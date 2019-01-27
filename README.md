@@ -2,7 +2,7 @@
 A personal project created by curiosity and for fun, to extract information from 500px web site fordata analyzing, and to perform some automated processes.
 
 
-**A BIT OF HISTORY:**
+### A BIT OF HISTORY: ###
 
 500px is a famous photo sharing site who recently shutdown its API access (June 15 2018), leaving numerous applications relied on its API, useless.
 
@@ -17,7 +17,7 @@ As a 500px user who does not want to be manipulated by bots, I initially just wa
  - ...
  
 And as a programmer, I got curious. I wondered how things can be done. I ended up creating some bots myself.
-Not wanting to involve in the virtual fame, I created a new account one for testing. 
+Not wanting to involve in the virtual fame, I created a new account for testing. 
 
 I don't want to fool myself by the "artificial" number of affections that I know could be manipulated if one chooses to do so.
 
@@ -27,7 +27,7 @@ Unless, you are in it not for fun, or your fun is getting ahead, no matter what.
 
 
 
-**WHAT IT CAN DO SO FAR:**
+### WHAT IT CAN DO SO FAR: ###
 
 ![Main menu](/MainMenu.JPG)
 
@@ -41,7 +41,7 @@ For sample output, please refer to [500px-Apiless.docx](/500px-Apiless.docx)
 
 
 
-**ENVIRONMENT:**
+### ENVIRONMENT: ###
 
 This was developed using Visual Studio Code, testing and run on Windows 10, for Python version 3.6
 
@@ -49,7 +49,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, for 
 
 
 
-**DEPENDENCIES:**
+### DEPENDENCIES: ###
 
 Python 3.6 or later (freely distributed on the web)
 
@@ -59,7 +59,7 @@ Selenium
 
 
 
-**USAGE:**
+### USAGE: ###
 
 If Python and Selenium were installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
@@ -69,7 +69,7 @@ If not, make sure the location of python executable is in the PATH, open the Win
 
 
 
-**LIMITATIONS, ISSUES, TODO :**
+### LIMITATIONS, ISSUES, TODO LIST: ###
 
 -	Not all exceptions are handled, especially with Selenium’s find_element… methods
 -	For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes longer time than I’d like it to. 
@@ -83,14 +83,14 @@ Feedback, bug report, contributions are all welcomed.
 
 
 
-**DISCLAIMER:**  
+### DISCLAIMER: ###  
 
 As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
-(500px certainly did not make it easy by already randomizing class names and by limiting the use of fixed tag id )
+(500px certainly did not make it easy by randomizing class names and by limiting the use of fixed tag id )
 
-This project is created for fun and for gaining personal experience with python and web scraping. The owner assumes no responsibility.
+This project is created for fun and for gaining personal experience with python and web scraping.**The owner assumes no responsibility.**
 Even though some limits have been set, some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your account being banned. Use this at your own risk.
+abusing or over-usage may result in your account being banned. **Use this at your own risk.**
 
 
 
