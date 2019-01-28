@@ -73,7 +73,7 @@ If not, make sure the location of python executable is in the PATH, open the Win
 
 -	Not all exceptions are handled, especially with Selenium’s find_element… methods
 -	For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes longer time than I’d like it to. 
-- TODO: putting thumbnails on the result files, create a GUI, run the slideshow ... 
+- TODO: putting thumbnails on the result files, creating a graphical user interface, running a slideshow ... 
 
 Prior to this project, I have zero knowledge on python and web scraping. I'm sure there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
@@ -90,7 +90,7 @@ As in any web scraping, a change in page structure may break one or more options
 
 This project is created for fun and for gaining personal experience with python and web scraping.**The owner assumes no responsibility.**
 Even though some limits have been set, some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your account being banned. **Use this at your own risk.**
+abusing or over-usage may result in your 500px account being banned. **Use this at your own risk.**
 
 
 
