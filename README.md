@@ -17,15 +17,16 @@ As a 500px user who does not want to be manipulated by bots, Initially I just wa
  ...
  
 And as a programmer, I got curious, wondering how things can be done. I ended up creating some bots myself.
-For testing, I created a dummy account. 
-The photographer side of mine tells me don't get fool by the artificial number of affections that could be manipulated if one chooses to do so.
-The programmer side, on the other hand, says: why not? you got played. 
 
-It is hard to mix two sides. I think that using bots to promote popularity will do you harm. It kills all the fun interacting with 'human' fellow photographers.
+For testing, I created a dummy account. 
+The photographer side of mine tells me: Don't get fool yourself by the "artifical" number of affections. It could be manipulated if one chooses to do so.
+The programmer side, on the other hand, says: Why not? you got played. 
+
+At the end of the day, I truly believe that using bots to promote popularity will do you harm. It kills all the fun interacting with 'human' fellow photographers.
 
 Unless, you are in it not for fun, or your fun is getting ahead, no matter what...
 
-Before tring my bots ("just for fun" you may say), check out this old but very interesting article I came across some time ago. 
+Before tring my bots, just for fun, you may say; check out this old but very interesting article I came across some time ago. 
 It is from  Andy Hutchinson and it said:
  [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
@@ -74,16 +75,16 @@ If not, make sure the location of python executable is in the PATH, open the Win
 
 **LIMITATIONS, ISSUES, TO DO LIST:**
 
--	Not all exceptions are handled, especially with Selenium’s find_element… methods
--	For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes longer time than I’d like it to. 
--   TODO: 
+- Not all exceptions are handled, especially with Selenium’s find_element… methods
+- For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
+- TODO: 
 		- Handling more exceptions
-		- Optimizing for better performance (eg.use css selector instead of xpath, improve algorithms ...)
+		- Optimizing for better performance
 		- Putting images thumbnais in the result files
 		- Add ChromeCast support to slideshow
 		- Making a GUI
 
-Prior to this project, I have zero knowledge on python and web scraping. No doubt there are much rooms for improvements. 
+Prior to this project, I have zero knowledge about python and web scraping. I'm sure there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
 
 Feedback, bug report, contributions are all welcomed.
@@ -96,9 +97,10 @@ Feedback, bug report, contributions are all welcomed.
 As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
 (500px certainly did not make it easy by randomizing class names)
 
-This project is created for fun and for gaining personal experience with python and web scraping. The owner assumes no responsibility.
-Even though some limits have been set, some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your account being banned. Use this at your own risk.
+This project is created for fun and for gaining personal experience with python and web scraping. 
+**The owner assumes no responsibility**.
+Even though some limits have been set, and some processes have been intentionally slowed down to make it look more human, 
+abusing or over-usage may result in your account being banned. **Use this at your own risk**.
 
 
 
