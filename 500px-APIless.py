@@ -107,19 +107,21 @@ def printB(text): print(f"\033[94m {text}\033[00m") #; logging.info(text)
 
 #---------------------------------------------------------------
 # USE SELENIUM WEBDRIVER TO START CHROME, WITH VARIOUS OPTIONS
-def Start_chrome_browser():
+# SAMPLE OF OPTIONS: ["--start-maximized", "--kiosk"]
+def Start_chrome_browser(options_list = []):
     global driver
-    options = webdriver.ChromeOptions()
-    # maximize window
-    #options.add_argument("--start-maximized")
-    driver = webdriver.Chrome(chrome_options=options)    
+    chrome_options = Options()
+    for option in options_list:
+        chrome_options.add_argument(option)
+
+    driver = webdriver.Chrome(chrome_options=chrome_options)    
     #customize zoom %
     #driver.get('chrome://settings/')
     #driver.execute_script('chrome.settingsPrivate.setDefaultZoom(.80);')
     #specify window size
     #river.set_window_size(400, 600)
     #driver.maximize_window()
-    printY('DO NOT INTERACT WITH THE CHROME BROWSER. WHEN YOUR REQUEST IS DONE, IT WILL CLOSED')
+    printY('DO NOT INTERACT WITH THE CHROME BROWSER. WHEN YOUR REQUEST FINISHES, IT WILL BE CLOSED')
 
 #---------------------------------------------------------------
 # CLOSE THE CHROME BROWSER, CARE-FREE OF EXCEPTIONS
@@ -128,6 +130,7 @@ def Close_chrome_browser():
         driver.close()
     except WebDriverException:
         pass
+
 #---------------------------------------------------------------
 # WRITE USER STATISTIC OBJECT stats TO AN HTML FILE
 def Create_user_statistics_html(stats):
@@ -215,6 +218,7 @@ def Write_notifications_to_csvfile(csv_file_name):
         else: 
             printR(f'Error writing file {csv_file_name}')
             return False
+
 #---------------------------------------------------------------
 # WRITE THE GLOBAL VARIABLE LIST unique_notificators TO A GIVEN CSV FILE
 # IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
@@ -267,6 +271,7 @@ def Get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
     if len(ele) > 0:
         return ele[0].attrib[attribute_name] 
     return ''
+
 #---------------------------------------------------------------
 # FIND THE WEB ELEMENT FROM A GIVEN XPATH, RETURN NONE IF NOT FOUND
 # THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
@@ -283,6 +288,16 @@ def check_and_get_ele_by_xpath(element, xpath):
 def check_and_get_ele_by_class_name(element, class_name):
     try:
         return element.find_element_by_class_name(class_name) 
+    except NoSuchElementException:
+        return None
+    return web_ele
+
+#---------------------------------------------------------------
+# FIND ALL THE WEB ELEMENTS OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
+# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+def check_and_get_all_eles_by_class_name(element, class_name):
+    try:
+        return element.find_elements_by_class_name(class_name) 
     except NoSuchElementException:
         return None
     return web_ele
@@ -695,47 +710,45 @@ def Get_like_actioners_list():
 
     innerHtml = driver.execute_script("return document.body.innerHTML") #run JS body scrip after page content is loaded
     time.sleep(3)
+    if DEBUG:
+        Write_string_to_text_file(str(innerHtml.encode('utf-8')), 'photo_innerHTML.txt')
+    # find an ancestor element that cover all needed elements
+    react_photos_index_container = driver.find_element_by_class_name('react_photos_index_container')
+    if react_photos_index_container is None:
+        printR('Error getting like_actioners list')
+        return []
 
-    owner_ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div/div/div[2]/div/div[1]/div[2]/div[1]/a')
-    owner = owner_ele.text
-    printG(f'Photogapher: {owner}')
+    styled_link =  check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[2]/div[1]/a')
+    if styled_link is not None: photographer_name = styled_link.text
+    else: photographer_name = 'Name not found'
+    printG(f'Photogapher: {photographer_name}')
+
+    styled_layout_box = check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[2]/div[1]/h3')
+    if styled_layout_box is None: 
+        printR('Error getting like_actioners list')
+        return []
+    photo_title = styled_layout_box.text
+    printG(f'Photo title: {photo_title}')
 
     # make sure the  photo title is visible
-    parent_6 = owner_ele.find_element_by_xpath('../../../../../..')
-    parent_6.location_once_scrolled_into_view
-    # extract photo title                      
-    title_ele = parent_6.find_element_by_tag_name('h3')
-    if title_ele is not None: 
-        title = title_ele.text
-        printG(f'Photo title: {title}')
- 
-    # find the like-count element and click on it  to open the modal window
-    like_count_button = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div/div/div[2]/div/div[1]/div[1]/div[1]/a') #'//*[@id="modal_content"]/div/div/div[2]/div/div[1]/div[1]/div[1]/a') #
+    styled_layout_box.location_once_scrolled_into_view
+    # find the like-count element, get the likes count and click on it  to open the modal window
+    like_count_button = react_photos_index_container.find_element_by_xpath('//div/div/div[2]/div/div[2]/div[1]/div[1]/a')
     if like_count_button is None:                           
         printR('Error getting like_actioners list')
-        return actioners_list
-    else:
-        driver.execute_script("arguments[0].click();", like_count_button)
-        time.sleep(3)   
-
-    # extract number of likes ( on the newly-opened model window)                 
-    likes_ele = check_and_get_ele_by_xpath(driver, '//*[@id="rcDialogTitle0"]/h4[2]')  #//*[@id="rcDialogTitle0"]  //*[@id="rcDialogTitle0"]/h4[2]
-    if likes_ele is None :
-        printR('Error getting like_actioners list')
-        return actioners_list
-
-    elif likes_ele.text == '0':
-        printG('This photo currently has zero like')
-        return actioners_list
-
-    likes_count = re.sub('[^\d]+', '', likes_ele.text)         
+        return []
+ 
+    likes_count = like_count_button.text
     printG(f'This photo has {likes_count} like(s)')
-  
-    like_actioners_file_name = f"{owner.replace(' ', '-')}_{title.replace(' ', '-')}_{likes_count}_ like_actioners.csv"
+    driver.execute_script("arguments[0].click();", like_count_button)
+    time.sleep(3)   
+    # make a meaningful output file name
+    like_actioners_file_name = f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners.csv"
 
-    # scroll to the end for all elements of the given class name to load
+    # scroll to the end for all elements of the given class name to load all actioners
     Scroll_to_end_by_class_name('ifsGet')
-        
+    
+    # create actionners list
     actioners = driver.find_elements_by_class_name('ifsGet')
     for actioner in actioners:
         try:    
@@ -894,6 +907,33 @@ def Like_n_photos_on_current_page(number_of_photos_to_be_liked, index_of_start_p
     # end old impl
 
 #---------------------------------------------------------------
+# PLAY SLIDESHOW OF PHOTOS ON THE ACTIVE PHOTO PAGE IN BROWSER
+# PROCESS:
+# EXPECTING THE ACTIVE PAGE IN BROWSER IS THE PHOTOS PAGE
+# - OPEN THE FIRST PHOTO BY CLICK ON IT
+# - CLICK ON THE EXPAND ARROW TO MAXIMIZE THE DISPLAY AREA 
+# - AFTER A GIVEN TIME INTERVAL, LOCATE THE NEXT BUTTON AND CLICK ON IT TO SHOW THE NEXT PHOTO
+# - EXIT WHEN LAST PHOTO IS REACHED
+def Play_slideshow(time_interval):
+    photo_links_eles = check_and_get_all_eles_by_class_name(driver, 'photo_link')
+    loaded_photos_count = len(photo_links_eles)
+ 
+    if len(photo_links_eles) > 0:
+        # show the first photo
+        driver.execute_script("arguments[0].click();", photo_links_eles[0])
+        innerHTML = driver.execute_script("return document.body.innerHTML")
+        time.sleep(3)
+        expand_icon = check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[2]') 
+        driver.execute_script("arguments[0].click();",expand_icon)
+        time.sleep(time_interval)
+        
+        next_icon = check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[1]/div') 
+        while next_icon is not None:
+            driver.execute_script("arguments[0].click();", next_icon)
+            time.sleep(time_interval)
+            next_icon = check_and_get_ele_by_xpath(driver,  '//*[@id="copyrightTooltipContainer"]/div/div[2]/div/div[2]')  
+
+#---------------------------------------------------------------                           
 # LIKE N PHOTOS FROM THE USER'S HOME FEED PAGE, EXCLUDING RECOMMENDED PHOTOS
 # SKIP CONSECUTIVE PHOTO(S) OF THE SAME USER
 # PROCESS:
@@ -1275,6 +1315,8 @@ def Show_menu(start_with_current_user = True):
     printC('  11  Like n photos from your home-feed page, excluding recommended photos ')
     printC('  12  Like n photos of each users in your last m notifications')
     printC('')
+    printC('  13  Play slideshow on a given gallery')
+    printC('')
     printC('   r  Restart for different user')
     printC('   q  Quit')
     printC('')
@@ -1289,13 +1331,39 @@ def Show_sub_menu():
     printC('    4  Fresh')
     printC("    5  Editor's Choice")
     return Validate_int('Enter your selection >')
+#---------------------------------------------------------------
+def Show_slideshow_galleries_menu():
+    printC('--------- Select the desired photos page for the slideshow: ---------')
+    printC('    1  Popular')
+    printC('    2  Upcoming')
+    printC('    3  Fresh')
+    printC("    4  Editor's Choice")
+    printC("    5  Your photos")
+    printC("    6  My specific gallery")
+    sel = input('Enter your selection >')
+    if sel == '1': return 'https://500px.com/popular'
+    if sel == '2': return 'https://500px.com/upcoming'
+    if sel == '3': return 'https://500px.com/fresh'
+    if sel == '4': return 'https://500px.com/editors'
+    if sel == '5': return f'https://500px.com/{user_name}'
+    if sel == '6': return Validate_non_empty_input('Enter the link to your desired photo gallery. It could be a public gallery with filters, or a private gallery >')
+
 #======================================================================================================================
 # MAIN PROGRAM STARTS HERE. TODO: put this in __main__
 #======================================================================================================================
 os.system('color')
 driver = None
 #logging.basicConfig(filename='500px.log', filemode='w', format='%(asctime)s - %(message)s', level=logging.INFO)
-choice = Show_menu(False)
+if True:
+    choice = Show_menu(False)
+else:
+#debug
+    choice = ''
+    gallery_href = ''
+    time_interval = ''
+    user_name = ''
+    password = ''
+    photo_href = ''
 
 while choice != 'q':
     #---------------------------------------------------------------
@@ -1530,7 +1598,7 @@ while choice != 'q':
     # if the first photo is already liked, do nothing
     elif choice == '10':
         # do as in option 5, get the list of users who like a given photo, but this time we need to login
-        if password == '': password = input('Enter password >')  
+        if password == '': password = Validate_non_empty_input('Enter password >')  
         photo_href = Validate_non_empty_input('Enter your photo href >')
         number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to auto-like for each user >')
 
@@ -1587,7 +1655,7 @@ while choice != 'q':
     #---------------------------------------------------------------  
     # Like n photos of each users in your last m notifications
     elif choice == '12':
-        if password == '': password = input('Enter password >')  
+        if password == '': password = Validate_non_empty_input('Enter password >')  
         number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to like for each user >')
         number_of_notifications =  Validate_int('Enter the number of notifications you want to retrieve(max 1000) >')
 
@@ -1623,6 +1691,31 @@ while choice != 'q':
         Close_chrome_browser()
         choice = Show_menu()
         continue
+    #---------------------------------------------------------------  
+    # Play slideshow on a given gallery  
+    # Popular, Upcoming, Fresh, Editor's choice or a spefic photo gallery
+    elif choice == '13':
+        gallery_href = Show_slideshow_galleries_menu()
+        if password == '':
+            printY('If you want to play your private gallery, or NSFW contents, you need to login.\n Type in your password now or just press ENTER to ignore')
+            password = input('> ')        
+
+        time_interval = Validate_int('Enter the interval time in second between photos >')
+        printY('Slideshow will play in fullscreen, covering this control window.\n To stop the slideshow and return to this window, press ESC three times.\n Now press ENTER to start > ')
+        wait_for_enter_key = input()
+
+        Start_chrome_browser(["--kiosk", "--hide-scrollbars", "--disable-infobars"])
+        if password is not None:
+            Login(user_name, password)
+        
+        driver.get(gallery_href)
+        dummy = driver.execute_script("return document.body.innerHTML") 
+        time.sleep(2)
+                    
+        Play_slideshow(time_interval)  
+        Close_chrome_browser()
+        choice = Show_menu()         
+        continue
     #---------------------------------------------------------------
     elif choice == 'r':  #restart for different user
         # reset global variables
@@ -1649,6 +1742,8 @@ while choice != 'q':
     else: 
         choice = Show_menu(False)
         continue
+    
+sys.exit()
 # END 
 #======================================================================================================================
 
