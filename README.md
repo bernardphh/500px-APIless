@@ -1,33 +1,36 @@
 # 500px-APIless: Scraping and automation
-A personal project created by curiosity and for fun, to extract information from 500px web site fordata analyzing, and to perform some automated processes.
+A personal project created by curiosity and for fun, to extract information from 500px web site for data analyzing, and to perform some automated processes.
 
 
-### A BIT OF HISTORY: ###
+**A BIT OF HISTORY:**
 
 500px is a famous photo sharing site who recently shutdown its API access (June 15 2018), leaving numerous applications relied on its API, useless.
 
-Without the API, data is harder to get, and it takes longer time to collect.
+Without the API, data is harder to collect, and it takes longer time to get them.
 But gone the API, came the challenges!
 
 
-As a 500px user who does not want to be manipulated by bots, I initially just wanted to gather data from the site, manually analyze them and figure it out the users who: 
+As a 500px user who does not want to be manipulated by bots, Initially I just wanted to gather data from the site, manually analyze it and figure it out the users who: 
  - Trigger me into following them, then ignore me, or un-follow me not long after.
  - Like every photo I posted, give un-mistaken robot comments, and like my photo back every time I liked theirs
  - Get unbelievable number of followers
- - ...
+ ...
  
-And as a programmer, I got curious. I wondered how things can be done. I ended up creating some bots myself.
-Not wanting to involve in the virtual fame, I created a new account for testing. 
+And as a programmer, I got curious, wondering how things can be done. I ended up creating some bots myself.
+For testing, I created a dummy account. 
+The photographer side of mine tells me don't get fool by the artificial number of affections that could be manipulated if one chooses to do so.
+The programmer side, on the other hand, says: why not? you got played. 
 
-I don't want to fool myself by the "artificial" number of affections that I know could be manipulated if one chooses to do so.
-
-I believe that using bots to promote popularity will do you harm. It kills all the fun interacting with fellow photographers.
+It is hard to mix two sides. I think that using bots to promote popularity will do you harm. It kills all the fun interacting with 'human' fellow photographers.
 
 Unless, you are in it not for fun, or your fun is getting ahead, no matter what...
 
+Before tring my bots ("just for fun" you may say), check out this old but very interesting article I came across some time ago. 
+It is from  Andy Hutchinson and it said:
+ [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
 
-### WHAT IT CAN DO SO FAR: ###
+**WHAT IT CAN DO SO FAR:**
 
 ![Main menu](/MainMenu.JPG)
 
@@ -37,11 +40,11 @@ Results are saved on disk as CSV files. You will be offered to view the data in 
 
 The next 5 options, from 8 to 12, are the automated processes, for which you need to enter a password for actions.
 
-For sample output, please refer to [500px-Apiless.docx](/500px-Apiless.docx)   
+For sample output, please refer to [500px-APIless.docx](/500px-APIless.docx)   
 
 
 
-### ENVIRONMENT: ###
+**ENVIRONMENT:**
 
 This was developed using Visual Studio Code, testing and run on Windows 10, for Python version 3.6
 
@@ -49,7 +52,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, for 
 
 
 
-### DEPENDENCIES: ###
+**DEPENDENCIES:**
 
 Python 3.6 or later (freely distributed on the web)
 
@@ -59,9 +62,9 @@ Selenium
 
 
 
-### USAGE: ###
+**USAGE FOR WINDOW OS:**
 
-If Python and Selenium were installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
+If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
 If not, make sure the location of python executable is in the PATH, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
  pythom.exe 500px-APIless.py
@@ -69,13 +72,18 @@ If not, make sure the location of python executable is in the PATH, open the Win
 
 
 
-### LIMITATIONS, ISSUES, TODO LIST: ###
+**LIMITATIONS, ISSUES, TO DO LIST:**
 
 -	Not all exceptions are handled, especially with Selenium’s find_element… methods
 -	For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes longer time than I’d like it to. 
-- TODO: putting thumbnails on the result files, creating a graphical user interface, running a slideshow ... 
+-   TODO: 
+		- Handling more exceptions
+		- Optimizing for better performance (eg.use css selector instead of xpath, improve algorithms ...)
+		- Putting images thumbnais in the result files
+		- Add ChromeCast support to slideshow
+		- Making a GUI
 
-Prior to this project, I have zero knowledge on python and web scraping. I'm sure there are rooms for improvements. 
+Prior to this project, I have zero knowledge on python and web scraping. No doubt there are much rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
 
 Feedback, bug report, contributions are all welcomed.
@@ -83,14 +91,14 @@ Feedback, bug report, contributions are all welcomed.
 
 
 
-### DISCLAIMER: ###  
+**DISCLAIMER:**  
 
 As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
-(500px certainly did not make it easy by randomizing class names and by limiting the use of fixed tag id )
+(500px certainly did not make it easy by randomizing class names)
 
-This project is created for fun and for gaining personal experience with python and web scraping.**The owner assumes no responsibility.**
+This project is created for fun and for gaining personal experience with python and web scraping. The owner assumes no responsibility.
 Even though some limits have been set, some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your 500px account being banned. **Use this at your own risk.**
+abusing or over-usage may result in your account being banned. Use this at your own risk.
 
 
 
