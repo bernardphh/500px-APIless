@@ -26,7 +26,7 @@ At the end of the day, I truly believe that using bots to promote popularity wil
 
 Unless, you are in it not for fun, or your fun is getting ahead, no matter what...
 
-Before tring my bots, just for fun, you may say; check out this old but very interesting article I came across some time ago. 
+Before trying my bots, just for fun, you may say; check out this old but very interesting article I came across some time ago. 
 It is from  Andy Hutchinson and it said:
  [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
@@ -35,13 +35,15 @@ It is from  Andy Hutchinson and it said:
 
 ![Main menu](/MainMenu.JPG)
 
-The first 7 options are for data collection, for which you need to provide a 500px username.
+- The first 7 options are for data collection, for which you need to provide a 500px username.
 
 Results are saved on disk as CSV files. You will be offered to view the data in the web browser when the process finished. 
 
-The next 5 options, from 8 to 12, are the automated processes, for which you need to enter a password for actions.
+- The next 5 options, from 8 to 12, are the automated processes, for which you need to enter a password for actions.
 
-For sample output, please refer to [500px-APIless.docx](/500px-APIless.docx)   
+- You can play slideshow of photos on various galleries, Popular, Fresh, Upcoming or Editor's choice.  User's galleries or filtered public galleries can also be played by supplying the href.
+
+For sample output, refer to [500px-APIless.docx](/500px-APIless.docx)   
 
 
 
@@ -57,7 +59,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, for 
 
 Python 3.6 or later (freely distributed on the web)
 
-Selenium 
+Selenium and ChromeDriver
 
 
 
@@ -67,8 +69,8 @@ Selenium
 
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
-If not, make sure the location of python executable is in the PATH, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
- pythom.exe 500px-APIless.py
+If not, make sure the location of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
+ python.exe 500px-APIless.py
 
 
 
