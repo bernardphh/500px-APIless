@@ -8,14 +8,17 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException   
 from selenium.common.exceptions import ElementNotInteractableException
+#not use yet
+#from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+#from selenium.webdriver.chrome import service
+#import pychromecast
+#import logging
+#import getpass 
 
 from lxml import html
 import os, sys, time, re, math, csv, json,codecs
 from time import sleep
 from enum import Enum
-#import logging
-#import getpass 
-
 
 PHOTOS_PER_PAGE = 50        # 500px currently loads 50 photos per page
 LOADED_ITEM_PER_PAGE = 50   # it also loads 50 followers, or friends, at a time in the popup window
@@ -111,15 +114,28 @@ def printB(text): print(f"\033[94m {text}\033[00m") #; logging.info(text)
 def Start_chrome_browser(options_list = []):
     global driver
     chrome_options = Options()
+ 
     for option in options_list:
         chrome_options.add_argument(option)
+    
+    chrome_options.add_argument('--log-level=3') 
+    
+    # atempt to suppress the ChromeDriver log to the console
+    #service = service.Service(chrome_exe_path = r'C:\Windows\System32')
+    #service.SuppressInitialDiagnosticInformation = True;
+    #driver = webdriver.Remote(service.service_url,   desired_capabilities=chrome_options.to_capabilities())
 
-    driver = webdriver.Chrome(chrome_options=chrome_options)    
+    #caps = DesiredCapabilities.CHROME
+    #caps['loggingPrefs'] = {'performance': 'ALL'} #, 'bufferUsageReportingInterval': '10000'
+    #driver = webdriver.Chrome(options=chrome_options, desired_capabilities=caps)    
+   
+    driver = webdriver.Chrome(options=chrome_options)
+
     #customize zoom %
     #driver.get('chrome://settings/')
     #driver.execute_script('chrome.settingsPrivate.setDefaultZoom(.80);')
     #specify window size
-    #river.set_window_size(400, 600)
+    #driver.set_window_size(400, 600)
     #driver.maximize_window()
     printY('DO NOT INTERACT WITH THE CHROME BROWSER. WHEN YOUR REQUEST FINISHES, IT WILL BE CLOSED')
 
@@ -166,11 +182,12 @@ def Write_photos_list_to_csv(csv_file_name):
             writer.writeheader()
             for i, photo in enumerate(photos):
                 writer.writerow({'No.' : str(i + 1), 'Page': str(photo.on_page), 'ID': str(photo.id), 'Title' : str(photo.desc), 'Link' :photo.link}) 
-            printG(f"User {user_name}\'s photos list is saved at:\n{os.path.abspath(csv_file_name)}")
+            printG(f"-List of {user_name}\'s {len(photos)} is saved at:\n  {os.path.abspath(csv_file_name)}")
         return True
 
    except PermissionError:
-        retry = input(f'Error writing file {os.path.abspath(csv_file_name)}.\nMake sure the file is not in use. Then type r for retry >')
+        printR(f'Error writing file {os.path.abspath(csv_file_name)}.\nMake sure the file is not in use. Then type r for retry >')
+        retry = input()
         if retry == 'r': 
             Write_photos_list_to_csv(csv_file_name)
         else:
@@ -291,7 +308,24 @@ def check_and_get_ele_by_class_name(element, class_name):
     except NoSuchElementException:
         return None
     return web_ele
-
+#---------------------------------------------------------------
+# FIND THE WEB ELEMENT OF A GIVEN id, RETURN NONE IF NOT FOUND
+# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+def check_and_get_ele_by_id(element, id_name):
+    try:
+        return element.find_element_by_id(id_name) 
+    except NoSuchElementException:
+        return None
+    return web_ele
+#---------------------------------------------------------------
+# FIND THE WEB ELEMENT OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
+# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+def check_and_get_ele_by_tag_name(element, tag_name):
+    try:
+        return element.find_element_by_class_name(tag_name) 
+    except NoSuchElementException:
+        return None
+    return web_ele
 #---------------------------------------------------------------
 # FIND ALL THE WEB ELEMENTS OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
 # THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
@@ -418,15 +452,26 @@ def Get_stats(user_name):
 # RETURN THE PHOTOS LIST OF A GIVEN USER: NUMBER OF LIKES, VIEWS, FOLLOWERS, FOLLOWING, PHOTOS; AND  FIRST, LAST UPLOAD DATE
 # PROCESS: 
 # - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
-# - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTAIN OF THE PAGE
+# - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
 # - EXTRACT THE user_data, the json section that contains all the photos data
 def Get_photos_list(user_name):
     global photo, user_id
 
     if Open_user_home_page(user_name) == False:
         return None
-    Scroll_down(1.5, -1) # scroll down until end, pause 1.5s between scrolls, 
+
+    # here, we intend to scroll down an indefinit number of times until the end is reaches
+    # so, to have a realistic progress bar, we need give an estimate of number of scrolls needed
+    estimate_scrolls_needed = 3  #default, just in case error occurs
+    photos_count  = 1
+    photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
+    if photos_count_ele is not None:
+        photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
+        estimate_scrolls_needed =  math.floor( photos_count / PHOTOS_PER_PAGE) +1
+
+    Scroll_down(1.5, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
     innerHtml = driver.execute_script("return document.body.innerHTML") #run JS body scrip after page content is loaded
+    update_progress(0, ' - Extracting data:')
     time.sleep(3)
     if DEBUG:
         Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_name + '_innerHTML.txt')
@@ -442,10 +487,7 @@ def Get_photos_list(user_name):
     # by some unknown reason the json.loads() method just loads the first 50 photos, 
     # for now we have to use the traditional way (parsing the xml by using lxml) 
 
-    #photos count
-    photos_count_str = Get_element_text_by_xpath(page,'//*[@id="content"]/div[3]/div/ul/li[1]/a/span')
-    photos_count = int( photos_count_str.replace('.', '').replace(',', ''))
-    #extract photo ids and descriptions (alt tag) using lxml and regex. put them to a list
+    #extract photo title and href (alt tag) using lxml and regex
     els = page.xpath("//a[@class='photo_link ']")
     titles = page.xpath("//img[@data-src='']")
     num_item = len(els)
@@ -455,6 +497,7 @@ def Get_photos_list(user_name):
 
     # Create list of photos
     for i in range(num_item): 
+        update_progress(i / (num_item -1), ' - Extracting data:')
         reg = "/photo/([0-9]*)/"  
         photoId = re.findall(reg, els[i].attrib["href"])
         if len(photoId) != 0:
@@ -496,7 +539,13 @@ def Get_followers_list(user_name):
 
     # keep scrolling the modal window, 50 followers at a time, until the end, where the followers count is reached 
     iteration_num = math.floor(followers_count / LOADED_ITEM_PER_PAGE) + 1 
+    if followers_count == 1:
+        printG(f'User {user_name} has {str(followers_count)} follower')
+    else:
+        printG(f'User {user_name} has {str(followers_count)} followers')
+        
     for i in range(1, iteration_num):
+        update_progress(i / (iteration_num -1), ' - Scrolling down to load all followers:')
         last_item_on_page = i * LOADED_ITEM_PER_PAGE - 1
         try:
             the_last_in_list = driver.find_elements_by_xpath('//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')[-1]
@@ -504,8 +553,10 @@ def Get_followers_list(user_name):
             time.sleep(3)
         except NoSuchElementException:
             pass
-
+    # force the progress bar to show 100% done
+    #update_progress(1, ' - Scrolling down to load all followers:')
     # now that we have all followers loaded, start extracting the info
+    update_progress(0, ' - Extracting data:')
     innerHTML = driver.execute_script("return document.body.innerHTML") #run JS body scrip after all photos are loaded
     time.sleep(5)
     if True: #DEBUG
@@ -513,14 +564,15 @@ def Get_followers_list(user_name):
 
     actor_infos = driver.find_elements_by_class_name('actor_info')
     lenght = len(actor_infos)
-    printG(f'User {user_name} has {str(lenght)} follower(s)')
-    #printG('............')
+
 
     follower_name = ''
     follower_page_link = ''
     count = ' '
 
-    for actor in actor_infos:
+    for i, actor in enumerate(actor_infos):
+        if i > 0:
+            update_progress( i / (len(actor_infos) - 1), 'Extracting followers info')
         try:
             follower_page_link = actor.find_element_by_class_name('name').get_attribute('href')
             follower_user_name = follower_page_link.replace('https://500px.com/', '')
@@ -531,7 +583,6 @@ def Get_followers_list(user_name):
         if len(texts) > 0: follower_name = texts[0] 
         if len(texts) > 1: count = texts[1]; number_of_followers =  count.replace(' followers', '').replace(' follower', '') 
         followers_list.append(user(follower_name, follower_user_name, number_of_followers))
-
     return  followers_list 
 
 #---------------------------------------------------------------
@@ -559,10 +610,16 @@ def Get_followings_list(user_name):
 
     # remode thousand separator character, if existed
     following_count = int(following_ele.text.replace(",", "").replace(".", ""))
+    if following_count == 1: 
+        printG(f'User {user_name} is following { str(following_count)} user')
+    else:
+        printG(f'User {user_name} is following { str(following_count)} users')
+    
 
     # keep scrolling the modal window, 50 followers at a time, until the end, where the followers count is reached 
     iteration_num = math.floor(following_count / LOADED_ITEM_PER_PAGE) + 1 
     for i in range(1, iteration_num):
+        update_progress(i / (iteration_num -1 ), ' - Scrolling down to load all following users')
         last_item_on_page = i * LOADED_ITEM_PER_PAGE - 1
         try:
             the_last_in_list = driver.find_elements_by_xpath('//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')[-1]                                                             
@@ -570,16 +627,20 @@ def Get_followings_list(user_name):
             time.sleep(3)
         except NoSuchElementException:
             pass
+    # force the progress bar to show 100% done
+    update_progress(1, ' - Scrolling down to load all following users')
 
     # now that we have all followers loaded, start extracting info
+    update_progress(0, ' - Extracting data:')
     actor_infos = driver.find_elements_by_class_name('actor_info')
     lenght = len(actor_infos)
-    printG(f'User {user_name} is following { str(lenght)} user(s)')
     following_name = ''
     followings_page_link = ''
     count = '' 
 
-    for actor in actor_infos:
+    for i, actor in enumerate(actor_infos):
+        if i > 0:
+            update_progress( i / (len(actor_infos) - 1), ' - Extracting data:')
         try:
             following_page_link = actor.find_element_by_class_name('name').get_attribute('href')
             following_user_name = following_page_link.replace('https://500px.com/', '')
@@ -591,7 +652,6 @@ def Get_followings_list(user_name):
         if len(texts) > 0: following_name = texts[0] 
         if len(texts) > 1: count = texts[1]; number_of_followings =  count.replace(' followers', '').replace(' follower', '')  
         followings_list.append(user(following_name, following_user_name, number_of_followings))
-
     return followings_list 
 
 #---------------------------------------------------------------
@@ -621,19 +681,18 @@ def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_
         printR('Error processing. Please retry, making sure your credentials are correct. ')
         return [], []
 
-    # WORK-AROUND: SCROLL DOWN ONE TIME(already perform prior to calling this function) AND SEND CTRL-HOME TO GO BACK TO TOP OF THE PAGE
-    #driver.find_element_by_tag_name('body').send_keys(Keys.CONTROL + Keys.HOME)
-    #time.sleep(5)
- 
     if not number_icon.text:
-        driver.execute_script("arguments[0].click();", bell_icon) #bell_icon.click()
+        driver.execute_script("arguments[0].click();", bell_icon) 
     else:
-        driver.execute_script("arguments[0].click();", number_icon) #number_icon.click()
+        driver.execute_script("arguments[0].click();", number_icon) 
     
     main_window = driver.window_handles[0]
 
     # Find "See all notifications" text and click it
-    see_all_button = driver.find_element_by_xpath('//*[@id="popup_notifications"]/div[2]/div/a')
+    see_all_button =check_and_get_ele_by_xpath(driver, '//*[@id="popup_notifications"]/div[2]/div/a')
+    if see_all_button is None:
+        printR('Error accessing All notifications page')
+        return  [], []
     driver.execute_script("arguments[0].click();", see_all_button)
 
     all_windows_handles = driver.window_handles
@@ -646,14 +705,19 @@ def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_
         scrolls_needed =  math.floor(number_of_notifications / NOTIFICATION_PER_LOAD) +1
 
     pause_between_scrolls = 1.5
-    Scroll_down(pause_between_scrolls, scrolls_needed ) 
+    estimate_scrolls_needed = scrolls_needed
+    # estimate_scrolls_needed is used only when we want unlimited scrolls times (scrolls_needed = -1). We pass irrelevant value here to Scroll_down() just to fill the function signature 
+    Scroll_down(pause_between_scrolls, scrolls_needed, estimate_scrolls_needed, ' - Scrolling down for more notifications:' ) 
 
     # get the info now that all the needed notifications are loaded
     items = driver.find_elements_by_class_name('notification_item')  #notification_item__text   notification_item__actor  notification_item__content
     count = len(items)                                                                #notification_item
     for i, item in enumerate(items):
         if number_of_notifications != -1 and i >=  number_of_notifications:
+            update_progress(1, ' - Extracting data:')
             break
+        if i > 0:
+            update_progress( i / (count-1), ' - Extracting data:')
 
         actor = check_and_get_ele_by_class_name(item, 'notification_item__actor') 
         if actor is None:
@@ -679,7 +743,7 @@ def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_
                 if follow_box is not None and follow_box.is_displayed(): 
                     status = 'you followed' 
                 elif following_box is not None and following_box.is_displayed():
-                    status = 'you did not follow'        
+                    status = 'you do not follow'        
                 #print(status)
             else: 
                 photo_title = photo_ele.text
@@ -689,7 +753,7 @@ def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_
             notifications_list.append(notification(display_name, code_name, content, photo_link, photo_title, timestamp, status))                  
 
         short_list.append(f'{display_name},{code_name}')
-        
+
     unique_notificators = remove_duplicates(short_list)
     if len(notifications_list) == 0 and len(unique_notificators) == 0: 
         printG(f'User {user_name} has no notification')
@@ -733,24 +797,29 @@ def Get_like_actioners_list():
     # make sure the  photo title is visible
     styled_layout_box.location_once_scrolled_into_view
     # find the like-count element, get the likes count and click on it  to open the modal window
-    like_count_button = react_photos_index_container.find_element_by_xpath('//div/div/div[2]/div/div[2]/div[1]/div[1]/a')
+    #like_count_button = react_photos_index_container.find_element_by_xpath('//div/div/div[2]/div/div[2]/div[1]/div[1]/a')
+    like_count_button = check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[1]/div[1]/a')
     if like_count_button is None:                           
-        printR('Error getting like_actioners list')
+        printG('Photo has 0 like')
         return []
  
-    likes_count = like_count_button.text
-    printG(f'This photo has {likes_count} like(s)')
+    likes_count_string = like_count_button.text
+    likes_count = int(likes_count_string.replace('.','').replace(',',''))
+
+    printG(f'This photo has {likes_count} likes')
     driver.execute_script("arguments[0].click();", like_count_button)
     time.sleep(3)   
     # make a meaningful output file name
     like_actioners_file_name = f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners.csv"
 
     # scroll to the end for all elements of the given class name to load all actioners
-    Scroll_to_end_by_class_name('ifsGet')
+    Scroll_to_end_by_class_name('ifsGet', likes_count)
     
     # create actionners list
     actioners = driver.find_elements_by_class_name('ifsGet')
-    for actioner in actioners:
+    actioners_count = len(actioners)
+    for i, actioner in enumerate(actioners):
+        update_progress(i / (actioners_count - 1), ' - Extracting data:')
         try:    
             texts = actioner.text.split('\n')
             if len(texts) > 0: 
@@ -760,8 +829,7 @@ def Get_like_actioners_list():
             name = actioner.find_element_by_tag_name('a').get_attribute('href').replace('https://500px.com/','')
             actioners_list.append(user(display_name, name, str(followers_count)) )
         except NoSuchElementException:
-            continue 
-
+            continue
     return actioners_list 
 #---------------------------------------------------------------
 # LIKE N PHOTO OF A GIVEN USER, STARTING FROM THE TOP
@@ -793,7 +861,6 @@ def Autolike_photos(target_user_name, number_of_photos_to_be_liked, include_alre
         if done_count < number_of_photos_to_be_liked and 'heart' in icon.get_attribute('class'): 
             if include_already_liked_photo_in_count == True:
                 done_count = done_count + 1          
-            #printY(f'User {target_user_name:25} liked #{str(done_count):3} Photo { str(i):3} already liked')
             printY(f'  - liked #{str(done_count):3} Photo { str(i):3} already liked')
 
             continue        
@@ -820,91 +887,65 @@ def Autolike_photos(target_user_name, number_of_photos_to_be_liked, include_alre
 # PROCESS:
 # - SIMILAR TO THE PREVIOUS METHOD ( Autolike_photos() )
 def Like_n_photos_on_current_page(number_of_photos_to_be_liked, index_of_start_photo):
-    if True: # new impl: dynamic scrolling 
-        photos_done = 0
-        current_index = 0  # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
-                            # ... we use this index to keep track where we are after a list update 
+    photos_done = 0
+    current_index = 0  # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
+                        # ... we use this index to keep track where we are after a list update 
             
-        # debug info: without scrolling, it would load 50 photos or so
-        new_fav_icons =  driver.find_elements_by_css_selector('.button.new_fav.only_icon')
+    # debug info: without scrolling, it would load 50 photos or so
+    new_fav_icons =  driver.find_elements_by_css_selector('.button.new_fav.only_icon')
+    loaded_photos_count = len(new_fav_icons)
+
+    #optimization: at the begining, scrolling down to the desired index instead of repeatedly scroll & check 
+    if index_of_start_photo > PHOTOS_PER_PAGE:
+        estimate_scrolls_needed =  math.floor( index_of_start_photo / PHOTOS_PER_PAGE) +1
+        Scroll_down(1, estimate_scrolls_needed, estimate_scrolls_needed, f' - Scrolling down to photos #{index_of_start_photo}:') 
+        time.sleep(2)
         loaded_photos_count = len(new_fav_icons)
-            
-        while photos_done < number_of_photos_to_be_liked: 
-            # if we have processed all loaded photos, if yes, scroll down 1 time for more to load
-            if current_index >= loaded_photos_count: 
-                prev_loaded_photos = loaded_photos_count
-                Scroll_down(1, 1)
-                time.sleep(2)
-                new_fav_icons =  driver.find_elements_by_css_selector('.button.new_fav.only_icon')
-                loaded_photos_count = len(new_fav_icons)
+          
+    while photos_done < number_of_photos_to_be_liked: 
+        # if all loaded photos have been processed, scroll down 1 time to load more
+        if current_index >= loaded_photos_count: 
+            prev_loaded_photos = loaded_photos_count
+  
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+            driver.execute_script("return document.body.innerHTML")
 
-                # stop when all photos are loaded
-                if loaded_photos_count == prev_loaded_photos:
-                    break;
+            new_fav_icons =  driver.find_elements_by_css_selector('.button.new_fav.only_icon')
+            loaded_photos_count = len(new_fav_icons)
 
-            #for i, icon in enumerate(new_fav_icons):
-            for i in range(current_index, loaded_photos_count):
-                current_index += 1
-                icon = new_fav_icons[i]
+            # stop when all photos are loaded
+            if loaded_photos_count == prev_loaded_photos:
+                break;
 
-                # stop when limit reaches
-                if photos_done >= number_of_photos_to_be_liked: break     
-                # skip un-interested items  
-                if i < index_of_start_photo - 1 : continue                   
-                # skip already liked photo: 'liked' class is a subclass of 'new_fav_only_icon', so these elements are also included in the list
-                if 'heart' in icon.get_attribute('class'): continue
+        #for i, icon in enumerate(new_fav_icons):
+        for i in range(current_index, loaded_photos_count):
+            current_index += 1
+            icon = new_fav_icons[i]
 
-                Hover_by_element(icon) # not required, but good for visual demonstration
-                time.sleep(0.5)
-                try:
-                    # might want to slow down a bit to make it look more like human
-                    time.sleep(1.5)
-                    title =  icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link').find_element_by_tag_name('img').get_attribute('alt')
-                    photographer = icon.find_element_by_xpath('../../../..').find_element_by_class_name('photographer').text
-                    driver.execute_script("arguments[0].click();", icon) 
-                    photos_done = photos_done + 1
-                    printG(f'Like #{str(photos_done):<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
-                except Exception as e:
-                    printR(f'Error after {str(photos_done)}, at index {str(i+1)}, title {title}:\nException: {e}')
-
-    else:  # old implementation, skept for referenc purpose
-           # based on user request, estimate how many times we need to scroll down to get all the needed photos to load.
-           # this approach is flawed: there will be photos that are already-liked and we will skip them, and we don't know beforehand how many of them. We may come up short.
-        number_of_photos_need_to_be_loaded = index_of_start_photo + number_of_photos_to_be_liked
-        if number_of_photos_need_to_be_loaded <= PHOTOS_PER_PAGE:
-            number_of_scroll_required = 0
-        else:
-            number_of_scroll_required = math.floor(number_of_photos_need_to_be_loaded / PHOTOS_PER_PAGE) + 1 # 10 extra scrolls (500 photos) are added to compensate for skipped photos 
-        Scroll_down(1, number_of_scroll_required)
-        new_fav_icons =  driver.find_elements_by_css_selector('.button.new_fav.only_icon')
-        # available_icons = len(new_fav_icons)
-        photos_done = 0
-        for i, icon in enumerate(new_fav_icons):
             # stop when limit reaches
-            if photos_done >= number_of_photos_to_be_liked:  
-                break            
+            if photos_done >= number_of_photos_to_be_liked: break     
             # skip un-interested items  
-            if i < index_of_start_photo - 1 :
-                continue
- 
+            if i < index_of_start_photo - 1 : continue                   
             # skip already liked photo: 'liked' class is a subclass of 'new_fav_only_icon', so these elements are also included in the list
-            if 'heart' in icon.get_attribute('class'): 
-                continue
+            if 'heart' in icon.get_attribute('class'): continue
             Hover_by_element(icon) # not required, but good for visual demonstration
             time.sleep(0.5)
             try:
                 # might want to slow down a bit to make it look more like human
-                time.sleep(1.5)
+                time.sleep(1)
                 title =  icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link').find_element_by_tag_name('img').get_attribute('alt')
-                photographer = icon.find_element_by_xpath('../../../..').find_element_by_class_name('photographer').text
+                photographer_ele = icon.find_element_by_xpath('../../../..').find_element_by_class_name('photographer')
+                photographer_ele.location_once_scrolled_into_view
+                Hover_by_element(photographer_ele)
+                photographer = photographer_ele.text
                 driver.execute_script("arguments[0].click();", icon) 
                 photos_done = photos_done + 1
-                printG(f'Like #{str(photos_done):<3}, {photographer:<30.28}, Photo {str(i+1):<4} title {title:<40.40}')
+                printG(f'Like #{str(photos_done):<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
             except Exception as e:
                 printR(f'Error after {str(photos_done)}, at index {str(i+1)}, title {title}:\nException: {e}')
 
-        printG(f'{str(number_of_photos_to_be_liked)} photos from popular-undiscover photos list have been auto-liked, started from index {index_of_start_photo}')
-    # end old impl
+  
 
 #---------------------------------------------------------------
 # PLAY SLIDESHOW OF PHOTOS ON THE ACTIVE PHOTO PAGE IN BROWSER
@@ -953,10 +994,14 @@ def Like_n_photos_on_homefeed_page(number_of_photos_to_be_liked):
     while photos_done < number_of_photos_to_be_liked: 
         # check whether we have processed all loaded photos, if yes, scroll down 1 time to load more
         if current_index >= loaded_photos_count: 
-            print(f'Scrolling down to load more photos ...')
+            #print(f'Scrolling down to load more photos ...')
             prev_loaded_photos = loaded_photos_count
-            Scroll_down(1, 1)
+
+            #scrol down one time
+            #Scroll_down(1, 1)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")                
             time.sleep(2)
+
             img_eles = Get_IMG_element_from_homefeed_page()
             loaded_photos_count = len(img_eles)
 
@@ -1037,51 +1082,68 @@ def remove_duplicates(values):
 # SCROLLING DOWN THE ACTIVE WINDOW IN A CONTROLLABLE FASHION
 # PASSING THE scroll_pause_time ACCORDING TO THE CONTENT OF THE PAGE, TO MAKE SURE ALL ITEMS ARE LOADED BEFORE THE NEXT SCROLL. DEFAULT IS 0.5s
 # THE PAGE COULD HAVE A VERY LONG LIST, OR ALMOST INFINITY, SO BY DEFAULT WE LIMIT IT TO 10 TIMES.
-# PASSING -1 to iteration_limit WILL SCROLL UNLIMITEDLY UNTIL THE END IS REACHED
-# PASSING 0 WILL RESULT IN NO SCROLLING AT ALL
-def Scroll_down(scroll_pause_time = 0.5, iteration_limit = 10):
-    if iteration_limit == 0 :
+# IF number_of_scrolls =  0, RETURN WITHOUT SCROLLING
+# IF number_of_scrolls = -1, KEEP SCROLLING UNTIL THE END IS REACHED ...
+# FOR THIS CASE, IN ORDER TO HAVE A REALISTIC PROGRESS BAR, WE WILL USE estimate_scrolls_needed  ( TOTAL REQUEST ITEMS / LOAD ITEMS PER SCROLL )
+# MESSAGE IS A STRING DESCRIBED THE TITLE OF THE PROGRESS BAr. IF EMPTY IS PASSED, THE PROGRESS BAR WILL NOT BE STIMULATED
+def Scroll_down(scroll_pause_time = 0.5, number_of_scrolls = 10, estimate_scrolls_needed = 3, message = ''):
+    if number_of_scrolls == 0 :
         return
     # Get scroll height
     last_height = driver.execute_script("return document.body.scrollHeight")
     iteration_count = 0
+    scrolls_count_for_stimulated_progressbar = 0
     while True:
+        if number_of_scrolls == -1:
+            update_progress(scrolls_count_for_stimulated_progressbar / estimate_scrolls_needed, message)
+        elif iteration_count > 0:
+            update_progress(iteration_count / number_of_scrolls, message)
+
+        scrolls_count_for_stimulated_progressbar += 1
+
         # Scroll down to bottom
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         # Wait to load page
         time.sleep(scroll_pause_time)
         innerHTML = driver.execute_script("return document.body.innerHTML") #run JS body scrip after all photos are loaded
 
-        if iteration_limit != -1:
+        if number_of_scrolls != -1:
             iteration_count = iteration_count + 1
-            if iteration_count >= iteration_limit:
-                break
+            if iteration_count >= number_of_scrolls:
+               break
 
-        # Calculate new scroll height and compare with last scroll height
+        # Calculate new scroll height and compare with last scroll height for another exit point
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             break
         last_height = new_height
-    
+
+    # force the display of "100% Done" 
+    update_progress(1, message) 
     time.sleep(scroll_pause_time)
 
 #---------------------------------------------------------------
 # SCROLL THE ACTIVE WINDOW TO THE END, WHERE THE LAST ELEMENT OF THE GIVEN CLASS NAME BECOME VISIBLE
-def Scroll_to_end_by_class_name(class_name):
-        eles = driver.find_elements_by_class_name('ifsGet')
-        count = 0
-        new_count = len(eles)
-        while new_count != count:
-            try:
-                the_last_in_list = eles[new_count - 1]
-                the_last_in_list.location_once_scrolled_into_view 
-                time.sleep(1)
-                WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
-                count = new_count
-                eles = driver.find_elements_by_class_name('ifsGet')
-                new_count = len(eles)
-            except NoSuchElementException:
-                pass
+# THE likes_count ARGUMENT IS USED FOR CREATING A REALISTIC PROGRESS BAR
+def Scroll_to_end_by_class_name(class_name, likes_count):
+    eles = driver.find_elements_by_class_name(class_name)
+    count = 0
+    new_count = len(eles)
+
+    while new_count != count:
+        try:
+            update_progress(new_count / likes_count, ' - Scrolling to load more items:')
+            the_last_in_list = eles[new_count - 1]
+            the_last_in_list.location_once_scrolled_into_view 
+            time.sleep(1)
+            WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
+            count = new_count
+            eles = driver.find_elements_by_class_name(class_name)
+            new_count = len(eles)
+        except NoSuchElementException:
+            pass
+    if new_count < likes_count:
+        update_progress(1, ' - Scrolling to load more items:')
 
 #---------------------------------------------------------------
 # READ CREDENTIALS FROM USER INPUT AND SUBMIT TO THE 500PX LOGIN PAGE
@@ -1292,6 +1354,43 @@ def Get_IMG_element_from_homefeed_page():
             img_eles.remove(ele)
     return img_eles
 #---------------------------------------------------------------
+# update_progress() : Displays or updates a console progress bar
+## Accepts a float between 0 and 1. Any int will be converted to a float.
+## A value under 0 represents a 'halt'.
+## A value at 1 or bigger represents 100%
+def update_progress(progress, message = ''):
+    if message == '':
+        message = 'Progress'
+    barLength = 15 # Modify this to change the length of the progress bar
+    status = ""
+    if isinstance(progress, int):
+        progress = float(progress)
+    if not isinstance(progress, float):
+        progress = 0
+        status = "error: progress var must be float\r\n"
+    if progress < 0:
+        progress = 0
+        status = "Halt...\r\n"
+    if progress >= 1:
+        progress = 1
+        status = "Done\r\n"
+    block = int(round(barLength*progress))
+    #text = "\rPercent: [{0}] {1}% {2}".format( "#"*block + "-"*(barLength-block), progress*100, status)
+    text = f'\r{message:<46.45}[{"."*block + " "*(barLength-block)}] {int(round(progress*100)):<3}% {status}'
+    sys.stdout.write(text)
+    sys.stdout.flush()
+#---------------------------------------------------------------
+# HIDE TOP AND BOTTOMS BANNERS
+# USAGE: BANNERS MAY COVER ELEMENTS, MAKING THEM INACCESSIBLE
+def Hide_banners():
+    top_banner = check_and_get_ele_by_id(driver, 'hellobar')
+    if top_banner is not None:
+        driver.execute_script("arguments[0].style.display='none'", top_banner)
+
+    bottom_banner = check_and_get_ele_by_tag_name(driver, 'w-div')
+    if bottom_banner is not None:
+        driver.execute_script("arguments[0].style.display='none'", bottom_banner)
+#---------------------------------------------------------------
 # DISPLAY MENU
 def Show_menu(start_with_current_user = True):
     global user_name 
@@ -1355,21 +1454,24 @@ os.system('color')
 driver = None
 #logging.basicConfig(filename='500px.log', filemode='w', format='%(asctime)s - %(message)s', level=logging.INFO)
 if True:
-    choice = Show_menu(False)
+    choice = Show_menu(start_with_current_user = False)
 else:
 #debug
     choice = ''
     gallery_href = ''
-    time_interval = ''
-    user_name = ''
+    time_interval = 2
+    user_name ='' 
     password = ''
     photo_href = ''
+    number_of_notifications = 1
+    choice = Show_menu(start_with_current_user = True)
 
 while choice != 'q':
     #---------------------------------------------------------------
     # Get statistics
     if choice == '1':
         Start_chrome_browser()
+        Hide_banners()
         json_data, stats = Get_stats(user_name) 
         if json_data is None or len(json_data) == 0:
             printR(f'Error reading {user_name}\'s page')
@@ -1394,13 +1496,14 @@ while choice != 'q':
             continue
         else:
             Start_chrome_browser()
+            Hide_banners()
+            print(f"Getting {user_name}'s photos list ...")
             photos = Get_photos_list(user_name)
             Close_chrome_browser()
             if photos is None: 
                 choice = Show_menu()
                 continue
             
-            print(f"Getting the list of your photos ...")
             photos_list_file_name = user_name + "_photos.csv"
             if Write_photos_list_to_csv(photos_list_file_name) == True:
                 Offer_to_open_file(photos_list_file_name, Output_file_type.PHOTOS_LIST) 
@@ -1418,7 +1521,8 @@ while choice != 'q':
             continue
         else:
             Start_chrome_browser()
-            print(f"Getting the list of users that followed you ...")
+            Hide_banners()
+            print(f"Getting the list of users who follow you ...")
             followers_list = Get_followers_list(user_name)
             Close_chrome_browser()
             if len(followers_list) > 0 and Write_users_list_to_csv(outfile, followers_list) == True:
@@ -1438,7 +1542,7 @@ while choice != 'q':
             continue
         else:
             Start_chrome_browser()
-            
+            Hide_banners()        
             print(f"Getting the list of users that you are following ...")
             followings_list = Get_followings_list(user_name)
             Close_chrome_browser()
@@ -1450,7 +1554,7 @@ while choice != 'q':
     #---------------------------------------------------------------  
     # Get a list of unique users who liked a given photo      
     elif choice == '5':
-        photo_href = input('Enter photo href >')
+        #photo_href = input('Enter photo href >')
         if len(photo_href) == 0:
             printR('Invalid input. Please retry')
             choice = Show_menu()
@@ -1458,9 +1562,8 @@ while choice != 'q':
 
         Start_chrome_browser()
         driver.get(photo_href)
-        #Scroll_down(0.5, 1)
         time.sleep(1)
-
+        Hide_banners()
         print(f"Getting the list of unique users who liked the given photo ...")
         like_actioners_list = Get_like_actioners_list()
         Close_chrome_browser()
@@ -1490,10 +1593,14 @@ while choice != 'q':
         Start_chrome_browser()
         Login(user_name, password)
         Open_user_home_page(user_name)         
-        Scroll_down(0.5, 1)
+        
+        #scrol down one time
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+
         innerHtml = driver.execute_script("return document.body.innerHTML")
         time.sleep(5)
-
+        Hide_banners()
         if number_of_notifications == -1:
             print(f"Getting the unique users that interact with your photos in all of your notifications ...")
         else:
@@ -1526,11 +1633,14 @@ while choice != 'q':
  
         Start_chrome_browser()
         Login(user_name, password)
-        Open_user_home_page(user_name)      
-        Scroll_down(0.5, 1)
+        Open_user_home_page(user_name)    
+  
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)        
+        
         innerHtml = driver.execute_script("return document.body.innerHTML")
         time.sleep(5)
-        
+        Hide_banners()        
         print(f"Getting the details of the last {number_of_notifications} notifications ...")
         notifications, unique_notificators = Get_notification_list(True, number_of_notifications)
         Close_chrome_browser()
@@ -1554,7 +1664,11 @@ while choice != 'q':
         Start_chrome_browser()
         Login(user_name, password)
 
-        print(f"Starting auto-like {number_of_photos_to_be_liked} photo(s) of user {target_user_name} ...")
+        if number_of_photos_to_be_liked == 1:
+            print(f"Starting auto-like {number_of_photos_to_be_liked} photo of user {target_user_name} ...")
+        else:
+            print(f"Starting auto-like {number_of_photos_to_be_liked} photos of user {target_user_name} ...")
+        Hide_banners()        
         include_already_liked_photos_in_count = True
         Autolike_photos(target_user_name, int(number_of_photos_to_be_liked), include_already_liked_photos_in_count)
         Close_chrome_browser()
@@ -1569,12 +1683,12 @@ while choice != 'q':
         index_of_start_photo =  Validate_int('Enter the index of the start photo (1-500) >')
 
         selection = Show_sub_menu()
-        if   selection == 1: href = 'https://500px.com/popular'
-        elif selection == 2: href = 'https://500px.com/popular?followers=undiscovered'
-        elif selection == 3: href = 'https://500px.com/upcoming' 
-        elif selection == 4: href = 'https://500px.com/fresh'
-        elif selection == 5: href = 'https://500px.com/editors'
-        else                 : href = ''
+        if   selection == 1: href = 'https://500px.com/popular';                        gallery_name = 'Popular'
+        elif selection == 2: href = 'https://500px.com/popular?followers=undiscovered'; gallery_name = 'Popular-Undiscovered'
+        elif selection == 3: href = 'https://500px.com/upcoming' ;                      gallery_name = 'Upcoming'
+        elif selection == 4: href = 'https://500px.com/fresh';                          gallery_name = 'fresh'
+        elif selection == 5: href = 'https://500px.com/editors';                        gallery_name = "Editor's choice"
+        else               : href = ''
         
         if password == '' or href is None: 
             printR('Invalid input(s). Please re-enter')
@@ -1584,10 +1698,14 @@ while choice != 'q':
         Start_chrome_browser()
         Login(user_name, password)
         driver.get(href)
-        inner_html = driver.execute_script("return document.body.innerHTML") #run JS body script after all photos are loaded
-        time.sleep(2)
-        
-        print(f"Starting auto-like {number_of_photos_to_be_liked} photo(s), begining at index {index_of_start_photo} ...")
+        inner_html = driver.execute_script("return document.body.innerHTML") 
+        time.sleep(5)
+        Hide_banners()
+        if number_of_photos_to_be_liked == 1:
+            print(f"Starting auto-like {number_of_photos_to_be_liked} photo from {gallery_name} gallery, start index {index_of_start_photo}  ...")
+        else:
+            print(f"Starting auto-like {number_of_photos_to_be_liked} photos from {gallery_name} gallery, start index {index_of_start_photo} ...")
+
         Like_n_photos_on_current_page(number_of_photos_to_be_liked, index_of_start_photo)
   
         Close_chrome_browser()
@@ -1604,9 +1722,15 @@ while choice != 'q':
 
         Start_chrome_browser()
         Login(user_name, password)
-        driver.get(photo_href)
+        try:
+            driver.get(photo_href)
+        except:
+            printR(f'Invalid href: {photo_href}. Please retry.')
+            Close_chrome_browser()
+            choice = Show_menu()         
+            continue
         time.sleep(1)
-        
+        Hide_banners()        
         print(f'Getting the list of users who liked this photo ...')
         like_actioners_list = Get_like_actioners_list()
         if len(like_actioners_list) == 0: 
@@ -1645,7 +1769,7 @@ while choice != 'q':
             debug_file = open(user_name + "_home_feed_innerHTML.txt", "w")
             debug_file.write(str(inner_html.encode('utf-8')))
             debug_file.close()
-        
+        Hide_banners() 
         print(f"Like {number_of_photos_to_be_liked} photos from the {user_name}'s home feed page ...")
         Like_n_photos_on_homefeed_page(number_of_photos_to_be_liked)
 
@@ -1672,14 +1796,18 @@ while choice != 'q':
         Start_chrome_browser()
         print(f'Getting the list of unique users in the last {number_of_notifications} notifications ...')
         Login(user_name, password)
-        Open_user_home_page(user_name)         
-        Scroll_down(0.5, 1)
+        Open_user_home_page(user_name)       
+        
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)      
+        
         innerHtml = driver.execute_script("return document.body.innerHTML")
         time.sleep(5)       
         dummy_notifications, unique_notificators = Get_notification_list(True, number_of_notifications)
         
         include_already_liked_photo_in_count = True  # meaning: if you want to autolike 3 first photos, and you found out two of them ...
         # are already liked, then you need to like just one photo, not three. A False here means you will do 3 photos, no matter what
+        Hide_banners()
         print(f"Starting auto-like {number_of_photos_to_be_liked} photos of each of {len(unique_notificators)} users on the list ...")
         for i, item in enumerate(unique_notificators):
             name_pair = item.split(',')
@@ -1703,15 +1831,36 @@ while choice != 'q':
         time_interval = Validate_int('Enter the interval time in second between photos >')
         printY('Slideshow will play in fullscreen, covering this control window.\n To stop the slideshow and return to this window, press ESC three times.\n Now press ENTER to start > ')
         wait_for_enter_key = input()
+        
+        #---- CHROMECAST      
+        if False:
+            device_friendly_name = "abcde"
+            chromecasts = pychromecast.get_chromecasts()
+            # select Chromecast device
+            cast = next(cc for cc in chromecasts if cc.device.friendly_name == device_friendly_name)
+            # wait for the device
+            cast.wait()
+            print(cast.device)
+            print(cast.status)
+            chrome_options = Options()
+            #options_list = ["--kiosk", "--hide-scrollbars", "--disable-infobars"]
+            #for option in options_list:
+            #    chrome_options.add_argument(option)
+            # get list of flags selenium adds that we want to exclude
+            excludeList = ['disable-default-apps', 'disable-background-networking', 'ignore-certificate-errors' ]
+            chrome_options.add_experimental_option('excludeSwitches', excludeList)
+            driver = webdriver.Chrome(options=chrome_options)    
+            printY('DO NOT INTERACT WITH THE CHROME BROWSER. WHEN YOUR REQUEST FINISHES, IT WILL BE CLOSED')
+        else:
+            Start_chrome_browser(["--kiosk", "--hide-scrollbars", "--disable-infobars"])
 
-        Start_chrome_browser(["--kiosk", "--hide-scrollbars", "--disable-infobars"])
         if password is not None:
             Login(user_name, password)
         
         driver.get(gallery_href)
         dummy = driver.execute_script("return document.body.innerHTML") 
         time.sleep(2)
-                    
+        Hide_banners()            
         Play_slideshow(time_interval)  
         Close_chrome_browser()
         choice = Show_menu()         
