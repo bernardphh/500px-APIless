@@ -23,16 +23,20 @@ from enum import Enum
 PHOTOS_PER_PAGE = 50        # 500px currently loads 50 photos per page
 LOADED_ITEM_PER_PAGE = 50   # it also loads 50 followers, or friends, at a time in the popup window
 NOTIFICATION_PER_LOAD = 20  # currently notifications are requested to display ( by scrolling the window) 20 items at a time
-MAX_NOTIFICATION_REQUESTED = 1000 # set a limit for this time-consuming process
+MAX_NOTIFICATION_REQUEST = 1000 # avoid abusing
+MAX_AUTO_LIKE_REQUEST = 100       # avoid abusing
 DEBUG = False
 
 class photo:
+    """ Represent a photo with id number, what page it is on in the user profile, the title and the href."""
     def __init__(self, id, on_page, desc, link):
         self.id = id
         self.on_page = on_page
         self.desc = str(desc)
         self.link = link
+
 class notification:
+    """ Represent a notification object."""
     def __init__(self, name, username, content, photo_link, photo_title, timestamp, status):
         self.name = name
         self.username = username
@@ -46,6 +50,7 @@ class notification:
     def write_to_textfile():
         print(self.name + "\n" + self.username + "\n" + self.content + "\n" + self.photo_link + "\n" + self.photo_title + "\n" + self.timestamp +  "\n" + self.status )
 class notificator:
+    """ Represent a user, with display name and user name, who generated a notification. """
     def __init__(self, name, username):
         self.name = name
         self.username = username   
@@ -54,6 +59,7 @@ class notificator:
     def write_to_textfile():
         print(self.name + "\n" + self.username + "\n")
 class user_stats:
+    """ Represent basic statistics of a user. """
     def __init__(self, name='', display_name='', id='', location='', affection_note='', following_note='', affections_count='', views_count='', 
                  followers_count='', followings_count='', photos_count='', galleries_count='', registration_date='', last_upload_date='', user_status=''):
         self.name = name
@@ -72,11 +78,13 @@ class user_stats:
         self.last_upload_date = last_upload_date
         self.user_status = user_status
 class user:
+    """ Represent a user with display name, user name and number of followers."""
     def __init__(self, display_name, user_name, number_of_followers):
         self.display_name = display_name
         self.user_name = user_name
         self.number_of_followers = number_of_followers
 class Output_file_type(Enum):
+   """ Enum representing 4 types of output list"""
    USERS_LIST = 0
    PHOTOS_LIST = 1
    NOTIFICATIONS_LIST = 2
@@ -109,9 +117,8 @@ def printC(text): print(f"\033[96m {text}\033[00m") #; logging.info(text)
 def printB(text): print(f"\033[94m {text}\033[00m") #; logging.info(text) 
 
 #---------------------------------------------------------------
-# USE SELENIUM WEBDRIVER TO START CHROME, WITH VARIOUS OPTIONS
-# SAMPLE OF OPTIONS: ["--start-maximized", "--kiosk"]
 def Start_chrome_browser(options_list = []):
+    """ use selenium webdriver to start chrome, with various options. Ex ["--start-maximized", "--log-level=3"] """
     global driver
     chrome_options = Options()
  
@@ -140,16 +147,16 @@ def Start_chrome_browser(options_list = []):
     printY('DO NOT INTERACT WITH THE CHROME BROWSER. WHEN YOUR REQUEST FINISHES, IT WILL BE CLOSED')
 
 #---------------------------------------------------------------
-# CLOSE THE CHROME BROWSER, CARE-FREE OF EXCEPTIONS
 def Close_chrome_browser():
+    """ Close the chrome browser, care-free of exceptions. """
     try:
         driver.close()
     except WebDriverException:
         pass
 
 #---------------------------------------------------------------
-# WRITE USER STATISTIC OBJECT stats TO AN HTML FILE
 def Create_user_statistics_html(stats):
+    """ write user statistic object stats to an html file. """
     output = f'''
 <html>\n\t<body>\n\t<table>
             <tr>                <td><b>User name</b></td>           <td>{stats.name}</td>\n</tr>         
@@ -172,33 +179,39 @@ def Create_user_statistics_html(stats):
     return output
 
 #---------------------------------------------------------------
-# WRITE THE GLOBAL VARIABLE PHOTOS LIST photos TO A GIVEN CSV FILE
-# IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
-def Write_photos_list_to_csv(csv_file_name):
-   try:
+
+def Write_photos_list_to_csv(list_of_photos, csv_file_name):
+    """ Write photos list to a csv file with the given  name. Return True if success.
+    
+    IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE   
+    """
+    try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['No.', 'Page', 'ID', 'Title', 'Link'])  
             writer.writeheader()
-            for i, photo in enumerate(photos):
+            for i, photo in enumerate(list_of_photos):
                 writer.writerow({'No.' : str(i + 1), 'Page': str(photo.on_page), 'ID': str(photo.id), 'Title' : str(photo.desc), 'Link' :photo.link}) 
-            printG(f"-List of {user_name}\'s {len(photos)} is saved at:\n  {os.path.abspath(csv_file_name)}")
+            printG(f"-List of {user_name}\'s {len(list_of_photos)} is saved at:\n  {os.path.abspath(csv_file_name)}")
         return True
 
-   except PermissionError:
+    except PermissionError:
         printR(f'Error writing file {os.path.abspath(csv_file_name)}.\nMake sure the file is not in use. Then type r for retry >')
         retry = input()
         if retry == 'r': 
-            Write_photos_list_to_csv(csv_file_name)
+            Write_photos_list_to_csv(list_of_photos, csv_file_name)
         else:
             printR('Error witing file' + os.path.abspath(csv_file_name))
             return False
 
 #---------------------------------------------------------------
-# WRITE A GIVEN USER LIST users_list TO A GIVEN CSV FILE
-# IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
-def Write_users_list_to_csv(csv_file_name, users_list):
-   try:
+def Write_users_list_to_csv(users_list, csv_file_name):
+    """ Write the users list to a csv file with the given  name. Return True if success.
+    
+    THE USERS LIST COULD BE A FOLLOWERS LIST, FRIENDS LIST 
+    IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
+    """
+    try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['Display Name', 'User Name', 'Number Of Followers'])  
@@ -207,46 +220,50 @@ def Write_users_list_to_csv(csv_file_name, users_list):
                 writer.writerow({'Display Name' : a_user.display_name, 'User Name': a_user.user_name, 'Number Of Followers': a_user.number_of_followers}) 
         printG('The users list is saved at:\n ' + os.path.abspath(csv_file_name) )
         return True
-   except PermissionError:
+    except PermissionError:
         retry = input(f'Error writing to file {csv_file_name}. Make sure the file is not in use. Then type r for retry >')
         if retry == 'r': 
-            Write_photos_list_to_csv(csv_file_name,user_list)
+            Write_users_list_to_csv(user_list, csv_file_name)
         else:
             printG('Error writing file\n' + os.path.abspath(csv_file_name))
             return False 
 
 #---------------------------------------------------------------
-# WRITE THE GLOBAL VARIABLE LIST notifications TO A GIVEN CSV FILE
-# IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
-def Write_notifications_to_csvfile(csv_file_name):
+def Write_notifications_to_csvfile(notifications_list, csv_file_name):
+    """ Write the  notifications list to a csv file with the given  name. Return True if success.
+
+    IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
+    """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['Name', 'User Name', 'Content', 'Photo Title', 'Time Stamp', 'Status'])    
             writer.writeheader()
-            for notif in notifications:
+            for notif in notifications_list:
                 writer.writerow({'Name' : notif.name, 'User Name': notif.username, 'Content': notif.content, 'Photo Title' : notif.photo_title, 'Time Stamp' : notif.timestamp, 'Status' : notif.status}) 
         printG('Notifications list is saved at:\n ' + os.path.abspath(csv_file_name))
         return True 
     except PermissionError:
         retry = input(f'Error writing to file {csv_file_name}.\n Make sure the file is not in use, then type r for retry >')
         if retry == 'r':  
-            Write_notifications_to_csvfile(csv_file_name)
+            Write_notifications_to_csvfile(notifications, csv_file_name)
         else: 
             printR(f'Error writing file {csv_file_name}')
             return False
 
 #---------------------------------------------------------------
-# WRITE THE GLOBAL VARIABLE LIST unique_notificators TO A GIVEN CSV FILE
-# IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
-def Write_unique_notificators_list_to_csv(csv_file_name):
+def Write_unique_notificators_list_to_csv(unique_notifications_list, csv_file_name):
+    """ Write the unique notifications list to a csv file with the given  name. Return True if success.
+    
+    IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
+    """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['Name', 'User Name'])  
             writer.writeheader()
 
-            for actor in unique_notificators:
+            for actor in unique_notifications_list:
                 items = actor.split(',')
                 if len(items) == 2:
                     writer.writerow({'Name' : items[0], 'User Name': items[1]}) 
@@ -256,43 +273,45 @@ def Write_unique_notificators_list_to_csv(csv_file_name):
     except PermissionError:
         retry = input(f'Error writing to file {csv_file_name}. Make sure the file is not in use. Then type r for retry >')
         if retry == 'r': 
-            Write_unique_notificators_list_to_csv(csv_file_name)
+            Write_unique_notificators_list_to_csv(unique_notificators, csv_file_name)
         else: 
             printR(f'Error writing file {csv_file_name}')
             return False
 
 #---------------------------------------------------------------
-# HOVER THE MOUSE ON AN ELEMENT SPECIFIED BY THE GIVEN XPATH.
 def Hover_element_by_its_xpath(xpath):
+    """ hover the mouse on an element specified by the given xpath. """
     element = driver.find_element_by_xpath(xpath)
     hov = ActionChains(driver).move_to_element (element)
     hov.perform()
 
 #---------------------------------------------------------------
-# HOVER THE MOUSE OVER A GIVEN ELEMENT 
 def Hover_by_element(element):
+    """ Hover the mouse over a given element. """
     hov = ActionChains(driver).move_to_element (element)
     hov.perform()
 
 #---------------------------------------------------------------
-# RETURN THE TEXT OF ELEMENT, SPECIFIED BY THE ELEMENT XPATH
 def Get_element_text_by_xpath(page, xpath_string):
+    """Return the text of element, specified by the element xpath. """
     ele = page.xpath(xpath_string)
     if len(ele) > 0 : return ele[0].text
     return ''
 
 #---------------------------------------------------------------
-# RETURN THE ATTRIBUTE CONTAIN OF A ELEMENT, SPECIFIED BY THE ELEMENT XPATH
 def Get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
+    """Return the attribute contain of a element, specified by the element xpath. """
     ele = page.xpath(xpath)
     if len(ele) > 0:
         return ele[0].attrib[attribute_name] 
     return ''
 
 #---------------------------------------------------------------
-# FIND THE WEB ELEMENT FROM A GIVEN XPATH, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
 def check_and_get_ele_by_xpath(element, xpath):
+    """ Find the web element from a given xpath, return none if not found.
+    
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+    """
     try:
         return element.find_element_by_xpath(xpath)
     except NoSuchElementException:
@@ -300,36 +319,44 @@ def check_and_get_ele_by_xpath(element, xpath):
     return web_ele
 
 #---------------------------------------------------------------
-# FIND THE WEB ELEMENT OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
 def check_and_get_ele_by_class_name(element, class_name):
+    """Find the web element of a given class name, return none if not found.
+    
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+    """
     try:
         return element.find_element_by_class_name(class_name) 
     except NoSuchElementException:
         return None
     return web_ele
 #---------------------------------------------------------------
-# FIND THE WEB ELEMENT OF A GIVEN id, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
 def check_and_get_ele_by_id(element, id_name):
+    """Find the web element of a given id, return none if not found.
+
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+    """
     try:
         return element.find_element_by_id(id_name) 
     except NoSuchElementException:
         return None
     return web_ele
 #---------------------------------------------------------------
-# FIND THE WEB ELEMENT OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
 def check_and_get_ele_by_tag_name(element, tag_name):
+    """Find the web element of a given class name, return none if not found.
+
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+    """
     try:
-        return element.find_element_by_class_name(tag_name) 
+        return element.find_element_by_tag_name(tag_name) 
     except NoSuchElementException:
         return None
     return web_ele
 #---------------------------------------------------------------
-# FIND ALL THE WEB ELEMENTS OF A GIVEN CLASS NAME, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
 def check_and_get_all_eles_by_class_name(element, class_name):
+    """Find all the web elements of a given class name, return none if not found.
+
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
+    """
     try:
         return element.find_elements_by_class_name(class_name) 
     except NoSuchElementException:
@@ -337,9 +364,11 @@ def check_and_get_all_eles_by_class_name(element, class_name):
     return web_ele
 
 #---------------------------------------------------------------
-# FIND THE WEB ELEMENT OF A GIVEN CSS SELECTOR, RETURN NONE IF NOT FOUND
-# THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT USING THE BROWSER DRIVER
 def check_and_get_ele_by_css_selector(element, selector):
+    """Find the web element of a given css selector, return none if not found.
+
+    THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT USING THE BROWSER DRIVER
+    """
     try:
         return element.find_element_by_css_selector(selector)
     except NoSuchElementException:
@@ -347,8 +376,9 @@ def check_and_get_ele_by_css_selector(element, selector):
     return web_ele
 
 #---------------------------------------------------------------
-# GIVEN A PHOTO LINK, RETURNS THE DATE OR TIME THAT PHOTO WAS UPLOADED
 def GetUploadDate(photo_link):
+    """Given a photo link, returns the date or time that photo was uploaded. """
+
     driver.get(photo_link)
     last_photo_page_HTML = driver.execute_script("return document.body.innerHTML") 
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -361,9 +391,11 @@ def GetUploadDate(photo_link):
        return "not found" 
 
 #---------------------------------------------------------------
-# OPEN THE HOME PAGE OF A GIVEN USER.  RETURN TRUE IF THE PAGE OPENS SUCCESSFULLY
-# IF THE USER PAGE IS NOT FOUND, PRINT ERROR AND RETURN FALSE
 def Open_user_home_page(user_name):
+    """Open the home page of a given user.  return true if the page opens successfully.
+
+    IF THE USER PAGE IS NOT FOUND, PRINT ERROR AND RETURN FALSE
+    """
     driver.get('https://500px.com/' + user_name)
     # waiting until the page is opened
     main_window_handle = None
@@ -376,10 +408,12 @@ def Open_user_home_page(user_name):
         return False
 
 #---------------------------------------------------------------
-# GET STATISTICS OF A GIVEN USER: NUMBER OF LIKES, VIEWS, FOLLOWERS, FOLLOWING, PHOTOS; AND  FIRST, LAST UPLOAD DATE
-# IF include_photos_list IS TRUE, GET THE LIST OF PHOTOS (ID, TITLE, LINK...) AND SAVED TO A CSV FILE
-# PROCESS: OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
 def Get_stats(user_name):
+    """Get statistics of a given user: number of likes, views, followers, following, photos; and  first, last upload date.
+
+    IF INCLUDE_PHOTOS_LIST IS TRUE, GET THE LIST OF PHOTOS (ID, TITLE, LINK...) AND SAVED TO A CSV FILE
+    PROCESS: OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
+    """
     global photo, user_stats, stats, user_id
     if Open_user_home_page(user_name) == False:
         return None, None
@@ -449,12 +483,14 @@ def Get_stats(user_name):
     return json_data, stats
       
 #---------------------------------------------------------------
-# RETURN THE PHOTOS LIST OF A GIVEN USER: NUMBER OF LIKES, VIEWS, FOLLOWERS, FOLLOWING, PHOTOS; AND  FIRST, LAST UPLOAD DATE
-# PROCESS: 
-# - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
-# - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
-# - EXTRACT THE user_data, the json section that contains all the photos data
 def Get_photos_list(user_name):
+    """return the photos list of a given user: number of likes, views, followers, following, photos; and  first, last upload date.
+
+    PROCESS: 
+    - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
+    - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
+    - EXTRACT THE user_data, the json section that contains all the photos data
+    """
     global photo, user_id
 
     if Open_user_home_page(user_name) == False:
@@ -513,13 +549,15 @@ def Get_photos_list(user_name):
     return photos
 
 #---------------------------------------------------------------
-# GIVEN A USER NAME, RETURN THE LIST OF FOLLOWERS, THE LINK TO THEIS PAGES AND THE NUMBER OF FOLLOWERS OF EACH OF THEM
-# PROCESS:
-# - OPEN THE USER HOME PAGE, LOCATE THE TEXT followers AND CLICK ON IT TO OPEN THE MODAL WINDONW CONTAINING FOLLOWERS LIST
-# - SCROLL TO THE END FOR ALL ITEMS TO BE LOADED
-# - MAKE SURE THE DOCUMENT JS IS RUNNING FOR ALL THE DATA TO LOAD IN THE PAGE BODY
-# - EXTRACT INFO AND PUT IN A LIST. RETURN THE LIST
 def Get_followers_list(user_name):
+    """Given a user name, return the list of followers, the link to theis pages and the number of followers of each of them.
+
+    PROCESS:
+    - OPEN THE USER HOME PAGE, LOCATE THE TEXT followers AND CLICK ON IT TO OPEN THE MODAL WINDONW CONTAINING FOLLOWERS LIST
+    - SCROLL TO THE END FOR ALL ITEMS TO BE LOADED
+    - MAKE SURE THE DOCUMENT JS IS RUNNING FOR ALL THE DATA TO LOAD IN THE PAGE BODY
+    - EXTRACT INFO AND PUT IN A LIST. RETURN THE LIST
+    """
     global user
     followers_list = []
     if Open_user_home_page(user_name) == False:
@@ -553,8 +591,6 @@ def Get_followers_list(user_name):
             time.sleep(3)
         except NoSuchElementException:
             pass
-    # force the progress bar to show 100% done
-    #update_progress(1, ' - Scrolling down to load all followers:')
     # now that we have all followers loaded, start extracting the info
     update_progress(0, ' - Extracting data:')
     innerHTML = driver.execute_script("return document.body.innerHTML") #run JS body scrip after all photos are loaded
@@ -586,13 +622,15 @@ def Get_followers_list(user_name):
     return  followers_list 
 
 #---------------------------------------------------------------
-# GET THE LIST OF FOLLOWINGS, THE LINK TO THEIS PAGES AND THE NUMBER OF FOLLOWERS OF EACH OF THEM
-# PROCESS:
-# - OPEN THE USER HOME PAGE, LOCATE THE TEXT followers AND CLICK ON IT TO OPEN THE MODAL WINDONW CONTAINING FOLLOWERS LIST
-# - SCROLL TO THE END FOR ALL ITEMS TO BE LOADED
-# - MAKE SURE THE DOCUMENT JS IS RUNNING FOR ALL THE DATA TO LOAD IN THE PAGE BODY
-# - EXTRACT INFO AND PUT IN A LIST. RETURN THE LIST
 def Get_followings_list(user_name):
+    """Get the list of followings, the link to theis pages and the number of followers of each of them.
+
+    PROCESS:
+    - OPEN THE USER HOME PAGE, LOCATE THE TEXT followers AND CLICK ON IT TO OPEN THE MODAL WINDONW CONTAINING FOLLOWERS LIST
+    - SCROLL TO THE END FOR ALL ITEMS TO BE LOADED
+    - MAKE SURE THE DOCUMENT JS IS RUNNING FOR ALL THE DATA TO LOAD IN THE PAGE BODY
+    - EXTRACT INFO AND PUT IN A LIST. RETURN THE LIST
+    """
     global user
     followings_list = []
     if Open_user_home_page(user_name) == False:
@@ -655,19 +693,20 @@ def Get_followings_list(user_name):
     return followings_list 
 
 #---------------------------------------------------------------
-# GET N LAST NOTIFICATIONS. 
-# A DETAILED NOTIFICATION ITEM CONTAINS FULL_NAME, USER NAME, THE CONTENT OF THE NOTIFICATION, TITLE OF THE PHOTO IN QUESTION, THE TIME STAMP AND A STATUS
-# A SHORT NOTIFICATION ITEM CONTAINS JUST FULL NAME AND USER NAME
-# A UNIQUE NOTIFICATION LIST IS A SHORT NOTIFICATION LIST WHERE ALL THE DUPLICATION ARE REMOVED.
-#
-# IF THE GIVEN get_full_detail IS TRUE, RETURN THE DETAILED LIST, IF FALSE, RETURN THE UNIQUE LIST
-# PROCESS:
-# - EXPECTING THE ACTIVE PAGE IN THE BROWSER IS THE USER HOME PAGE
-# - LOCATE THE CORRECT NOTIFICATION ICON AND CLICK ON IT TO OPEN THE MODAL WINDOW HOSTING THE NOTIFICATION ITEMS
-# - LOCATE THE TEXT See all notifications AND CLICK ON IT TO OPEN THE NEW PAGE CONTAINING ALL THE NOTIFICATION ITEMS
-# - SCROLL DOWN  N TIMES, CALCULATED BY THE GIVEN number_of_notifications, FOR ALL REQUIRED ITEMS TO BE LOADED 
-# - EXTRACT INFO, RETURN THE FULL LIST OF A UNIQUE LIST DEPENTING ON THE REQUEST
-def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_NOTIFICATION_REQUESTED):
+def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_NOTIFICATION_REQUEST):
+    """Get n last notifications.
+    
+    A DETAILED NOTIFICATION ITEM CONTAINS FULL_NAME, USER NAME, THE CONTENT OF THE NOTIFICATION, TITLE OF THE PHOTO IN QUESTION, THE TIME STAMP AND A STATUS
+    A SHORT NOTIFICATION ITEM CONTAINS JUST FULL NAME AND USER NAME
+    A UNIQUE NOTIFICATION LIST IS A SHORT NOTIFICATION LIST WHERE ALL THE DUPLICATION ARE REMOVED.
+    IF THE GIVEN get_full_detail IS TRUE, RETURN THE DETAILED LIST, IF FALSE, RETURN THE UNIQUE LIST
+    PROCESS:
+    - EXPECTING THE ACTIVE PAGE IN THE BROWSER IS THE USER HOME PAGE
+    - LOCATE THE CORRECT NOTIFICATION ICON AND CLICK ON IT TO OPEN THE MODAL WINDOW HOSTING THE NOTIFICATION ITEMS
+    - LOCATE THE TEXT See all notifications AND CLICK ON IT TO OPEN THE NEW PAGE CONTAINING ALL THE NOTIFICATION ITEMS
+    - SCROLL DOWN  N TIMES, CALCULATED BY THE GIVEN number_of_notifications, FOR ALL REQUIRED ITEMS TO BE LOADED 
+    - EXTRACT INFO, RETURN THE FULL LIST OF A UNIQUE LIST DEPENTING ON THE REQUEST
+    """
     global notification, notificator, unique_notificators
 
     notifications_list = []
@@ -754,21 +793,23 @@ def Get_notification_list(get_full_detail = True, number_of_notifications = MAX_
 
         short_list.append(f'{display_name},{code_name}')
 
-    unique_notificators = remove_duplicates(short_list)
+    unique_notificators = Remove_duplicates(short_list)
     if len(notifications_list) == 0 and len(unique_notificators) == 0: 
         printG(f'User {user_name} has no notification')
    
     return notifications_list, unique_notificators
 
 #---------------------------------------------------------------
-# GET THE LIST OF USERS WHO LIKED A GIVEN PHOTO.
-# PROCESS:
-# - EXPECTING THE ACTIVE PAGE IN THE BROWSER IS THE GIVEN PHOTO PAGE
-# - FORCE THE DOCUMENT JS TO RUN TO FILL THE PAGE BODY
-# - EXTRACT PHOTO TITLE AND PHOTOGRAPHER NAME
-# - LOCATE THE LIKE COUNT NUMBER THEN CLICK ON IT TO OPEN THE MODAL WINDOW HOSTING THE LIST OF ACTIONER USER
-# - SCROLL DOWN TO THE END AND EXTRACT RELEVANT INFO, PUT ALL TO THE LIST AND RETURN IT
 def Get_like_actioners_list():
+    """Get the list of users who liked a given photo.
+
+    PROCESS:
+    - EXPECTING THE ACTIVE PAGE IN THE BROWSER IS THE GIVEN PHOTO PAGE
+    - FORCE THE DOCUMENT JS TO RUN TO FILL THE PAGE BODY
+    - EXTRACT PHOTO TITLE AND PHOTOGRAPHER NAME
+    - LOCATE THE LIKE COUNT NUMBER THEN CLICK ON IT TO OPEN THE MODAL WINDOW HOSTING THE LIST OF ACTIONER USER
+    - SCROLL DOWN TO THE END AND EXTRACT RELEVANT INFO, PUT ALL TO THE LIST AND RETURN IT
+    """
     global user, like_actioners_file_name
     actioners_list = []
 
@@ -832,18 +873,20 @@ def Get_like_actioners_list():
             continue
     return actioners_list 
 #---------------------------------------------------------------
-# LIKE N PHOTO OF A GIVEN USER, STARTING FROM THE TOP
-# IF THE include_already_liked_photo IS TRUE, THE ALREADY-LIKED PHOTO WILL BE COUNTED AS DONE BY THE AUTO-LIKE PROCESS
-# FOR EXAMPLE, IF YOU NEED TO AUTO-LIKE 3 PHOTOS FROM A USER, BUT THE FIRST TWO ARE ALREADY LIKED, THEN YOU ONLY NEED TO DO ONE
-# IF THE include_already_liked_photo_in_count IS FALSE (DEFAULT), THE PROCESS WILL AUTO-LIKE THE EXACT NUMBER REQUESTED
-# PROCESS:
-# - OPEN THE USER HOME PAGE
-# - FORCE DOCUMENT JS TO RUN TO FILL THE VISIBLE BODY
-# - LOCATE THE FIRST PHOTO, CHECK IF IT IS ALREADY-LIKED OR NOT, IF YES, GO THE NEXT PHOTO, IT NO, CLICK ON IT TO LIKE THE PHOTO
-# - CONTINUE UNTIL THE ASKING NUMBER OF PHOTOS IS REACHED. 
-# - WHEN WE HAVE PROCESSED ALL THE LOADED PHOTOS BUT THE REQUIRED NUMBER IS NOT REACHED YET, 
-#   ... SCROLL DOWN ONCE TO LOAD MORE PHOTOS ( CURRENTLY 500PX LOADS 50 PHOTOS AT A TIME) AND REPEAT THE STEPS UNTIL DONE
 def Autolike_photos(target_user_name, number_of_photos_to_be_liked, include_already_liked_photo_in_count = True):
+    """Like n photo of a given user, starting from the top.
+
+    IF THE include_already_liked_photo IS TRUE, THE ALREADY-LIKED PHOTO WILL BE COUNTED AS DONE BY THE AUTO-LIKE PROCESS
+    FOR EXAMPLE, IF YOU NEED TO AUTO-LIKE 3 PHOTOS FROM A USER, BUT THE FIRST TWO ARE ALREADY LIKED, THEN YOU ONLY NEED TO DO ONE
+    IF THE include_already_liked_photo_in_count IS FALSE (DEFAULT), THE PROCESS WILL AUTO-LIKE THE EXACT NUMBER REQUESTED
+    PROCESS:
+    - OPEN THE USER HOME PAGE
+    - FORCE DOCUMENT JS TO RUN TO FILL THE VISIBLE BODY
+    - LOCATE THE FIRST PHOTO, CHECK IF IT IS ALREADY-LIKED OR NOT, IF YES, GO THE NEXT PHOTO, IT NO, CLICK ON IT TO LIKE THE PHOTO
+    - CONTINUE UNTIL THE ASKING NUMBER OF PHOTOS IS REACHED. 
+    - WHEN WE HAVE PROCESSED ALL THE LOADED PHOTOS BUT THE REQUIRED NUMBER IS NOT REACHED YET, 
+      ... SCROLL DOWN ONCE TO LOAD MORE PHOTOS ( CURRENTLY 500PX LOADS 50 PHOTOS AT A TIME) AND REPEAT THE STEPS UNTIL DONE
+      """
     if Open_user_home_page(target_user_name) == False:
         return
 
@@ -882,11 +925,13 @@ def Autolike_photos(target_user_name, number_of_photos_to_be_liked, include_alre
             printR(f'Error after {str(done_count)}, at index {str(i)}, title {title}:\nException: {e}')
 
 #---------------------------------------------------------------
-# LIKE N PHOTOS ON THE ACTIVE PHOTO PAGE. IT COULD BE EITHER POPULAR, POPULAR-UNDISCOVERED, UPCOMING, FRESH OR EDITOR'S CHOICE PAGE
-# THIS WILL AUTOMATICALLY SCROLL DOWN IF MORE PHOTOS ARE NEEDED
-# PROCESS:
-# - SIMILAR TO THE PREVIOUS METHOD ( Autolike_photos() )
 def Like_n_photos_on_current_page(number_of_photos_to_be_liked, index_of_start_photo):
+    """Like n photos on the active photo page. it could be either popular, popular-undiscovered, upcoming, fresh or editor's choice page.
+
+    THIS WILL AUTOMATICALLY SCROLL DOWN IF MORE PHOTOS ARE NEEDED
+    PROCESS:
+    - SIMILAR TO THE PREVIOUS METHOD ( Autolike_photos() )
+    """
     photos_done = 0
     current_index = 0  # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                         # ... we use this index to keep track where we are after a list update 
@@ -948,14 +993,16 @@ def Like_n_photos_on_current_page(number_of_photos_to_be_liked, index_of_start_p
   
 
 #---------------------------------------------------------------
-# PLAY SLIDESHOW OF PHOTOS ON THE ACTIVE PHOTO PAGE IN BROWSER
-# PROCESS:
-# EXPECTING THE ACTIVE PAGE IN BROWSER IS THE PHOTOS PAGE
-# - OPEN THE FIRST PHOTO BY CLICK ON IT
-# - CLICK ON THE EXPAND ARROW TO MAXIMIZE THE DISPLAY AREA 
-# - AFTER A GIVEN TIME INTERVAL, LOCATE THE NEXT BUTTON AND CLICK ON IT TO SHOW THE NEXT PHOTO
-# - EXIT WHEN LAST PHOTO IS REACHED
 def Play_slideshow(time_interval):
+    """Play slideshow of photos on the active photo page in browser.
+
+    PROCESS:
+    EXPECTING THE ACTIVE PAGE IN BROWSER IS THE PHOTOS PAGE
+    - OPEN THE FIRST PHOTO BY CLICK ON IT
+    - CLICK ON THE EXPAND ARROW TO MAXIMIZE THE DISPLAY AREA 
+    - AFTER A GIVEN TIME INTERVAL, LOCATE THE NEXT BUTTON AND CLICK ON IT TO SHOW THE NEXT PHOTO
+    - EXIT WHEN LAST PHOTO IS REACHED
+    """
     photo_links_eles = check_and_get_all_eles_by_class_name(driver, 'photo_link')
     loaded_photos_count = len(photo_links_eles)
  
@@ -975,14 +1022,16 @@ def Play_slideshow(time_interval):
             next_icon = check_and_get_ele_by_xpath(driver,  '//*[@id="copyrightTooltipContainer"]/div/div[2]/div/div[2]')  
 
 #---------------------------------------------------------------                           
-# LIKE N PHOTOS FROM THE USER'S HOME FEED PAGE, EXCLUDING RECOMMENDED PHOTOS
-# SKIP CONSECUTIVE PHOTO(S) OF THE SAME USER
-# PROCESS:
-# - EXPECTING THE USER HOME FEED PAGE IS THE ACTIVE PAGE IN THE BROWSER
-# - GET THE LIST ELEMENTS REPRESENTING LOADED INTERESTED PHOTOS (THE ONES FROM PHOTOGRAPHERS THAT YOU ARE FOLLOWING)
-# - FOR EACH ELEMENT IN THE LIST, TRAVERSE UP, DOWN THE XML TREE FOR PHOTO TITLE, OWNER NAME, LIKE STATUS, AND MAKE A DECISION TO CLICK THE LIKE ICON OR NOT
-# - CONTINUE UNTIL THE REQUIRED NUMBER IS REACHED. ALONG THE WAY, STOP AND SCROLL DOWN TO LOAD MORE PHOTOS WHEN NEEDED 
 def Like_n_photos_on_homefeed_page(number_of_photos_to_be_liked):
+    """Like n photos from the user's home feed page, excluding recommended photos.
+
+    SKIP CONSECUTIVE PHOTO(S) OF THE SAME USER
+    PROCESS:
+    - EXPECTING THE USER HOME FEED PAGE IS THE ACTIVE PAGE IN THE BROWSER
+    - GET THE LIST ELEMENTS REPRESENTING LOADED INTERESTED PHOTOS (THE ONES FROM PHOTOGRAPHERS THAT YOU ARE FOLLOWING)
+    - FOR EACH ELEMENT IN THE LIST, TRAVERSE UP, DOWN THE XML TREE FOR PHOTO TITLE, OWNER NAME, LIKE STATUS, AND MAKE A DECISION TO CLICK THE LIKE ICON OR NOT
+    - CONTINUE UNTIL THE REQUIRED NUMBER IS REACHED. ALONG THE WAY, STOP AND SCROLL DOWN TO LOAD MORE PHOTOS WHEN NEEDED 
+    """
     photos_done = 0
     current_index = 0  # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                     # ... we use this index to keep track where we are after a list update 
@@ -1065,9 +1114,8 @@ def Like_n_photos_on_homefeed_page(number_of_photos_to_be_liked):
                     time.sleep(1.5)  # slow down a bit to make it look more like a human
 
 #---------------------------------------------------------------
-# GIVEN A LIST CONTAINING THE PAIRS OF DISPLAY NAME AND USER NAME,
-# RETURN THE LIST THAT HAS NO DUPLICATION PAIR IN IT
-def remove_duplicates(values):
+def Remove_duplicates(values):
+    """Given a list containing the pairs of display name and user name. return the list that has no duplication pair in it."""
     output = []
     seen = set()
     for value in values:
@@ -1079,14 +1127,16 @@ def remove_duplicates(values):
     return output    
 
 #---------------------------------------------------------------
-# SCROLLING DOWN THE ACTIVE WINDOW IN A CONTROLLABLE FASHION
-# PASSING THE scroll_pause_time ACCORDING TO THE CONTENT OF THE PAGE, TO MAKE SURE ALL ITEMS ARE LOADED BEFORE THE NEXT SCROLL. DEFAULT IS 0.5s
-# THE PAGE COULD HAVE A VERY LONG LIST, OR ALMOST INFINITY, SO BY DEFAULT WE LIMIT IT TO 10 TIMES.
-# IF number_of_scrolls =  0, RETURN WITHOUT SCROLLING
-# IF number_of_scrolls = -1, KEEP SCROLLING UNTIL THE END IS REACHED ...
-# FOR THIS CASE, IN ORDER TO HAVE A REALISTIC PROGRESS BAR, WE WILL USE estimate_scrolls_needed  ( TOTAL REQUEST ITEMS / LOAD ITEMS PER SCROLL )
-# MESSAGE IS A STRING DESCRIBED THE TITLE OF THE PROGRESS BAr. IF EMPTY IS PASSED, THE PROGRESS BAR WILL NOT BE STIMULATED
 def Scroll_down(scroll_pause_time = 0.5, number_of_scrolls = 10, estimate_scrolls_needed = 3, message = ''):
+    """Scrolling down the active window in a controllable fashion.
+
+    PASSING THE scroll_pause_time ACCORDING TO THE CONTENT OF THE PAGE, TO MAKE SURE ALL ITEMS ARE LOADED BEFORE THE NEXT SCROLL. DEFAULT IS 0.5s
+    THE PAGE COULD HAVE A VERY LONG LIST, OR ALMOST INFINITY, SO BY DEFAULT WE LIMIT IT TO 10 TIMES.
+    IF number_of_scrolls =  0, RETURN WITHOUT SCROLLING
+    IF number_of_scrolls = -1, KEEP SCROLLING UNTIL THE END IS REACHED ...
+    FOR THIS CASE, IN ORDER TO HAVE A REALISTIC PROGRESS BAR, WE WILL USE estimate_scrolls_needed  ( TOTAL REQUEST ITEMS / LOAD ITEMS PER SCROLL )
+    MESSAGE IS A STRING DESCRIBED THE TITLE OF THE PROGRESS BAr. IF EMPTY IS PASSED, THE PROGRESS BAR WILL NOT BE STIMULATED
+    """
     if number_of_scrolls == 0 :
         return
     # Get scroll height
@@ -1123,9 +1173,11 @@ def Scroll_down(scroll_pause_time = 0.5, number_of_scrolls = 10, estimate_scroll
     time.sleep(scroll_pause_time)
 
 #---------------------------------------------------------------
-# SCROLL THE ACTIVE WINDOW TO THE END, WHERE THE LAST ELEMENT OF THE GIVEN CLASS NAME BECOME VISIBLE
-# THE likes_count ARGUMENT IS USED FOR CREATING A REALISTIC PROGRESS BAR
 def Scroll_to_end_by_class_name(class_name, likes_count):
+    """Scroll the active window to the end, where the last element of the given class name become visible.
+
+    THE likes_count ARGUMENT IS USED FOR CREATING A REALISTIC PROGRESS BAR
+    """
     eles = driver.find_elements_by_class_name(class_name)
     count = 0
     new_count = len(eles)
@@ -1146,8 +1198,8 @@ def Scroll_to_end_by_class_name(class_name, likes_count):
         update_progress(1, ' - Scrolling to load more items:')
 
 #---------------------------------------------------------------
-# READ CREDENTIALS FROM USER INPUT AND SUBMIT TO THE 500PX LOGIN PAGE
 def Login(user_name, password):
+    """Read credentials from user input and submit to the 500px login page. """
     if len(password) == 0 or len(user_name) == 0: 
         return ''
     driver.get("https://500px.com/login" )
@@ -1160,8 +1212,8 @@ def Login(user_name, password):
     time.sleep(3) #important: need this for the default page to load and some JS to run to get user's stats
 
 #---------------------------------------------------------------
-# WRITE THE GIVEN STRING TO A DISK AS A GIVEN FILE NAME
 def Write_string_to_text_file(input_string, file_name, encode = ''):
+    """Write the given string to a disk as a given file name. """
     if encode == '':
         open_file = open(file_name, "w")
     else:
@@ -1171,10 +1223,12 @@ def Write_string_to_text_file(input_string, file_name, encode = ''):
     open_file.close()
 
 #--------------------------------------------------------------- 
-# OFFER TO OPEN THE GIVEN FILE WITH THE DEFAULT SYSTEM APP. GIVEN FILES ARE ONE OF THE CSV OUTPUT FILES WE HAVE CREATED
-# FOR BETTER VIEWING, WE CONVERT THE CSV FILE TO A HTML 
-# ALSO CLOSE THE BROWSER <--SHOULD NOT DO THIS HERE, BUT TOO CONVENIENT TO DO SO 
 def Offer_to_open_file(file_name, list_type):
+    """Offer to open the given file with the default system app. given files are one of the csv output files we have created.
+
+    FOR BETTER VIEWING, WE CONVERT THE CSV FILE TO A HTML 
+    ALSO CLOSE THE BROWSER <--SHOULD NOT DO THIS HERE, BUT TOO CONVENIENT TO DO SO 
+    """
     try:
         driver.close()
     except WebDriverException:
@@ -1195,10 +1249,12 @@ def Offer_to_open_file(file_name, list_type):
                 os.startfile(CSV_to_HTML(file_name))
 
 #--------------------------------------------------------------- 
-# READ A CSV FILE ON DISK AND CONVERT IT TO HTML
-# SAVE THE HTML FILE  USING THE SAME NAME BUT WITH EXTENSION '.html'
-# EXPECTING THE FIRST LINE TO BE THE HEADERS
 def CSV_generic_list_to_HTML(csv_file_name):
+    """Read a csv file on disk and convert it to html.
+
+    SAVE THE HTML FILE  USING THE SAME NAME BUT WITH EXTENSION '.html'
+    EXPECTING THE FIRST LINE TO BE THE HEADERS
+    """
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
@@ -1238,11 +1294,13 @@ def CSV_generic_list_to_HTML(csv_file_name):
     return html_file
 
 #--------------------------------------------------------------- 
-# READ A CSV PHOTOS LIST FILE ON DISK AND CONVERT IT TO HTML
-# SAVE THE HTML FILE USING THE SAME NAME BUT WITH EXTENSION '.html'
-# EXPECTING THE FIRST LINE TO BE THE HEADERS, WHICH ARE  No., Page, ID, Title, Link
-# USE THE LINK COLUMN AS A <a> TAG WITHIN THE TITLE COLUMN 
 def CSV_photos_list_to_HTML(csv_file_name):
+    """Read a csv photos list file on disk and convert it to html.
+
+    SAVE THE HTML FILE USING THE SAME NAME BUT WITH EXTENSION '.html'
+    EXPECTING THE FIRST LINE TO BE THE HEADERS, WHICH ARE  No., Page, ID, Title, Link
+    USE THE LINK COLUMN AS A <a> TAG WITHIN THE TITLE COLUMN 
+    """
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
@@ -1278,13 +1336,16 @@ def CSV_photos_list_to_HTML(csv_file_name):
     return html_file
 
 #--------------------------------------------------------------- 
-# READ A CSV FILE FILE (THAT IS NOT A PHOTO CSV FILE) ON DISK AND CONVERT IT TO HTML
-# SAVE THE HTML FILE USING THE SAME NAME BUT WITH EXTENSION '.html'
-# EXPECTING THE FIRST LINE TO BE THE HEADERS, WHICH ARE  Display Name, User Name, Number Of Followers
-#                                                   OR:  Name, User Name, Content, Photo Title, Time Stamp, Status
-#                                                   OR:  Name, User Name
-# INSERT A <a> TAG WITHIN THE User Name COLUMN : <a href="https://500px.com/{User Name}"  
 def CSV_to_HTML(csv_file_name):
+    """ Read a specific type of csv file into a table, put it to a html file and write it to disk . Return the filename.
+    
+    THE EXPECTED CSV FILES HAS THIS FEATURE: THE FIRST TWO COLUMNS ARE ALWAYS DISPLAY NAME AND USER NAME.
+    ON THE SECOND COLUMN, WE WILL ASSIGN A WEB LINK <A> SUCH AS <A HREF="HTTPS://500PX.COM/{USER NAME}" 
+    SAVE THE HTML FILE USING THE SAME NAME BUT WITH EXTENSION '.HTML' 
+    THE FIRST LINE WILL BE USED AS HEADERS, WHICH ARE  DISPLAY NAME, USER NAME, NUMBER OF FOLLOWERS
+                                                       OR:  NAME, USER NAME, CONTENT, PHOTO TITLE, TIME STAMP, STATUS
+                                                       OR:  NAME, USER NAME
+    """
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
@@ -1320,8 +1381,8 @@ def CSV_to_HTML(csv_file_name):
     return html_file
 
 #--------------------------------------------------------------- 
-# PROMPT USER FOR A NUMBER INPUT, VALIDATE AND CONVERT IT TO INT. LOOPING UNTIL SUCCESS
 def Validate_int(prompt_message):
+    """ PROMPT USER FOR A NUMBER INPUT, VALIDATE AND CONVERT IT TO INT. LOOPING UNTIL SUCCESS """
     num_str = input(prompt_message)
     while True:        
         try: 
@@ -1331,20 +1392,37 @@ def Validate_int(prompt_message):
             num_str = input(prompt_message)
 
 #--------------------------------------------------------------- 
-# PROMPT USER FOR AN INPUT, MAKE SURE THE INPUT IS NOT EMPTY
 def Validate_non_empty_input(prompt_message):
+    """Prompt user for an input, make sure the input is not empty. """
+
     val = input(prompt_message)
     while len(val) == 0:        
         printR("Input cannot be empty! Please re-enter.")
         val = input(prompt_message)
     return  val
+#--------------------------------------------------------------- 
+def Validate_intput(prompt_message):
+    """ Prompt for input and accepts nothing but digits or letter 'r' or 'q'. """
+
+    val = input(prompt_message)        
+    while True:
+        if val == 'r' or val == 'q':
+            return val
+        try: 
+            return int(val)
+        except ValueError:
+            printR("Invalid input! Please retry.")
+            val = input(prompt_message)
 
 #--------------------------------------------------------------- 
-# WE WANT TO GET THE LIST OF LOADED PHOTOS ON THE USER HOME FEED PAGE, THE ONES FROM THE PHOTOGRAPHERS THAT YOU ARE FOLLOWING.
-# SINCE ALL THE CLASS NAMES IN THE USER HOMEFEED PAGE ARE POSTFIXED WITH RANDOMIZED TEXTS. 
-# A WORK-AROUND SOLUTION IS TO USE THE TAG IMG AS IDENTIFIER FOR A PHOTO 
-# FROM THERE WE REMOVE IMG ITEM THAT ARE EITHER AVATARS, THUMBNAILS OR RECOMMENDED PHOTOS
 def Get_IMG_element_from_homefeed_page():
+    """Get all <img> elements on page then remove elmenents that are not from user's friends.
+
+    WE WANT TO GET THE LIST OF LOADED PHOTOS ON THE USER HOME FEED PAGE, THE ONES FROM THE PHOTOGRAPHERS THAT YOU ARE FOLLOWING.
+    SINCE ALL THE CLASS NAMES IN THE USER HOMEFEED PAGE ARE POSTFIXED WITH RANDOMIZED TEXTS. 
+    A WORK-AROUND SOLUTION IS TO USE THE TAG IMG AS IDENTIFIER FOR A PHOTO 
+    FROM THERE WE REMOVE IMG ITEM THAT ARE EITHER AVATARS, THUMBNAILS OR RECOMMENDED PHOTOS
+    """
     # we are interested in items with the tag <img>
     img_eles = driver.find_elements_by_tag_name('img')
     # img_eles list has many img elements that we don't want, such as thumbnails, recommended photos..., we will remove them from the list
@@ -1354,11 +1432,13 @@ def Get_IMG_element_from_homefeed_page():
             img_eles.remove(ele)
     return img_eles
 #---------------------------------------------------------------
-# update_progress() : Displays or updates a console progress bar
-## Accepts a float between 0 and 1. Any int will be converted to a float.
-## A value under 0 represents a 'halt'.
-## A value at 1 or bigger represents 100%
 def update_progress(progress, message = ''):
+    """Updates a text-based progress bar on the console.
+
+    ACCEPTS A FLOAT BETWEEN 0 AND 1. ANY INT WILL BE CONVERTED TO A FLOAT.
+    A VALUE UNDER 0 REPRESENTS A 'HALT'.
+    A VALUE AT 1 OR BIGGER REPRESENTS 100%
+    """
     if message == '':
         message = 'Progress'
     barLength = 15 # Modify this to change the length of the progress bar
@@ -1375,14 +1455,12 @@ def update_progress(progress, message = ''):
         progress = 1
         status = "Done\r\n"
     block = int(round(barLength*progress))
-    #text = "\rPercent: [{0}] {1}% {2}".format( "#"*block + "-"*(barLength-block), progress*100, status)
     text = f'\r{message:<46.45}[{"."*block + " "*(barLength-block)}] {int(round(progress*100)):<3}% {status}'
     sys.stdout.write(text)
     sys.stdout.flush()
 #---------------------------------------------------------------
-# HIDE TOP AND BOTTOMS BANNERS
-# USAGE: BANNERS MAY COVER ELEMENTS, MAKING THEM INACCESSIBLE
 def Hide_banners():
+    """Hide top and bottoms banners which They make elements beneath them inaccessible."""
     top_banner = check_and_get_ele_by_id(driver, 'hellobar')
     if top_banner is not None:
         driver.execute_script("arguments[0].style.display='none'", top_banner)
@@ -1391,8 +1469,9 @@ def Hide_banners():
     if bottom_banner is not None:
         driver.execute_script("arguments[0].style.display='none'", bottom_banner)
 #---------------------------------------------------------------
-# DISPLAY MENU
 def Show_menu(start_with_current_user = True):
+    """ Display main menu and waiting for the user selection"""
+
     global user_name 
     if not start_with_current_user:
         user_name = input('Enter 500px user name >')
@@ -1423,15 +1502,21 @@ def Show_menu(start_with_current_user = True):
 
 #---------------------------------------------------------------
 def Show_sub_menu():
+    """ Show sub menu for selection of a public gallery. Wait for user input."""
+
     printC('--------- Select the desired photos pages : ---------')
     printC('    1  Popular')
     printC('    2  Popular of Undiscovered photographers ')
     printC('    3  Upcoming')
     printC('    4  Fresh')
     printC("    5  Editor's Choice")
-    return Validate_int('Enter your selection >')
+    printC('    r  Restart for different user')
+    printC('    q  Quit')
+    return Validate_intput('Enter your selection >')
+
 #---------------------------------------------------------------
 def Show_slideshow_galleries_menu():
+    """ Show sub menu for selection of a photo gallery for playing slideshow. Wait for user input."""
     printC('--------- Select the desired photos page for the slideshow: ---------')
     printC('    1  Popular')
     printC('    2  Upcoming')
@@ -1439,6 +1524,9 @@ def Show_slideshow_galleries_menu():
     printC("    4  Editor's Choice")
     printC("    5  Your photos")
     printC("    6  My specific gallery")
+    printC('    r  Restart for different user')
+    printC('    q  Quit')
+
     sel = input('Enter your selection >')
     if sel == '1': return 'https://500px.com/popular'
     if sel == '2': return 'https://500px.com/upcoming'
@@ -1505,7 +1593,7 @@ while choice != 'q':
                 continue
             
             photos_list_file_name = user_name + "_photos.csv"
-            if Write_photos_list_to_csv(photos_list_file_name) == True:
+            if Write_photos_list_to_csv(photos, photos_list_file_name) == True:
                 Offer_to_open_file(photos_list_file_name, Output_file_type.PHOTOS_LIST) 
             choice = Show_menu()
             continue
@@ -1525,7 +1613,7 @@ while choice != 'q':
             print(f"Getting the list of users who follow you ...")
             followers_list = Get_followers_list(user_name)
             Close_chrome_browser()
-            if len(followers_list) > 0 and Write_users_list_to_csv(outfile, followers_list) == True:
+            if len(followers_list) > 0 and Write_users_list_to_csv(followers_list, outfile) == True:
                 Offer_to_open_file(outfile, Output_file_type.USERS_LIST) 
 
             choice = Show_menu()
@@ -1546,7 +1634,7 @@ while choice != 'q':
             print(f"Getting the list of users that you are following ...")
             followings_list = Get_followings_list(user_name)
             Close_chrome_browser()
-            if len(followings_list) > 0 and Write_users_list_to_csv(outfile, followings_list) == True:
+            if len(followings_list) > 0 and Write_users_list_to_csv(followings_list, outfile, ) == True:
                  Offer_to_open_file(outfile, Output_file_type.USERS_LIST) 
 
             choice = Show_menu()
@@ -1554,7 +1642,7 @@ while choice != 'q':
     #---------------------------------------------------------------  
     # Get a list of unique users who liked a given photo      
     elif choice == '5':
-        #photo_href = input('Enter photo href >')
+        photo_href = input('Enter photo href >')
         if len(photo_href) == 0:
             printR('Invalid input. Please retry')
             choice = Show_menu()
@@ -1567,7 +1655,7 @@ while choice != 'q':
         print(f"Getting the list of unique users who liked the given photo ...")
         like_actioners_list = Get_like_actioners_list()
         Close_chrome_browser()
-        if len(like_actioners_list) > 0 and Write_users_list_to_csv(like_actioners_file_name, like_actioners_list) == True:
+        if len(like_actioners_list) > 0 and Write_users_list_to_csv(like_actioners_list, like_actioners_file_name, ) == True:
              Offer_to_open_file(like_actioners_file_name, Output_file_type.USERS_LIST) 
         choice = Show_menu()
         continue   
@@ -1585,10 +1673,12 @@ while choice != 'q':
         #    choice = Show_menu()
         #    continue        
 
-        number_of_notifications =  Validate_int('Enter the number of notifications you want to retrieve(max 1000) >')
-        #  limit maximum number of notifications to retrieve to MAX_NOTIFICATION_REQUESTED 
-        if number_of_notifications > MAX_NOTIFICATION_REQUESTED: 
-            number_of_notifications = MAX_NOTIFICATION_REQUESTED
+        user_input =  Validate_intput('Enter the number of notifications you want to retrieve(max 1000) >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_notifications = int(user_input)
+        if number_of_notifications > MAX_NOTIFICATION_REQUEST:  # prevent abusing
+            number_of_notifications = MAX_NOTIFICATION_REQUEST
  
         Start_chrome_browser()
         Login(user_name, password)
@@ -1608,7 +1698,7 @@ while choice != 'q':
 
         dummy_notifications, unique_notificators = Get_notification_list(True, number_of_notifications)
         Close_chrome_browser()
-        if len(unique_notificators) >= 0 and Write_unique_notificators_list_to_csv(outfile) == True: 
+        if len(unique_notificators) >= 0 and Write_unique_notificators_list_to_csv(unique_notificators, outfile) == True: 
              Offer_to_open_file(outfile, Output_file_type.NOTIFICATIONS_LIST) 
 
         choice = Show_menu()
@@ -1626,10 +1716,12 @@ while choice != 'q':
             choice = Show_menu()
             continue
 
-        number_of_notifications =  Validate_int('Enter the number of notifications you want to retrieve(max 1000) >')
-        #  limit maximum number of notifications to retrieve to MAX_NOTIFICATION_REQUESTED 
-        if number_of_notifications > MAX_NOTIFICATION_REQUESTED: 
-            number_of_notifications = MAX_NOTIFICATION_REQUESTED
+        user_input =  Validate_intput('Enter the number of notifications you want to retrieve(max 1000) >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_notifications = int(user_input)
+        if number_of_notifications > MAX_NOTIFICATION_REQUEST: # prevent abusing
+            number_of_notifications = MAX_NOTIFICATION_REQUEST
  
         Start_chrome_browser()
         Login(user_name, password)
@@ -1644,7 +1736,7 @@ while choice != 'q':
         print(f"Getting the details of the last {number_of_notifications} notifications ...")
         notifications, unique_notificators = Get_notification_list(True, number_of_notifications)
         Close_chrome_browser()
-        if len(notifications) > 0 and  Write_notifications_to_csvfile(outfile) == True:
+        if len(notifications) > 0 and  Write_notifications_to_csvfile(notifications, outfile) == True:
             Offer_to_open_file(outfile, Output_file_type.NOTIFICATIONS_LIST)
 
         choice = Show_menu()
@@ -1653,13 +1745,15 @@ while choice != 'q':
     # Auto-like the first n not-yet-liked photos of a given user'
     elif choice == '8':
         if password == '': password = Validate_non_empty_input('Enter password >')  
-        number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to auto-like >')
+        target_user_name = Validate_non_empty_input('Enter target user name >')
 
-        target_user_name = input('Enter target user name >')
-        if len(password) == 0 or target_user_name is None: 
-            printR('Invalid input(s). Please re-enter')
-            choice = Show_menu()
-            continue
+        user_input =  Validate_intput('Enter the number of photos you want to auto-like >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_photos_to_be_liked = int(user_input)
+        #  avoid abusing the server
+        if number_of_photos_to_be_liked > MAX_AUTO_LIKE_REQUEST: 
+            number_of_photos_to_be_liked = MAX_AUTO_LIKE_REQUEST
   
         Start_chrome_browser()
         Login(user_name, password)
@@ -1679,21 +1773,29 @@ while choice != 'q':
     # Popular, Popular Undiscovered, Upcoming Fresh, Editor's choice
     elif choice == '9':
         if password == '': password = Validate_non_empty_input('Enter password >')  
-        number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to auto-like >')
-        index_of_start_photo =  Validate_int('Enter the index of the start photo (1-500) >')
+
+        user_input =  Validate_intput('Enter the number of photos you want to auto-like >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_photos_to_be_liked = int(user_input)
+        #  avoid abusing the server
+        if number_of_photos_to_be_liked > MAX_AUTO_LIKE_REQUEST: 
+            number_of_photos_to_be_liked = MAX_AUTO_LIKE_REQUEST
+
+        user_input =  Validate_intput('Enter the index of the start photo (1-500) >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: index_of_start_photo = int(user_input)
 
         selection = Show_sub_menu()
-        if   selection == 1: href = 'https://500px.com/popular';                        gallery_name = 'Popular'
+        if   selection == 'q': sys.exit()
+        elif selection == 'r': choice = Show_menu(start_with_current_user = False); continue
+        elif selection == 1: href = 'https://500px.com/popular';                        gallery_name = 'Popular'
         elif selection == 2: href = 'https://500px.com/popular?followers=undiscovered'; gallery_name = 'Popular-Undiscovered'
         elif selection == 3: href = 'https://500px.com/upcoming' ;                      gallery_name = 'Upcoming'
         elif selection == 4: href = 'https://500px.com/fresh';                          gallery_name = 'fresh'
         elif selection == 5: href = 'https://500px.com/editors';                        gallery_name = "Editor's choice"
-        else               : href = ''
-        
-        if password == '' or href is None: 
-            printR('Invalid input(s). Please re-enter')
-            choice = Show_menu()
-            continue
+        else               : href = 'https://500px.com/popular';                        gallery_name = 'Popular'  #default
         
         Start_chrome_browser()
         Login(user_name, password)
@@ -1717,8 +1819,16 @@ while choice != 'q':
     elif choice == '10':
         # do as in option 5, get the list of users who like a given photo, but this time we need to login
         if password == '': password = Validate_non_empty_input('Enter password >')  
+ 
         photo_href = Validate_non_empty_input('Enter your photo href >')
-        number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to auto-like for each user >')
+
+        user_input =  Validate_intput('Enter the number of photos you want to auto-like for each user >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_photos_to_be_liked = int(user_input)
+        #  avoid abusing the server
+        if number_of_photos_to_be_liked > MAX_AUTO_LIKE_REQUEST: 
+            number_of_photos_to_be_liked = MAX_AUTO_LIKE_REQUEST	
 
         Start_chrome_browser()
         Login(user_name, password)
@@ -1753,8 +1863,15 @@ while choice != 'q':
     # skip all consecutive photos of the same user
     elif choice == '11':
         if password == '': password = Validate_non_empty_input('Enter password >')  
-        number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to auto-like >')
-   
+
+        user_input =  Validate_intput('Enter the number of photos you want to auto-like >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_photos_to_be_liked = int(user_input)
+        #  avoid abusing the server
+        if number_of_photos_to_be_liked > MAX_AUTO_LIKE_REQUEST: 
+            number_of_photos_to_be_liked = MAX_AUTO_LIKE_REQUEST	   
+
         Start_chrome_browser()
         Login(user_name, password)
         time.sleep(2)
@@ -1780,13 +1897,22 @@ while choice != 'q':
     # Like n photos of each users in your last m notifications
     elif choice == '12':
         if password == '': password = Validate_non_empty_input('Enter password >')  
-        number_of_photos_to_be_liked = Validate_int('Enter the number of photos you want to like for each user >')
-        number_of_notifications =  Validate_int('Enter the number of notifications you want to retrieve(max 1000) >')
 
-        #  limit maximum number of notifications to retrieve to MAX_NOTIFICATION_REQUESTED 
-        if number_of_notifications > MAX_NOTIFICATION_REQUESTED:
-            number_of_notifications = MAX_NOTIFICATION_REQUESTED
-        
+        user_input =  Validate_intput('Enter the number of photos you want to like for each user >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_photos_to_be_liked = int(user_input)
+        #  avoid abusing the server
+        if number_of_photos_to_be_liked > MAX_AUTO_LIKE_REQUEST: 
+            number_of_photos_to_be_liked = MAX_AUTO_LIKE_REQUEST			
+
+        user_input =  Validate_intput('Enter the number of notifications you want to retrieve(max 1000) >')
+        if user_input == 'q': sys.exit()
+        elif user_input == 'r': choice = Show_menu(start_with_current_user = False); continue
+        else: number_of_notifications = int(user_input)
+        if number_of_notifications > MAX_NOTIFICATION_REQUEST: 
+            number_of_notifications = MAX_NOTIFICATION_REQUEST
+
         ## check whether option 6 or 7 have been done recently, we may be able to skip some work
         #if len(unique_notificators) > 0 and os.path.isfile(outfile) and int(intput_number) <= int(number_of_notifications):
         #    print(f' Using the existing list of users at: { os.path.abspath(outfile)} ')
@@ -1828,7 +1954,7 @@ while choice != 'q':
             printY('If you want to play your private gallery, or NSFW contents, you need to login.\n Type in your password now or just press ENTER to ignore')
             password = input('> ')        
 
-        time_interval = Validate_int('Enter the interval time in second between photos >')
+        time_interval = Validate_intput('Enter the interval time between photos, in second>')
         printY('Slideshow will play in fullscreen, covering this control window.\n To stop the slideshow and return to this window, press ESC three times.\n Now press ENTER to start > ')
         wait_for_enter_key = input()
         
@@ -1882,7 +2008,7 @@ while choice != 'q':
         password = ''
         target_user_name = ''
         number_of_photos_to_be_liked = 2
-        number_of_notifications = MAX_NOTIFICATION_REQUESTED
+        number_of_notifications = MAX_NOTIFICATION_REQUEST
         index_of_start_photo = 0
         like_actioners_file_name = 'dummy'
         choice = Show_menu(False)
