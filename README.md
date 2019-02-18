@@ -7,7 +7,8 @@ A personal project created by curiosity and for fun, to extract information from
 500px is a famous photo sharing site who recently shutdown its API access (June 15 2018), leaving numerous applications relied on its API, useless.
 
 Without the API, data is harder to collect, and it takes longer time to get them.
-But gone the API, came the challenges!
+
+But gone the API, arrived the challenges!
 
 
 As a 500px user who does not want to be manipulated by bots, Initially I just wanted to gather data from the site, manually analyze it and figure it out the users who: 
@@ -26,8 +27,8 @@ At the end of the day, I truly believe that using bots to promote popularity wil
 
 Unless, you are in it not for fun, or your fun is getting ahead, no matter what...
 
-Before trying my bots, just for fun, you may say; check out this old but very interesting article I came across some time ago. 
-It is from  Andy Hutchinson and it said:
+Before trying my bots- just for fun, you may say- check out this old but very interesting article I came across some time ago. 
+It is from  Andy Hutchinson and it pretty much said it all:
  [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
 
@@ -43,7 +44,7 @@ Results are saved on disk as CSV files. You will be offered to view the data in 
 
 - You can play slideshow of photos on various galleries, Popular, Fresh, Upcoming or Editor's choice.  User's galleries or filtered public galleries can also be played by supplying the href.
 
-For sample output, refer to [500px-APIless.docx](/500px-APIless.docx)   
+For detailed steps on each option and the sample output, refer to [500px-APIless.docx](/500px-APIless.docx)   
 
 
 
@@ -80,16 +81,19 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 - Not all exceptions are handled, especially with Selenium’s find_element… methods
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
 - TODO: 
-		- Handling more exceptions
-		- Optimizing for better performance
-		- Putting images thumbnais in the result files
-		- Add ChromeCast support to slideshow
-		- Making a GUI
+   - Handling more exceptions
+   - Optimizing for better performance
+   - Use WebDriverWait whenever possible, instead of time.sleep()
+   - Putting images thumbnais in the result files
+   - Add ChromeCast support to slideshow
+   - Play the slideshow in random order
+   - Accept command line arguments
+   - Making a GUI 
 
 Prior to this project, I have zero knowledge about python and web scraping. I'm sure there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
 
-Feedback, bug report, contributions are all welcomed.
+Feedback, bug report, contributions are more than welcomed.
 
 
 
@@ -97,12 +101,15 @@ Feedback, bug report, contributions are all welcomed.
 **DISCLAIMER:**  
 
 As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
-(500px certainly did not make it easy by randomizing class names)
 
-This project is created for fun and for gaining personal experience with python and web scraping. 
+As stated earlier, this project is created for fun and for gaining personal experience with python and web scraping. 
+
 **The owner assumes no responsibility**.
+
 Even though some limits have been set, and some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your account being banned. **Use this at your own risk**.
+abusing or over-usage may result in your account being banned. 
+
+**Use this at your own risk**.
 
 
 
