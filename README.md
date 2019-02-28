@@ -2,9 +2,9 @@
 A personal project created by curiosity and for fun, to extract information from 500px web site for data analyzing, and to perform some automated processes.
 
 
-**A BIT OF HISTORY:**
+## A BIT OF HISTORY: ##
 
-500px is a famous photo sharing site who recently shutdown its API access (June 15 2018), leaving numerous applications relied on its API, useless.
+[500px](https://500px.com) is a famous photo sharing site who recently shutdown its API access (June 24 2018), leaving numerous applications relied on its API, useless.
 
 Without the API, data is harder to collect, and it takes longer time to get them.
 
@@ -32,7 +32,7 @@ It is from  Andy Hutchinson and it pretty much said it all:
  [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
 
-**WHAT IT CAN DO SO FAR:**
+## WHAT IT CAN DO SO FAR: ##
 
 ![Main menu](/MainMenu.JPG)
 
@@ -47,11 +47,11 @@ The results data are saved on disk in both CSV and HTML formats. User will be of
 
 - The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 
-Refer to [500px-APIless.docx](/500px-APIless.docx) for A complete syntax of the command-line options and the detailed description of each option and its sample outputs.
+Refer to [500px-APIless.docx](/500px-APIless.docx) for a complete command-line syntaxes and the detailed description of each option and its sample outputs.
 
 
 
-**ENVIRONMENT:**
+## ENVIRONMENT: ##
 
 This was developed using Visual Studio Code, testing and run on Windows 10, Python version 3.6
 
@@ -59,7 +59,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, Pyth
 
 
 
-**DEPENDENCIES:**
+## DEPENDENCIES: ##
 
 Python 3.6 or later 
 
@@ -69,7 +69,7 @@ Selenium and ChromeDriver
 
 
 
-**USAGE FOR WINDOW OS:**
+## USAGE FOR WINDOW OS: ##
 
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
@@ -79,20 +79,21 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 
 
 
-**LIMITATIONS, ISSUES, TO DO LIST:**
+## LIMITATIONS, ISSUES, TO DO LIST: ## 
 
 - Not all exceptions are handled, especially with Selenium’s find_element… methods
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
 - In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
-   - Handling more exceptions
-   - Optimizing for better performance
-   - Use WebDriverWait whenever possible, instead of time.sleep()
-   - Putting images thumbnais in the result files
-   - Add ChromeCast support to slideshow
-   - Play the slideshow in random order
-   - Making a GUI 
-   - Automatic data analysation
+   - [ ] Handling more exceptions
+   - [ ] Optimizing for better performance
+   - [ ] Use WebDriverWait whenever possible, instead of time.sleep()
+   - [ ] Putting images thumbnails in the result files
+   - [ ] Add ChromeCast support to slideshow
+   - [x] Support command-line arguments
+   - [ ] Play slideshow in random order
+   - [ ] Making a GUI 
+   - [ ] Automatic data analyzation
 
 Prior to this project, I have zero knowledge about python and web scraping. I'm sure there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
@@ -102,7 +103,7 @@ Feedback, bug report, contributions are more than welcomed.
 
 
 
-**DISCLAIMER:**  
+## DISCLAIMER: ## 
 
 As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
 
