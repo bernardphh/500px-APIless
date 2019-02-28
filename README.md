@@ -36,21 +36,24 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ![Main menu](/MainMenu.JPG)
 
-- The first 7 options are for data collection, for which you need to provide a 500px username.
+- The first 7 options are for data collection
 
-Results are saved on disk as CSV files. You will be offered to view the data in the web browser when the process finished. 
+The results data are saved on disk in both CSV and HTML formats. User will be offered to view the html file on the web browser when the task finishes.
 
-- The next 5 options, from 8 to 12, are the automated processes, for which you need to enter a password for actions.
+
+- The next 5 options, from 8 to 12, are the automated processes, or bots, that will perform some actions.
 
 - You can play slideshow of photos on various galleries, Popular, Fresh, Upcoming or Editor's choice.  User's galleries or filtered public galleries can also be played by supplying the href.
 
-For detailed steps on each option and the sample output, refer to [500px-APIless.docx](/500px-APIless.docx)   
+- The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
+
+Refer to [500px-APIless.docx](/500px-APIless.docx) for A complete syntax of the command-line options and the detailed description of each option and its sample outputs.
 
 
 
 **ENVIRONMENT:**
 
-This was developed using Visual Studio Code, testing and run on Windows 10, for Python version 3.6
+This was developed using Visual Studio Code, testing and run on Windows 10, Python version 3.6
 
 
 
@@ -58,7 +61,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, for 
 
 **DEPENDENCIES:**
 
-Python 3.6 or later (freely distributed on the web)
+Python 3.6 or later 
 
 Selenium and ChromeDriver
 
@@ -80,6 +83,7 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 
 - Not all exceptions are handled, especially with Selenium’s find_element… methods
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
+- In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - Handling more exceptions
    - Optimizing for better performance
@@ -87,8 +91,8 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
    - Putting images thumbnais in the result files
    - Add ChromeCast support to slideshow
    - Play the slideshow in random order
-   - Accept command line arguments
    - Making a GUI 
+   - Automatic data analysation
 
 Prior to this project, I have zero knowledge about python and web scraping. I'm sure there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
@@ -107,7 +111,7 @@ As stated earlier, this project is created for fun and for gaining personal expe
 **The owner assumes no responsibility**.
 
 Even though some limits have been set, and some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your account being banned. 
+abusing or over-usage may result in your 500px account being banned. 
 
 **Use this at your own risk**.
 
