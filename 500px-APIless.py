@@ -692,13 +692,15 @@ def Get_followings_list(driver, user_inputs):
     Hide_banners(driver)        
 
     # click on the Following text to open the modal window
-    driver.find_element_by_xpath('//*[@id="content"]/div[2]/div[4]/ul/li[4]').click()  # not working: driver.find_element_by_class_name("following").click()     
+    ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')     
+    if ele is not None:
+        ele.click()
     time.sleep(2)
       
-    # extract number of following
-    following_ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[2]/div[4]/ul/li[4]/span') 
+    # extract number of following                      
+    following_ele = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span') 
     if following_ele is None:
-        return None
+        return []
 
     # remode thousand separator character, if existed
     following_count = int(following_ele.text.replace(",", "").replace(".", ""))
