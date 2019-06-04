@@ -34,7 +34,7 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ## WHAT IT CAN DO SO FAR: ##
 
-![Main menu](/MainMenu.JPG)
+![Main menu](/MainMenu.jpg)
 
 - The first 6 options are for data collection
 
