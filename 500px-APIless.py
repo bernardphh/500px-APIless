@@ -2533,7 +2533,7 @@ def main():
     if  user_inputs.use_command_line_args == False:
         Show_menu(user_inputs)
  
-    # declare a dictionary so that functions can be refered as string from "1" to "14"
+    # declare a dictionary so that functions can be referred as string from "1" to "14"
     Functions_dictionary = {   
             "1" : Handle_option_1, 
             "2" : Handle_option_2, 
