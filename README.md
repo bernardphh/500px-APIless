@@ -36,12 +36,12 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ![Main menu](/MainMenu.JPG)
 
-- The first 7 options are for data collection
+- The first 6 options are for data collection
 
-The results data are saved on disk in both CSV and HTML formats. User will be offered to view the html file on the web browser when the task finishes.
+The output data are saved on disk in both CSV and HTML formats. When a task finished, the html file will be shown on the web browser.
 
 
-- The next 5 options, from 8 to 12, are the automated processes, or bots, that will perform some actions.
+- The options from 8 to 12, are the automated processes, or bots, that will perform some actions. The descriptions are self-explanatory.
 
 - You can play slideshow of photos on various galleries, Popular, Fresh, Upcoming or Editor's choice.  User's galleries or filtered public galleries can also be played by supplying the href.
 
@@ -85,9 +85,8 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
 - In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
-   - [ ] Handling more exceptions
-   - [ ] Optimizing for better performance
-   - [ ] Use WebDriverWait whenever possible, instead of time.sleep()
+   - [x] Handling more exceptions
+   - [x] Use WebDriverWait whenever possible, instead of time.sleep()
    - [ ] Putting images thumbnails in the result files
    - [ ] Add ChromeCast support to slideshow
    - [x] Support command-line arguments
@@ -95,7 +94,7 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
    - [ ] Making a GUI 
    - [ ] Automatic data analyzation
 
-Prior to this project, I have zero knowledge about python and web scraping. I'm sure there are rooms for improvements. 
+Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
 
 Feedback, bug report, contributions are more than welcomed.
