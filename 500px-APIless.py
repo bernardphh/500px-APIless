@@ -150,7 +150,7 @@ class User_inputs():
         self.number_of_users                = 100
 class Output_data():
     """ Represent all the output lists and data"""
-    def __init__(self, json_data = [], photos = [],notifications = [], unique_notificators = [], followers_list = [], followings_list = [], like_actioners_list= []):
+    def __init__(self, output_dir = '', json_data = [], photos = [],notifications = [], unique_notificators = [], followers_list = [], followings_list = [], like_actioners_list= []):
         self.json_data = json_data      
         self.photos = photos         
         self.notifications = notifications  
@@ -158,8 +158,13 @@ class Output_data():
         self.followers_list = followers_list  
         self.followings_list = followings_list 
         self.like_actioners_list= like_actioners_list
-        self.stats = user_stats() 
-
+        self.stats = user_stats()  
+        
+        # Set default output folder :  %PROGRAMDATA%\500px_APIless\Output (C:\ProgramData\500px_Apiless\Output)
+        output_dir = os.path.join(os.getenv('ProgramData'), r'500px_Apiless\Output')
+        os.makedirs(output_dir, exist_ok = True)
+        self.output_dir = output_dir
+ 
     def Reset(self):
         self.json_data = []       
         self.photos = []          
@@ -205,9 +210,13 @@ def Close_chrome_browser(chrome_driver):
 #---------------------------------------------------------------
 def Create_user_statistics_html(stats):
     """ write user statistic object stats to an html file. """
+
+    time_stamp = datetime.datetime.now().replace(microsecond=0).strftime("%Y-%m-%d, %H:%M:%S")
+
     output = f'''
 <html>\n\t<body>
-        <h3>User statistics</h3>
+        <h2>User statistics</h2>
+        <h3>{time_stamp}</h3>
         <table>
             <tr>                <td><b>User name</b></td>           <td>{stats.user_name}</td>\n</tr>
             <tr>                <td><b>Display name</b></td>        <td>{stats.display_name}</td>\n</tr>
@@ -513,10 +522,7 @@ def Finish_Javascript_rendered_body_content(driver, time_out=10, class_name_to_c
         printR('Error loading. Please retry.')
         return False, ''   
     
-    if DEBUG:
-        Write_string_to_text_file(str(innerHtml.encode('utf-8')), class_name_to_check + '_innerHTML.txt')
     return True, innerHtml
-
 #---------------------------------------------------------------
 def Wait_for_element_visibility(driver, web_element, time_out=10 ):
     """ Wait for an element to be visible within a given timeout. Log error if it occurs."""
@@ -535,7 +541,7 @@ def Wait_for_element_visibility(driver, web_element, time_out=10 ):
 
 #---------------------------------------------------------------
 
-def Get_stats(driver, user_inputs):
+def Get_stats(driver, user_inputs, output_lists):
     """Get statistics of a given user: number of likes, views, followers, following, photos, last upload date...
 
     OPEN USER HOME PAGE https://500px.com/[user_name]
@@ -601,7 +607,8 @@ def Get_stats(driver, user_inputs):
     # write to file the userdata in json for debugging
     if DEBUG:
         jason_string = json.dumps(json_data, indent=2, sort_keys=True) 
-        Write_string_to_text_file(jason_string, user_name + "_stats_json.txt")
+        time_stamp = datetime.datetime.now().replace(microsecond=0).strftime("%Y_%m_%d__%H_%M_%S")
+        Write_string_to_text_file(jason_string, os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_json_{time_stamp}.txt'))
 
     stats = user_stats(json_data['fullname'], user_inputs.user_name,  user_id, location, 
                        affection_note, following_note, json_data['affection'], views_count, json_data['followers_count'], json_data['friends_count'], 
@@ -890,8 +897,8 @@ def Get_following_statuses(driver, user_inputs, start_index, number_of_users, fo
     """
     import pandas as pd
 
-    csv_file  = os.getcwd() + '\\' + user_inputs.user_name + '_followings.csv'
-    result_file = os.getcwd() + '\\' + user_inputs.user_name + '_following_statuses.csv'
+    csv_file = os.path.join(output_lists.output_dir, user_inputs.user_name + '_followings.csv')
+    result_file = os.path.join(output_lists.output_dir, user_inputs.user_name + '_following_statuses.csv')
 
     # the end user will use 1-base index, so we will convert the input to 0-base index
     if start_index > 0: start_index -= 1
@@ -1126,7 +1133,7 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
     return notifications_list, unique_notificators
 
 #---------------------------------------------------------------
-def Get_like_actioners_list(driver):
+def Get_like_actioners_list(driver, output_lists):
     """Get the list of users who liked a given photo. Return the list a suggested file name that includes owner name, photo title and the like count
 
     PROCESS:
@@ -1187,7 +1194,8 @@ def Get_like_actioners_list(driver):
     time.sleep(2)
         
     # make a meaningful output file name
-    like_actioners_file_name = f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners_{date_string}.csv"
+    like_actioners_file_name = os.path.join(output_lists.output_dir, \
+        f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners_{date_string}.csv")
 
     # scroll to the end for all elements of the given class name to load all actioners
     Scroll_to_end_by_class_name(driver, 'ifsGet', likes_count)
@@ -1632,12 +1640,13 @@ def Login(driver, user_inputs):
 
 #---------------------------------------------------------------
 def Write_string_to_text_file(input_string, file_name, encode = ''):
-    """Write the given string to a disk as a given file name. """
+    """Write the given string to a given text file. Create new file if it does not exist."""
+
     if encode == '':
         open_file = open(file_name, "w")
     else:
         open_file = open(file_name, "w", encoding = encode)
-    
+
     open_file.write(input_string)
     open_file.close()
 
@@ -1998,10 +2007,8 @@ def Define_and_read_arguments():
     ap.add_argument("-n",  "--number_of_notifications",     required=False, type=int, nargs='?', const=1, default=200, help="")
     ap.add_argument("-a",  "--target_user_name",            required=False,           nargs='?', const=1, default='',  help="")
     ap.add_argument("-t",  "--time_interval",               required=False, type=int, nargs='?', const=1, default=4,   help="")   
-    ap.add_argument("-f",  "--following",                   required=False,           nargs='?', const=1, default='',  help="Check following status")
 
-    
-    # read actual command line arguments
+      # read actual command line arguments
     args_dict= vars(ap.parse_args())
     for dict_name in args_dict:
         if DEBUG:
@@ -2145,8 +2152,10 @@ def Handle_option_1(user_inputs, output_lists):
     """ Get user status."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.strftime("%Y_%m_%d")
+
     driver = Start_chrome_browser()
-    json_data, stats = Get_stats(driver, user_inputs) 
+    json_data, stats = Get_stats(driver, user_inputs, output_lists) 
     if json_data is None or len(json_data) == 0:
         printR(f'Error reading {user_inputs.user_name}\'s page. Please make sure a valid user name is used')
         if user_inputs.use_command_line_args == False:
@@ -2154,7 +2163,7 @@ def Handle_option_1(user_inputs, output_lists):
 
 
     print(f"Getting user's statistics ...")
-    html_file =  user_inputs.user_name + "_stats.html"
+    html_file =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
     Write_string_to_text_file(Create_user_statistics_html(stats), html_file)
     Close_chrome_browser(driver)
     Show_html_result_file(html_file)
@@ -2168,26 +2177,27 @@ def Handle_option_2(user_inputs, output_lists):
     """ Get user photos """
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    csv_file  = user_inputs.user_name + "_photos.csv"
-    html_file = user_inputs.user_name + "_photos.html"
+    date_string = time_start.strftime("%Y_%m_%d")
+
+    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_photos_{date_string}.csv')
+    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_photos_{date_string}.html')
+    
     # avoid to do the same thing twice: if list (in memory) has items AND output file exists on disk
-    if len(output_lists.photos) > 0 and os.path.isfile(html_file):
-        printY('Photo list existed at: ' + os.path.abspath(html_file))
-        Close_chrome_browser(driver)
+    if output_lists.photos is not None and len(output_lists.photos) > 0 and os.path.isfile(html_file):
+        printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
         Show_html_result_file(html_file) 
+        return
+
+    driver = Start_chrome_browser()
+    print(f"Getting {user_inputs.user_name}'s photos list ...")
+    output_lists.photos = Get_photos_list(driver, user_inputs)
+    Close_chrome_browser(driver)
+    if output_lists.photos is None: 
         Show_menu(user_inputs)
         return
-    else:
-        driver = Start_chrome_browser()
-        print(f"Getting {user_inputs.user_name}'s photos list ...")
-        output_lists.photos = Get_photos_list(driver, user_inputs)
-        Close_chrome_browser(driver)
-        if output_lists.photos is None: 
-            Show_menu(user_inputs)
-            return
             
-        if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
-            Show_html_result_file(CSV_photos_list_to_HTML(csv_file)) 
+    if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
+        Show_html_result_file(CSV_photos_list_to_HTML(csv_file)) 
 
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -2203,28 +2213,28 @@ def Handle_option_3(user_inputs, output_lists):
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
         html_file = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.html'
         if os.path.isfile(html_file):
-            printY('Followers list existed at:\n ' + os.path.abspath(html_file))
+            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
             Show_html_result_file(html_file) 
             return
-    else:
-        driver = Start_chrome_browser()
-        # if user provided password then login
-        if user_inputs.password != '':
-            if Login(driver, user_inputs) == False :
-                return
-        Hide_banners(driver)
-        print(f"Getting the list of users who follow {user_inputs.user_name} ...")
-        output_lists.followers_list = Get_followers_list(driver, user_inputs)
-        Close_chrome_browser(driver)
-        if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
-            csv_file  = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv'           
-            if Write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
-                # show output and print summary report
-                Show_html_result_file(CSV_to_HTML(csv_file)) 
-                time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
-                print(f'The process took {time_duration} seconds') 
-            else:
-                printR(f'Error writing the output file\n:{csv_file}')
+  
+    driver = Start_chrome_browser()
+    # if user provided password then login
+    if user_inputs.password != '':
+        if Login(driver, user_inputs) == False :
+            return
+    Hide_banners(driver)
+    print(f"Getting the list of users who follow {user_inputs.user_name} ...")
+    output_lists.followers_list = Get_followers_list(driver, user_inputs)
+    Close_chrome_browser(driver)
+    if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
+        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')           
+        if Write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
+            # show output and print summary report
+            Show_html_result_file(CSV_to_HTML(csv_file)) 
+            time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
+            print(f'The process took {time_duration} seconds') 
+        else:
+            printR(f'Error writing the output file\n:{csv_file}')
 #---------------------------------------------------------------
 def Handle_option_4(user_inputs, output_lists):
     """ Get followings (friends)"""
@@ -2234,25 +2244,25 @@ def Handle_option_4(user_inputs, output_lists):
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followings_list is not None and len(output_lists.followings_list) > 0:
-        html_file = f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.html'
+        html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.html')
         if os.path.isfile(html_file):
-            printY('Followings list existed at:\n ' + os.path.abspath(html_file))
+            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
             Show_html_result_file(html_file) 
             return
-    else:
-        driver = Start_chrome_browser()
-        print(f"Getting the list of users that you are following ...")
-        output_lists.followings_list = Get_followings_list(driver, user_inputs)
-        Close_chrome_browser(driver)
-        if len(output_lists.followings_list) > 0:
-            csv_file  = f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv'          
-            if Write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
-                # show output and print summary report
-                Show_html_result_file(CSV_to_HTML(csv_file, ['Status'])) #ignore column 'Status'
-                time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
-                print(f'The process took {time_duration} seconds') 
-            else:
-                printR(f'Error writing the output file\n:{csv_file}')
+
+    driver = Start_chrome_browser()
+    print(f"Getting the list of users that you are following ...")
+    output_lists.followings_list = Get_followings_list(driver, user_inputs)
+    Close_chrome_browser(driver)
+    if len(output_lists.followings_list) > 0:
+        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
+        if Write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
+            # show output and print summary report
+            Show_html_result_file(CSV_to_HTML(csv_file, ['Status'])) #ignore column 'Status'
+            time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
+            print(f'The process took {time_duration} seconds') 
+        else:
+            printR(f'Error writing the output file\n:{csv_file}')
 
 #---------------------------------------------------------------
 def Handle_option_5(user_inputs, output_lists):
@@ -2271,7 +2281,7 @@ def Handle_option_5(user_inputs, output_lists):
     time.sleep(1)
     Hide_banners(driver)
     print(f"Getting the list of unique users who liked the given photo ...")
-    output_lists.like_actioners_list, csv_file = Get_like_actioners_list(driver)
+    output_lists.like_actioners_list, csv_file = Get_like_actioners_list(driver, output_lists)
     Close_chrome_browser(driver)
     if output_lists.like_actioners_list is not None and \
        len(output_lists.like_actioners_list) > 0 and \
@@ -2286,14 +2296,13 @@ def Handle_option_6(user_inputs, output_lists):
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime("%Y_%m_%d")
-    csv_file  = f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv'
-    html_file = f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html'
+    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
+    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
-    if len(output_lists.notifications) > 0 and os.path.isfile(html_file):
-        printG('List existed at:\n ' + os.path.abspath(html_file))
+    if output_lists.notifications is not None and len(output_lists.notifications) > 0 and os.path.isfile(html_file):
+        printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')        
         Show_html_result_file(html_file)
-        Show_menu(user_inputs)
         return
 
     driver = Start_chrome_browser()
@@ -2321,7 +2330,8 @@ def Handle_option_6(user_inputs, output_lists):
     Close_chrome_browser(driver)
     
     # Write the list of unique users to csv and html files. Display html file on the browser 
-    csv_file_2  = f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique_users_in_last_{user_inputs.number_of_notifications}_notifications_{date_string}.csv"     
+    csv_file_2  = os.path.join(output_lists.output_dir, \
+        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique_users_in_last_{user_inputs.number_of_notifications}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  Write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_2) == True:
         Show_html_result_file(CSV_to_HTML(csv_file_2))     
     
@@ -2415,7 +2425,7 @@ def Handle_option_10(user_inputs, output_lists):
     time.sleep(1)
     Hide_banners(driver)        
     print(f'Getting the list of users who liked this photo ...')
-    output_lists.like_actioners_list, dummy_file_name = Get_like_actioners_list(driver)
+    output_lists.like_actioners_list, dummy_file_name = Get_like_actioners_list(driver, output_lists)
     if len(output_lists.like_actioners_list) == 0: 
         printG(f'The photo {photo_tilte} has no affection yet')
         Show_menu(user_inputs)
@@ -2533,7 +2543,7 @@ def main():
     if  user_inputs.use_command_line_args == False:
         Show_menu(user_inputs)
  
-    # declare a dictionary so that functions can be referred as string from "1" to "14"
+    # declare a dictionary so that functions can be refered as string from "1" to "14"
     Functions_dictionary = {   
             "1" : Handle_option_1, 
             "2" : Handle_option_2, 
