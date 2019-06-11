@@ -36,9 +36,10 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ![Main menu](/MainMenu.jpg)
 
-- The first 6 options are for data collection
+- The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
+CSV files are used for statistical analysis, and in the automated processes. 
+HTML files are used for presentation, which happens after a data collection task is completed.
 
-The output data are saved on disk in both CSV and HTML formats. When a task finished, the html file will be shown on the web browser.
 
 
 - The options from 8 to 12, are the automated processes, or bots, that will perform some actions. The descriptions are self-explanatory.
@@ -87,12 +88,12 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 - TODO: 
    - [x] Handling more exceptions
    - [x] Use WebDriverWait whenever possible, instead of time.sleep()
-   - [ ] Putting images thumbnails in the result files
+   - [x] Putting images thumbnails in the result files
    - [ ] Add ChromeCast support to slideshow
    - [x] Support command-line arguments
    - [ ] Play slideshow in random order
    - [ ] Making a GUI 
-   - [ ] Automatic data analyzation
+   - [ ] Automatic data analysis
 
 Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
