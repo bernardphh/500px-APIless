@@ -15,7 +15,7 @@ from selenium.common.exceptions import TimeoutException
 #from selenium.webdriver.chrome import service
 #import pychromecast
 #import logging
-#import getpass 
+import getpass 
 
 from lxml import html
 import os, sys, time, datetime, re, math, csv, json, codecs, argparse
@@ -30,40 +30,58 @@ MAX_AUTO_LIKE_REQUEST = 100      # self limitation to avoid abusing
 MAX_FOLLOWINGS_STATUSES = 100    # max number of users you want to find the following statuses with you
 DEBUG = False
 
+DATE_FORMAT = "%Y-%m-%d"         # ex. 2019-06-15
+
+HEAD_STRING_WITH_CSS_STYLE ='\n\
+<head>\n\
+    <style>\n\
+        table {border-collapse: collapse;}\n\
+        table, th, td {border: 1px solid black; padding: 5px; vertical-align: center;}\n\
+        th { background-color: lightgray;}\n\
+        td img { vetical-align:middle; border:3px red; height:50px; width: 50px;}\n\
+        .photo{height:50px; width: 80px;}\n\
+        p {line-height:0.5;}\n\
+    </style>\n\
+</head>\n'
 class photo:
     """ Represent a photo with id number, what page it is on in the user photo list, the title and the href."""
-    def __init__(self, order, id, on_page, desc, link):
+    def __init__(self, order, id, on_page, title, link, src):
         self.order = order
         self.id = id
         self.on_page = on_page
-        self.desc = str(desc)
+        self.title = title
         self.link = link
+        self.src = src
 
 class notification:
     """ Represent a notification object."""
-    def __init__(self, order, display_name, username, content, photo_link, photo_title, timestamp, status):
+    def __init__(self, order, user_avatar, display_name, username, content, photo_thumb, photo_link, photo_title, timestamp, status):
         self.order = order
+        self.user_avatar = user_avatar
         self.display_name = display_name
         self.username = username
         self.content = content
+        self.photo_thumb = photo_thumb
         self.photo_link = photo_link
         self.photo_title = photo_title
         self.timestamp = timestamp
         self.status = status
+
     def print_screen(self):
-        print(self.order + "\n" + self.display_name + "\n" + self.username + "\n" + self.content + "\n" + self.photo_link + "\n" + self.photo_title + "\n" + self.timestamp +  "\n" + self.status )   
+        print(self.order + "\n" + self.user_avatar + self.display_name + "\n" + self.username + "\n" + self.content  +  "\n" + self.photo_thumb + "\n" + self.photo_link + "\n" + self.photo_title + "\n" + self.timestamp +  "\n" + self.status +  "\n"  )   
     def write_to_textfile(self):
-        print(self.order + "\n" + self.display_name + "\n" + self.username + "\n" + self.content + "\n" + self.photo_link + "\n" + self.photo_title + "\n" + self.timestamp +  "\n" + self.status )
+        print(self.order + self.user_avatar + "\n" + self.display_name + "\n" + self.username + "\n" + self.content + self.photo_thumb  + "\n" + self.photo_link + "\n" + self.photo_title + "\n" + self.timestamp +  "\n" + self.status +  "\n"  +  "\n")
 
 class notificator:
     """ Represent a user, with display name and user name, who generated a notification. """
-    def __init__(self, display_name, username):
+    def __init__(self, display_name, username, user_avatar = ''):
         self.display_name = display_name
         self.username = username   
+        self.user_avatar = user_avatar   
     def print_screen(self):
-        print(self.display_name + "\n" + self.username + "\n" )   
+        print(self.display_name + "\n" + self.username + "\n"  + self.user_avatar + "\n")   
     def write_to_textfile(self):
-        print(self.display_name + "\n" + self.username + "\n")
+        print(self.display_name + "\n" + self.username + "\n" + self.user_avatar + "\n")
 
 class user_stats:
     """ Represent basic statistics of a user. Object of the class is considered mutabble and therefore can be passed as reference"""
@@ -86,8 +104,9 @@ class user_stats:
         self.user_status = user_status
 class user:
     """ Represent a user with display name, user name and number of followers."""
-    def __init__(self, order, display_name, user_name, number_of_followers, following_status = ''):
+    def __init__(self, order, user_avatar, display_name, user_name, number_of_followers, following_status = ''):
         self.order = order
+        self.user_avatar = user_avatar
         self.display_name = display_name
         self.user_name = user_name
         self.number_of_followers = number_of_followers
@@ -96,6 +115,7 @@ class user:
     def to_dict(self):
         return {
             'order': self.order,
+            'user_avatar': self.user_avatar,
             'display_name': self.display_name,
             'user_name': self.user_name,
             'number_of_followers': self.number_of_followers,
@@ -104,11 +124,14 @@ class user:
 
 
 #class Output_file_type(Enum):
-#   """ Enum representing 4 types of output list"""
-#   USERS_LIST = 0
-#   PHOTOS_LIST = 1
-#   NOTIFICATIONS_LIST = 2
-#   STATISTICS_HTML_FILE = 3
+#   """ Enum representing 5 types of output list"""
+#   NOT_DEFINED          = 0
+#   FOLLOWERS_LIST       = 1                   
+#   FOLLOWINGS_LIST      = 2                  
+#   PHOTOS_LIST          = 3              
+#   NOTIFICATIONS_LIST   = 4
+#   UNIQUE_USERS_LIST    = 5        # Unique users with appearance count, extracted from Notifications list
+#   STATISTICS_HTML_FILE = 6
 
 class User_inputs():
     """ Represent the input entered by the user. 
@@ -216,7 +239,7 @@ def Create_user_statistics_html(stats):
     output = f'''
 <html>\n\t<body>
         <h2>User statistics</h2>
-        <h3>{time_stamp}</h3>
+        <p>Date: {time_stamp}</p>
         <table>
             <tr>                <td><b>User name</b></td>           <td>{stats.user_name}</td>\n</tr>
             <tr>                <td><b>Display name</b></td>        <td>{stats.display_name}</td>\n</tr>
@@ -246,10 +269,10 @@ def Write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['Order', 'Page', 'ID', 'Title', 'Link'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Page', 'ID', 'Title', 'Link', 'Src'])  
             writer.writeheader()
             for i, a_photo in enumerate(list_of_photos):
-                writer.writerow({'Order' : str(a_photo.order), 'Page': str(a_photo.on_page), 'ID': str(a_photo.id), 'Title' : str(a_photo.desc), 'Link' :a_photo.link}) 
+                writer.writerow({'No' : str(a_photo.order), 'Page': str(a_photo.on_page), 'ID': str(a_photo.id), 'Title' : str(a_photo.title), 'Link' :a_photo.link, 'Src': a_photo.src}) 
             printG(f"- List of {user_name}\'s {len(list_of_photos)} photo is saved at:\n  {os.path.abspath(csv_file_name)}")
         return True
 
@@ -272,10 +295,11 @@ def Write_users_list_to_csv(users_list, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:  # could user utf-16be
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['Order', 'Display Name', 'User Name', 'Followers', 'Status'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'User Avatar', 'Display Name', 'User Name', 'Followers', 'Status'])  
             writer.writeheader()
             for a_user in users_list:
-                writer.writerow({'Order' : a_user.order, 'Display Name' : a_user.display_name, 'User Name': a_user.user_name, 'Followers': a_user.number_of_followers, 'Status': a_user.following_status}) 
+                writer.writerow({'No' : a_user.order, 'User Avatar': a_user.user_avatar, 'Display Name' : a_user.display_name, \
+                    'User Name': a_user.user_name, 'Followers': a_user.number_of_followers, 'Status': a_user.following_status}) 
         printG('The users list is saved at:\n ' + os.path.abspath(csv_file_name) )
         return True
     except PermissionError:
@@ -295,10 +319,13 @@ def Write_notifications_to_csvfile(notifications_list, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['Order', 'Display Name', 'User Name', 'Content', 'Photo Title', 'Time Stamp', 'Status'])    
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'User Avatar', 'Display Name', 'User Name', 'Content', \
+                'Photo Thumbnail', 'Photo Title', 'Time Stamp', 'Status'])    
             writer.writeheader()
             for notif in notifications_list:
-                writer.writerow({'Order': notif.order, 'Display Name': notif.display_name, 'User Name': notif.username, 'Content': notif.content, 'Photo Title': notif.photo_title, 'Time Stamp': notif.timestamp, 'Status': notif.status}) 
+                writer.writerow({'No': notif.order, 'User Avatar': notif.user_avatar, 'Display Name': notif.display_name, \
+                    'User Name': notif.username, 'Content': notif.content, 'Photo Thumbnail': notif.photo_thumb, \
+                    'Photo Title': notif.photo_title, 'Time Stamp': notif.timestamp, 'Status': notif.status }) 
         printG('Notifications list is saved at:\n ' + os.path.abspath(csv_file_name))
         return True 
     except PermissionError:
@@ -310,7 +337,7 @@ def Write_notifications_to_csvfile(notifications_list, csv_file_name):
             return False
 
 #---------------------------------------------------------------
-def Write_unique_notificators_list_to_csv(unique_notifications_list, csv_file_name):
+def Write_unique_notificators_list_to_csv(unique_users_list, csv_file_name):
     """ Write the unique notifications list to a csv file with the given  name. Return True if success.
     
     IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
@@ -318,20 +345,20 @@ def Write_unique_notificators_list_to_csv(unique_notifications_list, csv_file_na
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['Order', 'Display Name', 'User Name', 'Count'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'User Avatar', 'Display Name', 'User Name', 'Count'])  
             writer.writeheader()
 
-            for actor in unique_notifications_list:
+            for actor in unique_users_list:
                 items = actor.split(',')
-                if len(items) == 4:
-                    writer.writerow({'Order': items[0], 'Display Name': items[1], 'User Name': items[2], 'Count': items[3]}) 
+                if len(items) == 5:
+                    writer.writerow({'No': items[0], 'User Avatar': items[1], 'Display Name': items[2], 'User Name': items[3], 'Count': items[4]}) 
             printG('Unique notificators is saved at:\n' + os.path.abspath(csv_file_name))
             return True 
 
     except PermissionError:
         retry = input(f'Error writing to file {csv_file_name}. Make sure the file is not in use. Then type r for retry >')
         if retry == 'r': 
-            Write_unique_notificators_list_to_csv(unique_notificators, csv_file_name)
+            Write_unique_notificators_list_to_csv(unique_users_list, csv_file_name)
         else: 
             printR(f'Error writing file {csv_file_name}')
             return False
@@ -663,7 +690,7 @@ def Get_photos_list(driver, user_inputs):
     # for now we have to use the traditional way (parsing the xml by using lxml) 
 
     #extract photo title and href (alt tag) using lxml and regex
-    els = page.xpath("//a[@class='photo_link ']")
+    els = page.xpath("//a[@class='photo_link ']")  
     titles = page.xpath("//img[@data-src='']")
     num_item = len(els)
     if num_item == 0:
@@ -680,9 +707,9 @@ def Get_photos_list(driver, user_inputs):
         else:
             pId = 0
         on_page = math.floor(i / PHOTOS_PER_PAGE ) + 1
-        link = f"https://500px.com{els[i].attrib['href']}?ctx_page={on_page}&from=user&user_id={user_id}"
-
-        new_photo = photo(i+1, pId, on_page, str(titles[i].attrib["alt"]), link)
+        photo_href = f"https://500px.com{els[i].attrib['href']}?ctx_page={on_page}&from=user&user_id={user_id}"
+        photo_src = titles[i].attrib["src"]
+        new_photo = photo(order=i+1, id=pId, on_page=on_page, title=str(titles[i].attrib["alt"]), link=photo_href, src=photo_src)
         photos_list.append(new_photo)
  
     return photos_list
@@ -752,35 +779,48 @@ def Get_followers_list(driver, user_inputs):
     count = ' '
     following_status = ''
 
-    for i, actor in enumerate(actor_infos):
+    for i, actor_info in enumerate(actor_infos):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f' - Extracting data {i + 1}/{followers_count}:')
   
         try:
-            name_ele = check_and_get_ele_by_class_name(actor, 'name')  
+            # get user name 
+            name_ele = check_and_get_ele_by_class_name(actor_info, 'name')  
             if name_ele is not None:
                 follower_page_link = name_ele.get_attribute('href')
                 follower_user_name = follower_page_link.replace('https://500px.com/', '')
+            
+            # get user avatar
+            avatar_href = ''
+            actor_parent_ele = check_and_get_ele_by_xpath(actor_info, '..')   
+            if actor_parent_ele is not None:
+                avatar_ele = check_and_get_ele_by_class_name(actor_parent_ele, 'avatar')
+                if avatar_ele is not None:
+                    style = avatar_ele.get_attribute('style')
+                    avatar_href =  style[style.find('https'): style.find('\")')]
+
         except NoSuchElementException:
             continue  #ignore if follower name not found
 
         # if logged-in, we can determine if this user has been followed or not
         if user_inputs.password != '':
             try:          
-                class_name_ele = check_and_get_ele_by_xpath(actor, '../..')  #class_name = actor.find_element_by_xpath('../..').get_attribute('class')
+                class_name_ele = check_and_get_ele_by_xpath(actor_info, '../..')  #class_name = actor.find_element_by_xpath('../..').get_attribute('class')
                 if class_name_ele is not None:
                     class_name = class_name_ele.get_attribute('class')
-                    following_status = 'Following' if class_name.find('following') != -1  else 'Not yet follow'
+                    following_status = 'Following' if class_name.find('following') != -1  else 'Not Follow'
             except NoSuchElementException:
                 pass
-
+        # get followers count
         number_of_followers = ''
-        texts = actor.text.split('\n')
+        texts = actor_info.text.split('\n')
         if len(texts) > 1: 
             follower_name = texts[0] 
             count = texts[1]
             number_of_followers =  count.replace(' followers', '').replace(' follower', '') 
-        followers_list.append(user(str(i+1), follower_name, follower_user_name, number_of_followers, following_status))
+        
+        # create user object and add it to the result list 
+        followers_list.append(user(str(i+1), avatar_href, follower_name, follower_user_name, number_of_followers, following_status))
     return  followers_list 
 
 #---------------------------------------------------------------
@@ -908,7 +948,7 @@ def Get_following_statuses(driver, user_inputs, start_index, number_of_users, fo
         # convert list of users to dataframe
         # ERROR HERE, WRONG COLUMN ORDER
         df = pd.DataFrame.from_records([s.to_dict() for s in following_list])
-        df.columns = ["Order", "Display Name", "User Name", "Followers", "Status"]
+        df.columns = ["No", "Display Name", "User Name", "Followers", "Status"]
         #size = str(len(following_list))
         printY(f'Using the existing list in memory (str(len({following_list})) users)')
         print(df)
@@ -1017,23 +1057,37 @@ def Get_followings_list(driver, user_inputs):
     followings_page_link = ''
     count = '' 
 
-    for i, actor in enumerate(actor_infos):
+    for i, actor_info in enumerate(actor_infos):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f' - Extracting data {i + 1}/{following_count}:')
 
         try:
-            #following_page_link = actor.find_element_by_class_name('name').get_attribute('href')
-            ele = check_and_get_ele_by_class_name(actor, 'name')
+            # get user name 
+            ele = check_and_get_ele_by_class_name(actor_info, 'name')
             if ele is not None:
                 following_page_link = ele.get_attribute('href')
                 following_user_name = following_page_link.replace('https://500px.com/', '')
+
+            # get user avatar
+            avatar_href = ''
+            actor_info_parent_ele = check_and_get_ele_by_xpath(actor_info, '..')   
+            if actor_info_parent_ele is not None:
+                avatar_ele = check_and_get_ele_by_class_name(actor_info_parent_ele, 'avatar')
+                if avatar_ele is not None:
+                    style = avatar_ele.get_attribute('style')
+                    avatar_href =  style[style.find('https'): style.find('\")')]
+
         except NoSuchElementException:
             continue  #ignore if follower name not found
 
-        texts = actor.text.split('\n')
+        # get followers count
+        texts = actor_info.text.split('\n')
         if len(texts) > 0: following_name = texts[0] 
-        if len(texts) > 1: count = texts[1]; number_of_followings =  count.replace(' followers', '').replace(' follower', '')  
-        followings_list.append(user(str(i+1), following_name, following_user_name, number_of_followings))
+        if len(texts) > 1: count = texts[1]; 
+        number_of_followers =  count.replace(' followers', '').replace(' follower', '')  
+
+        # create user object and add it to the result list 
+        followings_list.append(user(str(i+1), avatar_href, following_name, following_user_name, number_of_followers))
     return followings_list 
 
 #---------------------------------------------------------------
@@ -1071,19 +1125,29 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
     if count > user_inputs.number_of_notifications:
        count = user_inputs.number_of_notifications 
     for i, item in enumerate(items):
+        # advance the progress bar
         if user_inputs.number_of_notifications != -1 and i >=  user_inputs.number_of_notifications:
             update_progress(1, f' - Extracting data {user_inputs.number_of_notifications}/{user_inputs.number_of_notifications}:')
             break
         if i > 0:
             update_progress( i / (count), f' - Extracting data {i}/{count}:')
 
+        # get user_name, display_name
         actor = check_and_get_ele_by_class_name(item, 'notification_item__actor') 
         if actor is None:
             continue
         display_name = actor.text
         user_name = actor.get_attribute('href').replace('https://500px.com/', '')
-        
-        item_text = check_and_get_ele_by_class_name(item, 'notification_item__text')  #item.find_element_by_class_name('notification_item__text')
+
+        # get user avatar
+        user_avatar = ''
+        avatar_ele = check_and_get_ele_by_class_name(item, 'notification_item__avatar_img') 
+        if avatar_ele is None:
+            continue 
+        user_avatar = avatar_ele.get_attribute('src')
+          
+        # the type of notificication
+        item_text = check_and_get_ele_by_class_name(item, 'notification_item__text')  
         if item_text is not  None:
             if item_text.text.find('liked') != -1: 
                 content = 'liked'
@@ -1099,6 +1163,7 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
             if content.find('Quest') != -1:
                 continue
 
+        # photo title, photo link
         photo_ele = check_and_get_ele_by_class_name(item_text, 'notification_item__photo_link')
         photo_title = ''
         photo_link = ''        
@@ -1109,17 +1174,29 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
             if following_box is not None and following_box.is_displayed():        
                 status = 'Following'
             else:  
-                status = 'Not yet follow' 
+                status = 'Not Follow' 
 
         else: 
             photo_title = photo_ele.text
             photo_link = photo_ele.get_attribute('href') 
+
+        # get photo thumbnail
+        photo_thumbnail = ''
+        photo_thumb_ele = check_and_get_ele_by_class_name(item, 'notification_item__photo_img') 
+        if photo_thumb_ele is not None:
+            photo_thumbnail = photo_thumb_ele.get_attribute('src')
         
-        ele = check_and_get_ele_by_class_name(item, 'notification_item__timestamp')  #timestamp = item.find_element_by_class_name('notification_item__timestamp').text
+        # time stamp
+        ele = check_and_get_ele_by_class_name(item, 'notification_item__timestamp')  
         timestamp  = ele.text if ele is not None else ""
-        notifications_list.append(notification(str(i+1), display_name, user_name, content, photo_link, photo_title, timestamp, status))
-        # in some rare cases, the user_name may contain coma. We replace it with space
-        short_list.append(f'{display_name.replace(",", " ")},{user_name}')
+
+        # creating the notification object
+        new_notitication_item = notification(order=str(i+1), user_avatar=user_avatar, display_name=display_name, username=user_name, 
+                                          content=content, photo_thumb=photo_thumbnail, photo_link=photo_link, photo_title=photo_title, timestamp=timestamp, status=status)
+        notifications_list.append(new_notitication_item)
+
+        # Create the  short list. In some rare cases, the user_name may contain coma. We replace it with space
+        short_list.append(f'{user_avatar},{display_name.replace(",", " ")},{user_name}')
 
     unique_notificators = Count_And_Remove_Duplications(short_list)
 
@@ -1145,7 +1222,7 @@ def Get_like_actioners_list(driver, output_lists):
     """
 
     actioners_list = []
-    date_string = datetime.datetime.now().replace(microsecond=0).strftime("%Y_%m_%d")
+    date_string = datetime.datetime.now().replace(microsecond=0).strftime(DATE_FORMAT)
 
     # abort the action if the target objects failed to load within a timeout of 15s    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='react_photos_index_container')[0]:
@@ -1195,7 +1272,7 @@ def Get_like_actioners_list(driver, output_lists):
         
     # make a meaningful output file name
     like_actioners_file_name = os.path.join(output_lists.output_dir, \
-        f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners_{date_string}.csv")
+        f"{photographer_name.replace(' ', '-')}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
 
     # scroll to the end for all elements of the given class name to load all actioners
     Scroll_to_end_by_class_name(driver, 'ifsGet', likes_count)
@@ -1205,20 +1282,36 @@ def Get_like_actioners_list(driver, output_lists):
     actioners_count = len(actioners)
     display_name = ''
     followers_count = ''
+    avatar = ''
     for i, actioner in enumerate(actioners):
         update_progress(i / (actioners_count - 1), f' - Extracting data {i+1}/{actioners_count}:')
         try:    
             texts = actioner.text.split('\n')
+            # get user display name
             if len(texts) > 0: 
                 display_name = texts[0] 
+            # get number of followers
             if len(texts) > 1:
                 followers_count  = re.sub('[^\d]+', '', texts[1]) 
-            # extract actioner's user name
-            ele = check_and_get_ele_by_tag_name(actioner, 'a') 
-            if ele is not None:
-                name = ele.get_attribute('href').replace('https://500px.com/','')
+            # get user name
+            a_ele = check_and_get_ele_by_tag_name(actioner, 'a') 
+            if a_ele is not None:
+                name = a_ele.get_attribute('href').replace('https://500px.com/','')
+                
+            # get user avatar
+            img_ele = check_and_get_ele_by_tag_name(actioner, 'img') 
+            if img_ele is not None:
+                avatar= img_ele.get_attribute('src')
+            
+            # get following status
+            following_status = 'Not follow'
+            actioner_parent_ele = check_and_get_ele_by_xpath(actioner, '../..')
+            if actioner_parent_ele is not None:
+                texts = actioner_parent_ele.text
+                if 'Following' in texts:
+                    following_status = 'Following'
 
-            actioners_list.append(user(str(i+1), display_name, name, str(followers_count)) )
+            actioners_list.append(user(str(i+1), avatar, display_name, name, str(followers_count), following_status) )
         except NoSuchElementException:
             continue
     return actioners_list, like_actioners_file_name 
@@ -1485,8 +1578,10 @@ def Like_n_photos_on_homefeed_page(driver, user_inputs):
 
 #---------------------------------------------------------------
 def Count_And_Remove_Duplications(values):
-    """Given a list containing the strings of display name and user name separated by a comma such as "John Doe, johndoe" .
-       Count the  duplication then remove the duplicated entry. Append the count to each entry ."""
+    """Given a list containing the strings of display name and user name separated by a comma such as "John Doe, johndoe, http://..." .
+       Count the  duplication then remove the duplicated entry. Append the count to each entry's count column.
+       An output list item has this form: "John Doe, johndoe, http://..., count ". """
+
     output = []
     seen = set()
     count = 0
@@ -1500,11 +1595,11 @@ def Count_And_Remove_Duplications(values):
             index = next(indexes)
             list_items = output[index].split(',')
             try:
-                if len(list_items) == 3:
-                    new_count = int(list_items[2]) + 1
+                if len(list_items) == 4:
+                    new_count = int(list_items[3]) + 1
                # elif len(list_items) == 4: # just in crazy situation where display name has comma in it 
                #     new_count = int(list_items[3]) + 1
-                output[index] = f'{list_items[0]},{list_items[1]},{new_count}'
+                output[index] = f'{list_items[0]},{list_items[1]},{list_items[2]},{new_count}'
             except:
                 continue
     return output    
@@ -1583,10 +1678,10 @@ def Scroll_to_end_by_class_name(driver, class_name, likes_count):
     while new_count != count:
         try:
             update_progress(new_count / likes_count, f' - Scrolling to load more items {new_count}/{likes_count}:')
-            the_last_in_list = eles[new_count - 1]
+            the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
-            time.sleep(3)
-            #WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
+            time.sleep(1)
+            WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
             count = new_count
             eles = driver.find_elements_by_class_name(class_name)
             new_count = len(eles)
@@ -1671,40 +1766,62 @@ def Find_encoding(file_name):
     return charenc 
 
 #--------------------------------------------------------------- 
-def CSV_photos_list_to_HTML(csv_file_name):
+def CSV_photos_list_to_HTML(csv_file_name, ignore_columns=[]):
     """Create a html file from a given photos list csv  file. Save it to disk and return the file name.
 
     SAVE THE HTML FILE USING THE SAME NAME BUT WITH EXTENSION '.html'
-    EXPECTING THE FIRST LINE TO BE THE HEADERS, WHICH ARE  No., Page, ID, Title, Link
-    USE THE LINK COLUMN AS A <a> TAG WITHIN THE TITLE COLUMN 
+    EXPECTING THE FIRST LINE TO BE THE COLUMN HEADERS, WHICH ARE  No, Page, ID, Title, Link, Src
+    HIDE THE COLUMNS IN THE GIVEN ignore_columns LIST, BUT THE DATA IN THESE COLUMNS ARE USED TO FORM THE WEB LINK TAG <a href=...>
     """
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
         return None
-    paths = file_path.split('\\')
-    file_name = paths[len(paths) - 1]
-    html_file = os.path.dirname(os.path.abspath(csv_file_name))+ '\\' + file_name + '.html'
-    css_head_string='	<head><style>table {border-collapse: collapse;}table, th, td {border: 1px solid black;}</style></head>'
-   
+
+    html_file = file_path + '.html'
+
+    # Create the document title and description
+    file_name = file_path.split('\\')[-1]
+    splits = file_name.split('_')
+    title_string = ''
+    if len(splits) >=4:
+        title_string = f'\
+    <h2>Photo lists</h2>\n\
+    <p> Date: {splits[-1]} </p>\n\
+    <p> User: {splits[0]} </p>\n\
+    <p> {splits[1]} {splits[2]} </p>\n\
+    <p> File name: {html_file} </p>\n'
+
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
         headers = reader.fieldnames
+
         row_string = '<tr>'
-        # photo list headers:  No., Page, ID, Title, Link
+        # write headers row 
+        # Columns    : 0   1     2   3      4     5
+        # Photo List : No, Page, ID, Title, Link, Src
         for header in reader.fieldnames:
-            if header == 'Link': continue
+            if header in ignore_columns:
+                continue
             row_string += f'<th align="left">{header}</th>'
+        
+        # write each row 
         row_string += '</tr>'
         for row in reader:
             row_string += '<tr>'
-            for i in range(len(headers) -1):   #, fn in enumerate(reader.fieldnames):
-                if i == 3: 
-                    row_string += f'<td><a href="{row[headers[i+1]]}">{row[headers[i]]}</a></td> \n'
-                else:     
-                   row_string += f'<td>{row[headers[i]]}</td> \n'
+            for i in range(len(headers) ):
+                col_header = headers[i]
+                text = row[headers[i]]
+
+                if col_header == 'No': 
+                   row_string += f'<td>{text}</td> \n' 
+                
+                elif col_header == 'Title': 
+                    row_string += f'<td><img class="photo" src={row[headers[5]]}></img>\n' 
+                    row_string += f'<a href="{row[headers[4]]}">{text}</a></td> \n'
             row_string += '</tr>'
-        html_string = f'<html> {css_head_string} <body> <h3>{html_file}</h3> <table {row_string} </table> </body> </html>'
+
+        html_string = f'<html>\n{HEAD_STRING_WITH_CSS_STYLE}<body> \n{title_string}<table {row_string} </table> </body> </html>'
 
         #write html file 
         with open(html_file, 'wb') as htmlfile:
@@ -1714,62 +1831,135 @@ def CSV_photos_list_to_HTML(csv_file_name):
 
 #--------------------------------------------------------------- 
 def CSV_to_HTML(csv_file_name, ignore_columns=[]):
-    """ Read a specific type of csv file into a table, render it in a html file and write file to disk . Return the saved html filename.
+    """ Convert csv file of various types into html file and write it to disk . Return the saved html filename.
     
-    THE EXPECTED CSV FILES HAS THESE COMMON CHARACTERISTICS: THE FIRST THREE COLUMNS ARE ALWAYS ORDER, DISPLAY NAME AND USER NAME.
-    ON THE SECOND COLUMN, WE WILL ASSIGN A WEB LINK <A> SUCH AS <A HREF="HTTPS://500PX.COM/{USER NAME}" 
+    EXPECTED 5 CSV FILES TYPES: Notifications list , Unique users list, Followers list, Followings list, List of users who like a photo.
     THE SAVED HTML FILE HAS THE SAME NAME BUT WITH EXTENSION '.HTML' 
-    THE FIRST LINE WILL BE USED AS HEADERS, WHICH ARE  ORDER, DISPLAY NAME, USER NAME, FOLLOWERS, STATUS
-                                                       OR:  ORDER, NAME, USER NAME, CONTENT, PHOTO TITLE, TIME STAMP, STATUS
-                                                       OR:  ORDER, NAME, USER NAME, COUNT
-    THE ARGUMENT ignore_columns IS A LIST OF THE HEADER NAMES FOR WHICH WE WANT TO HIDE THE ENTIRE COLUMN
+    EXPECTING FIRST LINE IS COLUMN HEADERS, WHICH VARIES DEPENDING ON THE CSV TYPES
+    THE ARGUMENT ignore_columns IS A LIST OF THE COLUMN HEADERS FOR WHICH WE WANT TO HIDE THE ENTIRE COLUMN
     """
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
         return None
-    paths = file_path.split('\\')
-    file_name = paths[len(paths) - 1]
-    html_file = os.path.dirname(os.path.abspath(csv_file_name))+ '\\' + file_name + '.html'
-    css_head_string='	<head><style>table {border-collapse: collapse;}table, th, td {border: 1px solid black;}</style></head>'
-   
+
+    html_full_file_name = file_path + '.html'
+
+    # Create document title and description based on these predefined, expected file names:
+    # Notifications   :    [user name]_[count]_notifications_[date].html
+    # Unique users    :    [user name]_[count]_unique-users-last-23-notifications_[date].html
+    # Followers List  :    [user name]_[count]_followers_[date].html
+    # Followings List :    [user name]_[count]_followings_[date].html
+    # Users like photo:    [user name]_[count]_likes_[photo title]_[date].html
+
+    file_name = file_path.split('\\')[-1]
+    splits = file_name.split('_')  
+    title = ''
+    if len(splits) >=4:
+        if 'unique' in html_full_file_name:
+           parts = splits[2].split('-')
+           title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
+        elif 'notifications' in html_full_file_name:
+            title = f'Last {splits[1]} notifications'
+        elif 'followers' in html_full_file_name:
+            title = f'List of {splits[1]} followers'
+        elif 'followings' in html_full_file_name:
+            title = f'List of {splits[1]} followings'
+        elif 'likes' in html_full_file_name:
+            title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
+        
+        title_string = f'\
+    <h2>{title}</h2>\n\
+    <p> Date: {splits[-1]} </p>\n\
+    <p> User: {splits[0]} </p>\n\
+    <p> File name: {html_full_file_name} </p>\n'
+
+ 
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
         headers = reader.fieldnames
+        if len(headers) < 4:
+            printR(f'File {csv_file_name} is in wrong format!')
+            return ''
+
         row_string = '<tr>'
         
         for header in reader.fieldnames:
             if header not in ignore_columns:
                 row_string += f'<th align="left">{header}</th>'
-        row_string += '</tr>'
-        
+
+        # create rows for html table 
+        row_string += '</tr>'       
         for row in reader:
             row_string += '<tr>'
+            # Table columns vary depending on 5 different csv files:
+            # Columns:         0   1            2             3          4          5                6            7           8
+            # Notifications  : No, User Avatar, Display Name, User Name, Content,   Photo Thumbnail, Photo Title, Time Stamp, Status
+            # Unique users   : No, User Avatar, Display Name, User Name, Count
+            # Followers List : No, User Avatar, Display Name, User Name, Followers, Status
+            # Followings List: No, User Avatar, Display Name, User Name, Followers, Status
+
             for i in range(len(headers)): 
-                text = row[headers[i]]
-                if i != 2:                                                     # insert <a href> in the third column User Name
-                    if text.find('Following') != -1: 
-                        row_string += f'<td bgcolor="#00FF00">{text}</td> \n'  # green cell for following users
-                    elif headers[i].find('Followers') != -1: 
-                        row_string += f'<td align="right">{text}</td> \n'      # align right for number of followers        
-                    else:                            
+                col_header = headers[i]   
+                # ignore unwanted columns
+                if col_header in ignore_columns:
+                    continue
+
+                text = row[col_header]
+
+                # In Display Name column, show user's avatar and the display name with link 
+                if col_header == 'Display Name' : 
+                    avatar_src = row[headers[1]]
+                    row_string += f'<td><img src={avatar_src}></img> \n'   
+
+                    user_home_page = f'https://500px.com/{row[headers[3]]}'
+                    row_string += f'<a href="{user_home_page}">{text}</a></td> \n'   
+               
+                # Column 4 varies depending on csv file types
+                elif i == 4:  
+                    # Unique Users, Followers or Followings Lists:   
+                    if col_header == 'Followers' or col_header == 'Count': 
+                            row_string += f'<td align="right">{text}</td> \n'   # align right for a count number 
+                    # Notifications or Unique users csv files: 
+                    elif col_header == 'Count' or col_header == 'Content':      # write as is    
                         row_string += f'<td>{text}</td> \n'
-                else:
-                    row_string += f'<td><a href="https://500px.com/{text}">{text}</a></td> \n'   
-        row_string += '</tr>'
-        html_string = f'<html> {css_head_string} <body> <h3>{html_file}</h3> <table {row_string} </table> </body> </html>'
+                    
+                # Column 5 on Followers or Followings list or column 8 on Notifications list
+                elif col_header == 'Status':
+                    if text.find('Following') != -1: 
+                        row_string += f'<td bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
+                    else:  
+                        row_string += f'<td>{text}</td> \n'          
+  
+                # In Photo Tile column, show photo thumbnail and photo title with <a href> link
+                elif  col_header == 'Photo Title': 
+                     if row[headers[5]] == '':
+                         row_string += f'<td></td> \n'                          # donot write <img> tag if photo thumbnail is empty
+                     else:
+                         row_string += f'<td><img class="photo" src={row[headers[5]]}></img>{text}</td> \n' 
+
+                # All other columns such as 0:No, 7:Time Stamp,...: write text as is
+                else:                            
+                     row_string += f'<td>{text}</td> \n'
+
+            row_string += '</tr>'
+
+        html_string = f'<html> {HEAD_STRING_WITH_CSS_STYLE}<body> \n{title_string} \n<table {row_string} </table> </body> </html>'
 
         #write html file 
-        with open(html_file, 'wb') as htmlfile:
+        with open(html_full_file_name, 'wb') as htmlfile:
             htmlfile.write(html_string.encode('utf-16'))
 
-    return html_file
+    return html_full_file_name
 
 #--------------------------------------------------------------- 
 def Validate_non_empty_input(prompt_message, user_inputs):
     """Prompt user for an input, make sure the input is not empty. Return True if Quit or Restart is requested. False otherwise """
 
-    val = input(prompt_message)
+    if 'password' in prompt_message:
+        val = getpass.win_getpass(prompt_message)
+    else:
+        val = input(prompt_message)
     if val == 'q' or val == 'r':
         user_inputs.choice = val
         return val, True
@@ -1917,14 +2107,14 @@ def Show_menu(user_inputs):
     printG(f'Current user: {user_inputs.user_name}')
 
     # password is optional
-    if sel == 3 and user_inputs.password == '':
-        expecting_password = input('If you also want to obtain your following status to each of your followers,\ntype in password to login now,\nor just press ENTER to ignore this: >')
+    if (sel == 3 or sel == 5) and user_inputs.password == '':
+        expecting_password = getpass.win_getpass('If you also want to obtain your following status to each user,\ntype in password to login now,\nor just press ENTER to ignore this: >')
         if expecting_password == 'q' or expecting_password == 'r':
             user_inputs.choice = sel
             return 
         else:
             user_inputs.password =expecting_password
-   
+            
     if sel < 6 or sel == 7 or sel == 15:
         user_inputs.choice = str(sel)
         return
@@ -1975,8 +2165,8 @@ def Show_galllery_selection_menu(user_inputs):
     elif sel == '4': return 'https://500px.com/fresh'                         , 'Fresh', False
     elif sel == '5': return 'https://500px.com/editors'                       , "Editor's Choice", False
     elif sel == '6': 
-        input_val, abort = Validate_non_empty_input('Enter the link to your desired photo gallery. It could be a public  \
-                    gallery with filters, or a private gallery >', user_inputs), 
+        input_val, abort = Validate_non_empty_input('Enter the link to your desired photo gallery.\n\
+ It could be a public gallery with filters, or a private gallery >', user_inputs)
         if abort:
             return '', '', True
         else:
@@ -2118,9 +2308,8 @@ def Get_additional_user_inputs(user_inputs):
                 user_inputs.choice = user_inputs.user_name
                 return False               
 
-        if user_inputs.user_name is not '' and user_inputs.password is '':
-            printY('Type your password:')           
-            user_inputs.password, abort = Validate_non_empty_input('> ', user_inputs)
+        if user_inputs.user_name is not '' and user_inputs.password is '':                   
+            user_inputs.password, abort = Validate_non_empty_input('Type your password> ', user_inputs)
             if abort:
                 return False    
 
@@ -2152,16 +2341,17 @@ def Handle_option_1(user_inputs, output_lists):
     """ Get user status."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime("%Y_%m_%d")
+    date_string = time_start.strftime(DATE_FORMAT)
 
+    # do task
     driver = Start_chrome_browser()
     json_data, stats = Get_stats(driver, user_inputs, output_lists) 
     if json_data is None or len(json_data) == 0:
         printR(f'Error reading {user_inputs.user_name}\'s page. Please make sure a valid user name is used')
         if user_inputs.use_command_line_args == False:
             Show_menu(user_inputs)
-
-
+    
+    # write result to html file, show it on browser
     print(f"Getting user's statistics ...")
     html_file =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
     Write_string_to_text_file(Create_user_statistics_html(stats), html_file)
@@ -2177,37 +2367,39 @@ def Handle_option_2(user_inputs, output_lists):
     """ Get user photos """
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime("%Y_%m_%d")
+    date_string = time_start.strftime(DATE_FORMAT)
+   
+    # avoid to do the same thing twice: if list (in memory) has items AND output file (on disk) exists
+    if output_lists.photos is not None and len(output_lists.photos) > 0:
+        html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.html')
+        if  os.path.isfile(html_file):
+            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
+            Show_html_result_file(html_file) 
+            return
 
-    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_photos_{date_string}.csv')
-    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_photos_{date_string}.html')
-    
-    # avoid to do the same thing twice: if list (in memory) has items AND output file exists on disk
-    if output_lists.photos is not None and len(output_lists.photos) > 0 and os.path.isfile(html_file):
-        printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
-        Show_html_result_file(html_file) 
-        return
-
+    # do the action
     driver = Start_chrome_browser()
     print(f"Getting {user_inputs.user_name}'s photos list ...")
     output_lists.photos = Get_photos_list(driver, user_inputs)
     Close_chrome_browser(driver)
-    if output_lists.photos is None: 
-        Show_menu(user_inputs)
-        return
-            
-    if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
-        Show_html_result_file(CSV_photos_list_to_HTML(csv_file)) 
 
-    # print summary report
-    time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
-    print(f'The process took {time_duration} seconds')
+    # write result to csv, convert it to html, show html in browser
+    if output_lists.photos is not None and len(output_lists.photos) > 0:
+        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')           
+        if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
+            Show_html_result_file(CSV_photos_list_to_HTML(csv_file, ignore_columns=['Page', 'ID', 'Link', 'Src']))  
+            
+            time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
+            print(f'The process took {time_duration} seconds') 
+        else:
+            printR(f'Error writing the output file\n:{csv_file}')
+
 #---------------------------------------------------------------
 def Handle_option_3(user_inputs, output_lists):
     """ Get followers"""
     
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime("%Y_%m_%d")
+    date_string = time_start.strftime(DATE_FORMAT)
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
@@ -2216,7 +2408,8 @@ def Handle_option_3(user_inputs, output_lists):
             printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
             Show_html_result_file(html_file) 
             return
-  
+   
+    # do task
     driver = Start_chrome_browser()
     # if user provided password then login
     if user_inputs.password != '':
@@ -2226,11 +2419,13 @@ def Handle_option_3(user_inputs, output_lists):
     print(f"Getting the list of users who follow {user_inputs.user_name} ...")
     output_lists.followers_list = Get_followers_list(driver, user_inputs)
     Close_chrome_browser(driver)
+
+    # write result to csv, convert it to html, show html in browser
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')           
         if Write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
             # show output and print summary report
-            Show_html_result_file(CSV_to_HTML(csv_file)) 
+            Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name'])) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
             print(f'The process took {time_duration} seconds') 
         else:
@@ -2240,7 +2435,7 @@ def Handle_option_4(user_inputs, output_lists):
     """ Get followings (friends)"""
     
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime("%Y_%m_%d")
+    date_string = time_start.strftime(DATE_FORMAT)
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followings_list is not None and len(output_lists.followings_list) > 0:
@@ -2250,15 +2445,18 @@ def Handle_option_4(user_inputs, output_lists):
             Show_html_result_file(html_file) 
             return
 
+    # do task
     driver = Start_chrome_browser()
     print(f"Getting the list of users that you are following ...")
     output_lists.followings_list = Get_followings_list(driver, user_inputs)
     Close_chrome_browser(driver)
+
+    # write result to csv, convert it to html, show html in browser
     if len(output_lists.followings_list) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
         if Write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
             # show output and print summary report
-            Show_html_result_file(CSV_to_HTML(csv_file, ['Status'])) #ignore column 'Status'
+            Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name', 'Status'])) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
             print(f'The process took {time_duration} seconds') 
         else:
@@ -2270,6 +2468,12 @@ def Handle_option_5(user_inputs, output_lists):
     
     time_start = datetime.datetime.now().replace(microsecond=0) 
     driver = Start_chrome_browser()      
+
+    # if user provided password then login
+    if user_inputs.password != '':
+        if Login(driver, user_inputs) == False :
+            return
+
     try:
         driver.get(user_inputs.photo_href)
     except:
@@ -2278,15 +2482,19 @@ def Handle_option_5(user_inputs, output_lists):
         Show_menu(user_inputs)        
         return
 
+    # do task
     time.sleep(1)
     Hide_banners(driver)
     print(f"Getting the list of unique users who liked the given photo ...")
     output_lists.like_actioners_list, csv_file = Get_like_actioners_list(driver, output_lists)
     Close_chrome_browser(driver)
+
+    # write result to csv, convert it to html, show html in browser
     if output_lists.like_actioners_list is not None and \
        len(output_lists.like_actioners_list) > 0 and \
        Write_users_list_to_csv(output_lists.like_actioners_list, csv_file) == True:
-        Show_html_result_file(CSV_to_HTML(csv_file, ['Status'])) 
+        Show_html_result_file(CSV_to_HTML(csv_file, ['User Avatar', 'User Name'])) 
+
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f'The process took {time_duration} seconds') 
@@ -2295,7 +2503,7 @@ def Handle_option_6(user_inputs, output_lists):
     """ Get n last notifications details (max 5000). Show the detail list and the list of the unique users on it"""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime("%Y_%m_%d")
+    date_string = time_start.strftime(DATE_FORMAT)
     csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
     html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
 
@@ -2305,12 +2513,12 @@ def Handle_option_6(user_inputs, output_lists):
         Show_html_result_file(html_file)
         return
 
+ 
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
         return
     driver.get('https://500px.com/notifications')
     time.sleep(1)
-  
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
     # abort the action if the target objects failed to load within a timeout of 15s        
@@ -2320,6 +2528,7 @@ def Handle_option_6(user_inputs, output_lists):
     Hide_banners(driver)        
     print(f"Getting the last {user_inputs.number_of_notifications} notifications and the unique users in that list ...")
 
+    # do task   
     output_lists.notifications, output_lists.unique_notificators = Get_notification_list(driver, user_inputs, True)
         
     if len(output_lists.notifications) == 0 and len(output_lists.unique_notificators) == 0:
@@ -2329,15 +2538,15 @@ def Handle_option_6(user_inputs, output_lists):
 
     Close_chrome_browser(driver)
     
-    # Write the list of unique users to csv and html files. Display html file on the browser 
-    csv_file_2  = os.path.join(output_lists.output_dir, \
-        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique_users_in_last_{user_inputs.number_of_notifications}_notifications_{date_string}.csv")
-    if len(output_lists.unique_notificators) > 0 and  Write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_2) == True:
-        Show_html_result_file(CSV_to_HTML(csv_file_2))     
+    # write unique users list to csv. Convert it to html, show it in browser
+    csv_file_unique_users  = os.path.join(output_lists.output_dir, \
+        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{user_inputs.number_of_notifications}_notifications_{date_string}.csv")
+    if len(output_lists.unique_notificators) > 0 and  Write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
+        Show_html_result_file(CSV_to_HTML(csv_file_unique_users, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail']))     
     
-    # Write the notification list to csv and html files. Display html file on the browser         
+    # Write the notification list to csv. Convert it to html, show it in browser        
     if len(output_lists.notifications) > 0 and  Write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        Show_html_result_file(CSV_to_HTML(csv_file)) 
+        Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail'])) 
 
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -2347,9 +2556,13 @@ def Handle_option_7(user_inputs, output_lists):
     """Check if a user is following you."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
+
+    # do task
     driver = Start_chrome_browser()
     print(f"Check if the user {user_inputs.target_user_name} follows {user_inputs.user_name} ...")
     result, detail_message = Does_this_user_follow_me(driver, user_inputs)
+
+    # show result on screen
     if result == True:
         printG(f"User {user_inputs.target_user_name} follows {user_inputs.user_name} {detail_message} ")
     else:
@@ -2372,6 +2585,8 @@ def Handle_option_8(user_inputs, output_lists):
         print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo of user {user_inputs.target_user_name} ...")
     else:
         print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of user {user_inputs.target_user_name} ...")
+    
+    # do task   
     Like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False)
     Close_chrome_browser(driver)
 
@@ -2400,6 +2615,7 @@ def Handle_option_9(user_inputs, output_lists):
     else:
         print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos from {user_inputs.gallery_name} gallery, start index {user_inputs.index_of_start_photo} ...")
 
+    # do task
     Like_n_photos_on_current_page(driver, user_inputs.number_of_photos_to_be_liked, user_inputs.index_of_start_photo)
     Close_chrome_browser(driver)
 
@@ -2425,6 +2641,8 @@ def Handle_option_10(user_inputs, output_lists):
     time.sleep(1)
     Hide_banners(driver)        
     print(f'Getting the list of users who liked this photo ...')
+
+    # do preliminary task
     output_lists.like_actioners_list, dummy_file_name = Get_like_actioners_list(driver, output_lists)
     if len(output_lists.like_actioners_list) == 0: 
         printG(f'The photo {photo_tilte} has no affection yet')
@@ -2434,6 +2652,8 @@ def Handle_option_10(user_inputs, output_lists):
     print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of each of {actioners_count} users on the list ...")
     include_already_liked_photo_in_count = True  # meaning: if you want to autolike 3 first photos, and you found out two of them are already liked, then you need to like just one photo.
                                                     # if this is set to False, then you will find 3 available photos and Like them 
+
+    # do main task
     for i, actor in enumerate(output_lists.like_actioners_list):
         print(f'User {str(i+1)}/{actioners_count}: {actor.display_name}, {actor.user_name}')
         if Like_n_photos_from_user(driver, actor.user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count, close_browser_on_error=False) == False:
@@ -2456,6 +2676,8 @@ def Handle_option_11(user_inputs, output_lists):
      
     Hide_banners(driver) 
     print(f"Like {user_inputs.number_of_photos_to_be_liked} photos from the {user_inputs.user_name}'s home feed page ...")
+
+    # do task
     Like_n_photos_on_homefeed_page(driver, user_inputs)     
     Close_chrome_browser(driver)
 
@@ -2480,19 +2702,20 @@ def Handle_option_12(user_inputs, output_lists):
       return None, None	
 
     Hide_banners(driver)  
-        
+       
+    # do preliminary task
     output_lists.unique_notificators = Get_notification_list(driver, user_inputs, True)[1]
     #if len(output_lists.unique_notificators) == 0:
         #   break 
         
-
+    # do main task
     users_count = len(output_lists.unique_notificators)
     print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of each of {users_count} users on the list ...")
     for i, item in enumerate(output_lists.unique_notificators):
         name_pair = item.split(',')
-        if len(name_pair) > 2: 
-            print(f' User {name_pair[0]}/{users_count}: {name_pair[1]}, {name_pair[2]}')
-            if Like_n_photos_from_user(driver, name_pair[2], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False) == False:
+        if len(name_pair) > 3: 
+            print(f' User {name_pair[0]}/{users_count}: {name_pair[2]}, {name_pair[3]}')
+            if Like_n_photos_from_user(driver, name_pair[3], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False) == False:
                 continue
         else:
             continue
@@ -2509,21 +2732,33 @@ def Handle_option_13(user_inputs, output_lists):
     driver = Start_chrome_browser(["--kiosk", "--hide-scrollbars", "--disable-infobars"])
     #driver = Start_chrome_browser(["--hide-scrollbars", "--disable-infobars"])
     #driver.maximize_window()
+
+    # login if credentials are provided
+    if user_inputs.user_name is not  None and user_inputs.password is not None:
+        if Login(driver, user_inputs) == False :
+            printR('Error logging in. Slideshow will be played without a user login.')  
+        
     driver.get(user_inputs.gallery_href)
     driver.execute_script("return document.body.innerHTML")
     Hide_banners(driver)
+
+    # do task
     Play_slideshow(driver, int(user_inputs.time_interval))
+    
     Close_chrome_browser(driver)
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f'The process took {time_duration} seconds') 
 #---------------------------------------------------------------
+# in progress
 def Handle_option_14(user_inputs, output_lists):
     """Get following statuses of users that you are following."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser()
     print(f"Get the following statuses of the users that {user_inputs.user_name} is following ...")
+
+    # do task
     Get_following_statuses(driver, user_inputs, user_inputs.index_of_start_user, user_inputs.number_of_users,  output_lists.followings_list )
     Close_chrome_browser(driver)
 
@@ -2573,6 +2808,7 @@ def main():
             if not user_inputs.use_command_line_args and int(user_inputs.choice) >= 5:
                 if Get_additional_user_inputs(user_inputs) == False:
                     continue
+
             # dynamically call the function to perform the task 
             Functions_dictionary[user_inputs.choice](user_inputs, output_lists)
 
