@@ -1265,55 +1265,92 @@ def Get_like_actioners_list(driver, output_lists):
     # click on affection count number element to open the modal window, wait for page loading
     driver.execute_script("arguments[0].click();", count_number_button)
     
-    # abort the action if the target objects failed to load within a timeout of 15s    
-    #if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
-    #    return []	
-    time.sleep(2)
-        
+    #-----------
+    # July 7 2019: this section no longer works due to page structure and class name changed (dynamic class name in stead of ""ifsget"
+    ## abort the action if the target objects failed to load within a timeout of 15s    
+    ##if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
+    ##    return []	
+    #time.sleep(2)     
+    ## make a meaningful output file name
+    #like_actioners_file_name = os.path.join(output_lists.output_dir, \
+    #    f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners_{date_string}.csv")
+
+    ## scroll to the end for all elements of the given class name to load all actioners
+    #Scroll_to_end_by_class_name(driver, 'ifsGet', likes_count)
+    
+    ## create actionners list
+    #actioners = driver.find_elements_by_class_name('ifsGet')
+    #actioners_count = len(actioners)
+    #display_name = ''
+    #followers_count = ''
+    #for i, actioner in enumerate(actioners):
+    #    update_progress(i / (actioners_count - 1), f' - Extracting data {i+1}/{actioners_count}:')
+    #    try:    
+    #        texts = actioner.text.split('\n')
+    #        if len(texts) > 0: 
+    #            display_name = texts[0] 
+    #        if len(texts) > 1:
+    #            followers_count  = re.sub('[^\d]+', '', texts[1]) 
+    #        # extract actioner's user name
+    #        ele = check_and_get_ele_by_tag_name(actioner, 'a') 
+    #        if ele is not None:
+    #            name = ele.get_attribute('href').replace('https://500px.com/','')
+    #        actioners_list.append(user(str(i+1), display_name, name, str(followers_count)) )
+    #    except NoSuchElementException:
+    #        continue
+    #return actioners_list, like_actioners_file_name 
+    #-----------    
+    # new implementation:
+                          
+    # abort the action if the target objects failed to load within a given timeout    
+    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
+        return []	      
     # make a meaningful output file name
     like_actioners_file_name = os.path.join(output_lists.output_dir, \
         f"{photographer_name.replace(' ', '-')}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
 
-    # scroll to the end for all elements of the given class name to load all actioners
-    Scroll_to_end_by_class_name(driver, 'ifsGet', likes_count)
+    #get a container element containing all actors
+    container= check_and_get_ele_by_class_name(driver,'ant-modal-body')
+    if container is None:
+        return [], ''
+    #scrolling down until all the actors are loaded
+    img_eles = Scroll_to_end_by_tag_name_within_element(driver, container, 'img', likes_count)
     
-    # create actionners list
-    actioners = driver.find_elements_by_class_name('ifsGet')
-    actioners_count = len(actioners)
+    # create actors list
+    actors_count = len(img_eles )
     display_name = ''
+    u_name = ''
     followers_count = ''
     avatar = ''
-    for i, actioner in enumerate(actioners):
-        update_progress(i / (actioners_count - 1), f' - Extracting data {i+1}/{actioners_count}:')
-        try:    
-            texts = actioner.text.split('\n')
-            # get user display name
-            if len(texts) > 0: 
-                display_name = texts[0] 
-            # get number of followers
+    for i, img in enumerate(img_eles):
+        update_progress(i / (actors_count - 1), f' - Extracting data {i+1}/{actors_count}:')
+        try: 
+            display_name = img.get_attribute('alt')
+            avatar= img.get_attribute('src')
+            img_ele_parent =  check_and_get_ele_by_xpath(img, '..')
+            if img_ele_parent is None:
+                continue
+            u_name = img_ele_parent.get_attribute('href').replace('https://500px.com/','')
+
+            follower_count_text_ele =  check_and_get_ele_by_xpath(img_ele_parent, '..') 
+            if follower_count_text_ele is None: 
+                continue
+            texts = follower_count_text_ele.text.split('\n')
             if len(texts) > 1:
                 followers_count  = re.sub('[^\d]+', '', texts[1]) 
-            # get user name
-            a_ele = check_and_get_ele_by_tag_name(actioner, 'a') 
-            if a_ele is not None:
-                name = a_ele.get_attribute('href').replace('https://500px.com/','')
-                
-            # get user avatar
-            img_ele = check_and_get_ele_by_tag_name(actioner, 'img') 
-            if img_ele is not None:
-                avatar= img_ele.get_attribute('src')
             
             # get following status
             following_status = 'Not follow'
-            actioner_parent_ele = check_and_get_ele_by_xpath(actioner, '../..')
-            if actioner_parent_ele is not None:
-                texts = actioner_parent_ele.text
-                if 'Following' in texts:
-                    following_status = 'Following'
+            following_status_ele = check_and_get_ele_by_xpath(img, '../../../../div[2]/a/span')
+            if following_status_ele is None:
+                continue
+            if 'Unfollow' in following_status_ele.get_attribute("innerHTML"):
+                following_status = 'Following'
 
-            actioners_list.append(user(str(i+1), avatar, display_name, name, str(followers_count), following_status) )
+            actioners_list.append(user(str(i+1), avatar, display_name, u_name, str(followers_count), following_status) )
         except NoSuchElementException:
             continue
+         
     return actioners_list, like_actioners_file_name 
 
 #---------------------------------------------------------------
