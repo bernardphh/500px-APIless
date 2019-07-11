@@ -1490,7 +1490,7 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
                     if len(subStrings) > 1:
                         photographer =  re.sub('%\w\w', '*', subStrings[1].replace('-',' '))
 
-                #driver.execute_script("arguments[0].click();", icon) 
+                driver.execute_script("arguments[0].click();", icon) 
                 photos_done = photos_done + 1
                 print(repr(photographer))
                 printG(f'Liked {str(photos_done):>3}/{number_of_photos_to_be_liked:<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
