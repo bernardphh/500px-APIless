@@ -1421,6 +1421,8 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
     PROCESS:
     - SIMILAR TO THE PREVIOUS METHOD ( Autolike_photos() )
     """
+    title = ''
+    photographer = ''                                            
     photos_done = 0
     current_index = 0   # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                         # ... more photos are appended at the end of the list. We use this current_index to keep track where we were after a list update 
@@ -1469,18 +1471,35 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
             try:
                 #intentional slowing down a bit to make it look more like human
                 time.sleep(1.5)
-                title =  icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link').find_element_by_tag_name('img').get_attribute('alt')
-                photographer_ele = icon.find_element_by_xpath('../../../..').find_element_by_class_name('photographer')
-                photographer_ele.location_once_scrolled_into_view
-                Hover_by_element(driver, photographer_ele)
-                #driver.execute_script("arguments[0].scrollIntoView();", photographer_ele)
-                photographer = photographer_ele.text
-                driver.execute_script("arguments[0].click();", icon) 
+                photo_link = icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link')
+                title =  photo_link.find_element_by_tag_name('img').get_attribute('alt')
+                photographer_ele = check_and_get_ele_by_class_name(photo_link, 'photographer')
+
+                if photographer_ele is not None:
+                    photographer_ele.location_once_scrolled_into_view
+                    Hover_by_element(driver, photographer_ele)
+                    photographer = photographer_ele.text
+                    photographer_ele.location_once_scrolled_into_view
+                    Hover_by_element(driver, photographer_ele)
+                    photographer = photographer_ele.text
+                else:
+                # if the current photos page is a user home page or a user's gallery, there would be no photographer class.
+                # We will extract the photographer name from the photo href, replacing any hex number in it with character, for now '*'
+                    href =  photo_link.get_attribute('href')
+                    subStrings = href.split('-by-')
+                    if len(subStrings) > 1:
+                        photographer =  re.sub('%\w\w', '*', subStrings[1].replace('-',' '))
+
+                #driver.execute_script("arguments[0].click();", icon) 
                 photos_done = photos_done + 1
+                print(repr(photographer))
                 printG(f'Liked {str(photos_done):>3}/{number_of_photos_to_be_liked:<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
             except Exception as e:
                 printR(f'Error after {str(photos_done)}, at index {str(i+1)}, title {title}:\nException: {e}')
-
+                printY('The page structure of this photo gallery is not recognizable. The process will stop.')
+                # we set this to end the outer loop, while:
+                photos_done = number_of_photos_to_be_liked
+                break                                            
 #---------------------------------------------------------------
 def Play_slideshow(driver, time_interval):
     """Play slideshow of photos on the active photo page in browser.
