@@ -12,10 +12,10 @@ But gone the API, arrived the challenges!
 
 
 As a 500px user who does not want to be manipulated by bots, Initially I just wanted to gather data from the site, manually analyze it and figure it out the users who: 
- - Trigger me into following them, then ignore me, or un-follow me not long after.
  - Like every photo I posted, give un-mistaken robot comments, and like my photo back every time I liked theirs
  - Get unbelievable number of followers
- ...
+ - Follow me then un-follow me if I don't follow them back. 
+ - Follow me but do not have any interaction   ...
  
 And as a programmer, I got curious, wondering how things can be done. I ended up creating some bots myself.
 
@@ -34,12 +34,11 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ## WHAT IT CAN DO SO FAR: ##
 
-![Main menu](/MainMenu.jpg)
+![Main menu](Snapshots/MainMenu.png)
 
 - The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
 CSV files are used for statistical analysis, and in the automated processes. 
-HTML files are used for presentation, which happens after a data collection task is completed.
-
+HTML files are used for presentation, which happens after a data collection task is completed. They are also served as a tool to sort data in each criteria.
 
 
 - The options from 8 to 12, are the automated processes, or bots, that will perform some actions. The descriptions are self-explanatory.
@@ -82,8 +81,8 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ## 
 
-- Not all exceptions are handled, especially with Seleniumâ€™s find_elementâ€¦ methods
-- For the requests involved more than 1000 items (list of notifications, photos, usersâ€¦), processing time takes too long to my liking. 
+- Not all exceptions are handled, especially with Selenium’s find_element… methods
+- For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
 - In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - [x] Handling more exceptions
@@ -115,6 +114,5 @@ Even though some limits have been set, and some processes have been intentionall
 abusing or over-usage may result in your 500px account being banned. 
 
 **Use this at your own risk**.
-
 
 

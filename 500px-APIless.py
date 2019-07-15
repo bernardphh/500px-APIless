@@ -30,28 +30,134 @@ MAX_AUTO_LIKE_REQUEST = 100      # self limitation to avoid abusing
 MAX_FOLLOWINGS_STATUSES = 100    # max number of users you want to find the following statuses with you
 DEBUG = False
 
-DATE_FORMAT = "%Y-%m-%d"         # ex. 2019-06-15
+DATE_FORMAT = "%Y-%m-%d"                 # ex. 2019-06-15
+DATETIME_FORMAT = "%Y-%b-%d--T%H-%M-%S"  # ex. 2019-Jun-15--T13-21-45
 
-HEAD_STRING_WITH_CSS_STYLE ='\n\
-<head>\n\
-    <style>\n\
-        table {border-collapse: collapse;}\n\
-        table, th, td {border: 1px solid black; padding: 5px; vertical-align: center;}\n\
-        th { background-color: lightgray;}\n\
-        td img { vetical-align:middle; border:3px red; height:50px; width: 50px;}\n\
-        .photo{height:50px; width: 80px;}\n\
-        p {line-height:0.5;}\n\
-    </style>\n\
-</head>\n'
+# for simplicity, we keep everything in one file, including a CSS and a Javascript constant strings below
+HEAD_STRING_WITH_CSS_STYLE ="""
+<head>
+	 <style>
+        table {border-collapse: collapse; width: 100%; table-layout:fixed;  text-align:center;}
+ 		table tr:nth-child(even){background-color: #f2f2f2;}
+		table tr:hover {background-color: #ddd; }
+		table, th, td {border: 1px solid #ddd; padding: 6px; word-wrap: break-word;}
+        th { background-color: #248f8f; color: white; font-size: 16px; height:65;}
+        img { height:50px; width: 50px; border-radius: 25px;}
+        p {line-height:1;}
+        div {text-align:left;}
+        .photo{height:50px; width: 80px; style="vertical-align:top"; border-radius: 6px; }
+        .alignLeft {text-align:left;}       
+ 	    .w40  {width:40px;} 
+        .w80  {width:70px;} 
+        .w100 {width:100px;} 
+        .w120 {width:120px;} 
+        .w200 {width:200px;}
+		.hdr_text   {float:left; vertical-align:top display:table-cell; height:100%;}
+		.hdr_arrows {float:right; position:relative; right:1px; top:32px; font-size:60%;}
+     </style
+</head> """
+
+sort_direction_arrows = """
+			<div style="float:right;">
+				<div id ="arrow-up-0">&#x25B2;</div>
+				<div id ="arrow-down-0">&#x25BC;</div>
+			</div>		
+            """
+SCRIPT_STRING = """<script>
+/* Sort columns' table for tag "td" and for a specific column, where the sort item can be the innerHtml of the second div tag 
+     To trigger the specific sort, pass ANY value to the 2nd argument "special_sort"*/  
+function sortTable(n, special_sort) {
+    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+    table = document.getElementsByTagName("table")[0] /* targer the first table instead of table with id-- getElementById("myTable"); */
+    switching = true;
+    dir = "asc";
+    while (switching) {
+        switching = false;
+        rows = table.rows;
+        for (i = 1; i < (rows.length - 1); i++) {
+            shouldSwitch = false;
+            x = rows[i].getElementsByTagName("TD")[n];
+            y = rows[i + 1].getElementsByTagName("TD")[n];
+		    if (special_sort != undefined){
+			    x =x.getElementsByTagName("DIV")[1];
+			    y =y.getElementsByTagName("DIV")[1];
+            }		  
+ 		    if (x.innerHTML == "" && y.innerHTML != "" && dir == "asc"){
+		        shouldSwitch = true;	
+			    break;
+		    }	  
+		    if (y.innerHTML == "" && x.innerHTML != ""  && dir == "desc"){
+		        shouldSwitch = true;
+			    break;
+		    }	           
+		    var xContent = (isNaN(x.innerHTML))
+                ? ((x.innerHTML.toLowerCase() === "-")? 0 : x.innerHTML.toLowerCase() )
+                : parseFloat(x.innerHTML);
+            var yContent = (isNaN(y.innerHTML))
+                ? ((y.innerHTML.toLowerCase() === "-")? 0 : y.innerHTML.toLowerCase() )
+                : parseFloat(y.innerHTML);			  
+            if (dir == "asc") {
+                if (xContent > yContent) {
+                    shouldSwitch= true;
+                    break;
+                }
+            } else if (dir == "desc") {
+                if (xContent < yContent) {
+                    shouldSwitch= true;
+                    break;
+                }
+            }
+        }
+        if (shouldSwitch) {
+            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+            switching = true;
+            switchcount ++;
+        } else {
+            if (switchcount == 0 && dir == "asc") {
+                dir = "desc";
+                switching = true;
+            }
+        }
+	    if (dir == "asc") {
+		    document.getElementById("arrow-down-" + n ).style.display = "none";
+		    document.getElementById("arrow-up-" + n ).style.display = "block";
+	    }
+	    else {
+		    document.getElementById("arrow-up-" + n).style.display = "none";
+		    document.getElementById("arrow-down-" + n).style.display = "block";	  
+	    }
+    }
+	var num_cols = table.rows[0].cells.length;	
+	for ( i=0; i < num_cols; i++) {
+		if ( i != n) {
+			document.getElementById("arrow-up-" + i).style.display = "block";
+			document.getElementById("arrow-down-" + i).style.display = "block";				
+		}
+	}	   	
+}
+</script>"""
+
 class photo:
-    """ Represent a photo with id number, what page it is on in the user photo list, the title and the href."""
-    def __init__(self, order, id, on_page, title, link, src):
-        self.order = order
+    """ Represent a photo info."""
+    def __init__(self, order, id, title, href, thumbnail, stats):
+        self.order = order  # ascending order, with the latest uploaded photo being 1
         self.id = id
-        self.on_page = on_page
         self.title = title
-        self.link = link
-        self.src = src
+        self.href = href
+        self.thumbnail = thumbnail
+        self.stats = stats
+
+class photo_stats:
+    """ Photo statistics info """
+    def __init__(self,  upload_date = '', views_count=0, votes_count=0, collections_count=0, comments_count=0, highest_pulse=0, rating=0, tags='' ):
+        self.upload_date  = upload_date 
+        self.views_count = views_count
+        self.votes_count = votes_count 
+        self.collections_count = collections_count
+        self.comments_count = comments_count 
+        self.highest_pulse = highest_pulse
+        self.rating = rating
+        self.tags = tags
 
 class notification:
     """ Represent a notification object."""
@@ -184,6 +290,7 @@ class Output_data():
         self.stats = user_stats()  
         
         # Set default output folder :  %PROGRAMDATA%\500px_APIless\Output (C:\ProgramData\500px_Apiless\Output)
+        # TODO: use a config file and put this setting in it
         output_dir = os.path.join(os.getenv('ProgramData'), r'500px_Apiless\Output')
         os.makedirs(output_dir, exist_ok = True)
         self.output_dir = output_dir
@@ -216,6 +323,7 @@ def Start_chrome_browser(options_list = []):
     
     chrome_options.add_argument('--log-level=3')   
     chrome_options.add_argument("--window-size=800,1080")
+    # TODO: move these options into a config file and maybe add the headless option
     driver = webdriver.Chrome(options=chrome_options)
     printY('DO NOT INTERACT WITH THE CHROME BROWSER. IT IS CONTROLLED BY THE SCRIPT AND  WILL BE CLOSED WHEN THE TASK FINISHES')
     return driver
@@ -234,7 +342,7 @@ def Close_chrome_browser(chrome_driver):
 def Create_user_statistics_html(stats):
     """ write user statistic object stats to an html file. """
 
-    time_stamp = datetime.datetime.now().replace(microsecond=0).strftime("%Y-%m-%d, %H:%M:%S")
+    time_stamp = datetime.datetime.now().replace(microsecond=0).strftime(DATETIME_FORMAT)
 
     output = f'''
 <html>\n\t<body>
@@ -269,10 +377,13 @@ def Write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Page', 'ID', 'Title', 'Link', 'Src'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'ID', 'Photo Title', 'Href', 'Thumbnail', 'Views', 'Likes', 'Comments', 'Gallery', 'Highest Pulse', 'Rating', 'Date', 'Tags'])  
             writer.writeheader()
             for i, a_photo in enumerate(list_of_photos):
-                writer.writerow({'No' : str(a_photo.order), 'Page': str(a_photo.on_page), 'ID': str(a_photo.id), 'Title' : str(a_photo.title), 'Link' :a_photo.link, 'Src': a_photo.src}) 
+                writer.writerow({'No' : str(a_photo.order), 'ID': str(a_photo.id), 'Photo Title' : str(a_photo.title), 'Href' :a_photo.href, 'Thumbnail': a_photo.thumbnail, \
+                                 'Views': str(a_photo.stats.views_count), 'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), \
+                                'Gallery': str(a_photo.stats.collections_count), 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), \
+                                'Date': str(a_photo.stats.upload_date), 'Tags': a_photo.stats.tags}) 
             printG(f"- List of {user_name}\'s {len(list_of_photos)} photo is saved at:\n  {os.path.abspath(csv_file_name)}")
         return True
 
@@ -289,7 +400,7 @@ def Write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
 def Write_users_list_to_csv(users_list, csv_file_name):
     """ Write the users list to a csv file with the given  name. Return True if success.
     
-    THE USERS LIST COULD BE A FOLLOWERS LIST, FRIENDS LIST 
+    THE USERS LIST COULD BE ONE OF THE FOLLOWING: FOLLOWERS LIST, FRIENDS LIST OR UNIQUE USERS LIST 
     IF THE FILE IS CURRENTLY OPEN, GIVE THE USER A CHANCE TO CLOSE IT AND RE-SAVE
     """
     try:
@@ -320,12 +431,12 @@ def Write_notifications_to_csvfile(notifications_list, csv_file_name):
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['No', 'User Avatar', 'Display Name', 'User Name', 'Content', \
-                'Photo Thumbnail', 'Photo Title', 'Time Stamp', 'Status'])    
+                'Photo Thumbnail', 'Photo Title', 'Time Stamp', 'Status', 'Photo Link'])    
             writer.writeheader()
             for notif in notifications_list:
                 writer.writerow({'No': notif.order, 'User Avatar': notif.user_avatar, 'Display Name': notif.display_name, \
                     'User Name': notif.username, 'Content': notif.content, 'Photo Thumbnail': notif.photo_thumb, \
-                    'Photo Title': notif.photo_title, 'Time Stamp': notif.timestamp, 'Status': notif.status }) 
+                    'Photo Title': notif.photo_title, 'Time Stamp': notif.timestamp, 'Status': notif.status, 'Photo Link': notif.photo_link }) 
         printG('Notifications list is saved at:\n ' + os.path.abspath(csv_file_name))
         return True 
     except PermissionError:
@@ -527,6 +638,7 @@ def Open_user_home_page(driver, user_name):
         printR(f'Error reading {user_name}\'s page. Please make sure a valid user name is used')
         return False
 
+#---------------------------------------------------------------
 def Finish_Javascript_rendered_body_content(driver, time_out=10, class_name_to_check='', css_selector_to_check='', xpath_to_check=''):
     """ Run the Javascript to render the body content. Log error if it happened. Return the fail/success status and the page content text.
     
@@ -584,7 +696,7 @@ def Get_stats(driver, user_inputs, output_lists):
         
     Hide_banners(driver)
   
-    # abort the action if the target objects failed to load within a timeout of 15s
+    # abort the action if the target objects failed to load within a given timeout
     success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
     if not success:
         return None, None
@@ -643,7 +755,8 @@ def Get_stats(driver, user_inputs, output_lists):
     return json_data, stats
       
 #---------------------------------------------------------------
-def Get_photos_list(driver, user_inputs):
+# not using this for now. We need more info than the current json data provided (for example, tags list)
+def Get_photos_list_using_JSON(driver, user_inputs):
     """Return the list of photos from a given user.
 
     PROCESS: 
@@ -662,15 +775,15 @@ def Get_photos_list(driver, user_inputs):
     # We intend to scroll down an indeterminate number of times until the end is reached
     # In order to have a realistic progress bar, we need give an estimate of the number of scrolls needed
     estimate_scrolls_needed = 3  #default value, just in case error occurs
-    photos_count  = 1
+    json_photos_count  = 1
     photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
     if photos_count_ele is not None:
-        photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
-        estimate_scrolls_needed =  math.floor( photos_count / PHOTOS_PER_PAGE) +1
+        json_photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
+        estimate_scrolls_needed =  math.floor( json_photos_count / PHOTOS_PER_PAGE) +1
 
-    Scroll_down(driver, 1.5, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
+    Scroll_down(driver, 7, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
 
-    # abort the action if the target objects failed to load within a timeout of 15s
+    # abort the action if the target objects failed to load within a given timeout
     success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
     if not success:
         return []
@@ -685,8 +798,13 @@ def Get_photos_list(driver, user_inputs):
         return None
     json_data = json.loads(userdata[0]) 
     user_id = json_data['id']
+    
+    # Only the first 50 photos are available in JSON format from 500px. So We will get all the available details
+    # For the rest, we will need go to each photo page to extract the details. This could be done later in a separate methods. 
+    json_photos = json_data['photos']
+    json_photos_count = len(json_photos)
 
-    # TODO: by some unknown reason the json.loads() method just loads the first 50 photos, 
+    # 500px only exposes the details of the first 50 photos in the JSON data. We we get what are available. 
     # for now we have to use the traditional way (parsing the xml by using lxml) 
 
     #extract photo title and href (alt tag) using lxml and regex
@@ -697,7 +815,7 @@ def Get_photos_list(driver, user_inputs):
         printR(f'User {user_name} does not upload any photo')
         return None
 
-    # Create list of photos
+    # Create the photos list
     for i in range(num_item): 
         update_progress(i / (num_item -1), ' - Extracting data:')
         reg = "/photo/([0-9]*)/"  
@@ -709,12 +827,118 @@ def Get_photos_list(driver, user_inputs):
         on_page = math.floor(i / PHOTOS_PER_PAGE ) + 1
         photo_href = f"https://500px.com{els[i].attrib['href']}?ctx_page={on_page}&from=user&user_id={user_id}"
         photo_src = titles[i].attrib["src"]
-        new_photo = photo(order=i+1, id=pId, on_page=on_page, title=str(titles[i].attrib["alt"]), link=photo_href, src=photo_src)
+
+        # for photos available in json data
+        photo_statistics = photo_stats()
+        if i < json_photos_count:
+            photo_statistics = photo_stats(upload_date = json_photos[i]['created_at'],
+                                           views_count = json_photos[i]['times_viewed'],
+                                           votes_count = json_photos[i]['votes_count'],\
+                                           collections_count = json_photos[i]['collections_count'],
+                                           comments_count = json_photos[i]['comments_count'],
+                                           highest_pulse = json_photos[i]['highest_rating'],
+                                           rating = json_photos[i]['rating'] )
+
+
+        new_photo = photo(order=i+1, id=pId, title=str(titles[i].attrib["alt"]), href=photo_href, thumbnail=photo_src, stats=photo_statistics)
         photos_list.append(new_photo)
  
     return photos_list
 
 #---------------------------------------------------------------
+
+def Get_photos_list(driver, user_inputs):
+    """Return the list of photos from a given user.
+
+    PROCESS: 
+    - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
+    - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
+    - EXTRACT PHOTO DATA: No, ID, Photo Title, Href, Thumbnail, Views, Likes, Comments, Gallery, Highest Pulse, Rating, Date, Tags
+    """
+
+    photos_list = []
+
+    if Open_user_home_page(driver, user_inputs.user_name) == False:
+        Show_menu(user_inputs)
+        return []
+    Hide_banners(driver)
+
+    # We intend to scroll down an indeterminate number of times until the end is reached
+    # In order to have a realistic progress bar, we need give an estimate of the number of scrolls needed
+    estimate_scrolls_needed = 3  #default value, just in case error occurs
+    json_photos_count  = 1
+    photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
+    if photos_count_ele is not None:
+        json_photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
+        estimate_scrolls_needed =  math.floor( json_photos_count / PHOTOS_PER_PAGE) +1
+
+    Scroll_down(driver, 2, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
+
+    # abort the action if the target objects failed to load within a given timeout
+    success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
+    if not success:
+        return []
+    
+
+    #if DEBUG:
+    #     Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_inputs.user_name + '_innerHTML.txt')
+    page = html.document_fromstring(innerHtml)
+
+    #extract photo title and href (alt tag) using lxml and regex
+    els = page.xpath("//a[@class='photo_link ']")  
+    titles = page.xpath("//img[@data-src='']")
+    num_item = len(els)
+    if num_item == 0:
+        printR(f'User {user_name} does not upload any photo')
+        return None
+
+    update_progress(0, f' - Extracting 0/{num_item} photos:')
+    # Create the photos list
+    photo_src = ''
+    for i in range(num_item): 
+        update_progress(i / (num_item -1), f' - Extracting  {i + 1}/{num_item} photos:')
+        on_page = math.floor(i / PHOTOS_PER_PAGE ) + 1
+
+        # open each photo page
+        photo_href = r'https://500px.com' + els[i].attrib["href"]
+        if i < len(titles):
+            photo_src = titles[i].attrib["src"]
+
+        try:
+            driver.get(photo_href)
+        except:
+            printR(f'Invalid href: {test_photo_page}. Please retry.')
+            Close_chrome_browser(driver)
+            Show_menu(user_inputs)         
+            return
+
+        #time.sleep(1)
+        html_source = driver.page_source
+        # extract the interested data: Ex: "window.PxPreloadedData = {"photo":[interested data] };"
+        json_stats = re.findall('"photo":(.*)', html_source)
+        if len(json_stats) == 0:
+            return
+        if json_stats[0][-2:] == '};':
+            json_stats[0] = json_stats[0][:-2]
+        stats = json.loads(json_stats[0])   
+        #images_src = stats['images'][-1]['https_url']
+        up_date = stats['created_at'].split('T') #stats['created_at'].replace('T','\n')[:-6]
+        upload_date = up_date[0].replace('-','\n')
+        tags = stats['tags'].copy()
+        tags.sort()
+        tags_string = ",".join(tags)
+
+        photo_statistics = photo_stats(upload_date=upload_date, views_count=stats['times_viewed'], votes_count=stats['positive_votes_count'],
+                                       collections_count=stats['collections_count'], comments_count=stats['comments_count'], 
+                                       highest_pulse=stats['highest_rating'], rating=stats['rating'], tags=tags_string)
+
+        new_photo = photo(order=i+1, id=stats['id'], title=stats['name'], href=photo_href, thumbnail=photo_src, stats=photo_statistics)
+        photos_list.append(new_photo)
+ 
+    return photos_list
+
+#---------------------------------------------------------------
+
 def Get_followers_list(driver, user_inputs):
     """Given a user name, return the list of followers, the link to theis pages and the number of followers of each of them.
 
@@ -736,7 +960,7 @@ def Get_followers_list(driver, user_inputs):
     if ele is not None:
        ele.click()
 
-    # abort the action if the target objects failed to load within a timeout of 15s
+    # abort the action if the target objects failed to load within a given timeout
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
         return []
 
@@ -764,7 +988,7 @@ def Get_followers_list(driver, user_inputs):
     # now that we have all followers loaded, start extracting the info
     update_progress(0, f' - Extracting data 0/{followers_count}:')
 
-    # abort the action if the target objects failed to load within a timeout of 15s
+    # abort the action if the target objects failed to load within a given timeout
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
         return None, None
 
@@ -840,7 +1064,6 @@ def Does_this_user_follow_me(driver, user_inputs):
  
     if Open_user_home_page(driver, user_inputs.target_user_name) == False:
         user_inputs.target_user_name = ''
-        #Show_menu(user_inputs)
         return False, f"User name {user_inputs.target_user_name} not found"
   
     Hide_banners(driver)     
@@ -849,7 +1072,7 @@ def Does_this_user_follow_me(driver, user_inputs):
     if ele is not None:
         ele.click()
 
-    # abort the action if the target objects failed to load within a timeout of 15s
+    # abort the action if the target objects failed to load within a given timeout
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
         return  False, ""
 
@@ -872,7 +1095,7 @@ def Does_this_user_follow_me(driver, user_inputs):
     current_index = 0   # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                         # ... more photos are appended at the end of the list. We use this current_index to keep track where we were after a list update 
     
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
         return  False, ""
 
@@ -893,7 +1116,7 @@ def Does_this_user_follow_me(driver, user_inputs):
             except NoSuchElementException:
                 pass
 
-            # abort the action if the target objects failed to load within a timeout of 15s    
+            # abort the action if the target objects failed to load within a given timeout    
             if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
                 return  False, ""
 
@@ -912,7 +1135,7 @@ def Does_this_user_follow_me(driver, user_inputs):
             actor = actor_infos[i]
             update_progress(current_index / following_count, f' - Processing loaded data {current_index}/{following_count}:')  
             try:
-                ele = check_and_get_ele_by_class_name(actor, 'name')   #following_user_page_link = actor.find_element_by_class_name('name').get_attribute('href')
+                ele = check_and_get_ele_by_class_name(actor, 'name')  
                 if ele is not None:
                     following_user_page_link = ele.get_attribute('href')
                     following_user_name = following_user_page_link.replace('https://500px.com/', '')
@@ -928,7 +1151,7 @@ def Does_this_user_follow_me(driver, user_inputs):
     return False, ''
 
 #---------------------------------------------------------------
-# Time-consuming process, in need for a better solution to improve or to limit the request number ( in-progress)
+# This is a time-consuming process, in need for a better solution, either limiting the request number, or doing it in a certain range ( in-progress)
 def Get_following_statuses(driver, user_inputs, start_index, number_of_users, following_list):
     """ Get the follow statuses of the users that you are following, with the option to specify the range of user in the following list.
    
@@ -1023,7 +1246,7 @@ def Get_followings_list(driver, user_inputs):
     if ele is not None:
         ele.click()
     
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
         return []
             
@@ -1050,7 +1273,7 @@ def Get_followings_list(driver, user_inputs):
             pass
  
     # now that we have all followers loaded, start extracting info
-    update_progress(0, ' - Extracting data:')
+    update_progress(0, ' - Extracting data 0/{following_count}:')
     actor_infos = driver.find_elements_by_class_name('actor_info')
     lenght = len(actor_infos)
     following_name = ''
@@ -1175,7 +1398,7 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
                 status = 'Following'
             else:  
                 status = 'Not Follow' 
-
+ 
         else: 
             photo_title = photo_ele.text
             photo_link = photo_ele.get_attribute('href') 
@@ -1205,8 +1428,9 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
         unique_notificators[j] = f'{str(j+1)},{unique_notificators[j]}'
 
     if len(notifications_list) == 0 and len(unique_notificators) == 0: 
+        if user_name == '':
+            user_name = user_inputs.user_name
         printG(f'User {user_name} has no notification')
-   
     return notifications_list, unique_notificators
 
 #---------------------------------------------------------------
@@ -1224,11 +1448,11 @@ def Get_like_actioners_list(driver, output_lists):
     actioners_list = []
     date_string = datetime.datetime.now().replace(microsecond=0).strftime(DATE_FORMAT)
 
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='react_photos_index_container')[0]:
         return None, None
  
-    # find an ancestor element that cover all needed elements
+    # get photographer name and photo title
     react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
     if react_photos_index_container is None:
         printR('Error getting like_actioners list')
@@ -1264,9 +1488,9 @@ def Get_like_actioners_list(driver, output_lists):
     
     # click on affection count number element to open the modal window, wait for page loading
     driver.execute_script("arguments[0].click();", count_number_button)
-    
+
     #-----------
-    # July 7 2019: this section no longer works due to page structure and class name changed (dynamic class name in stead of ""ifsget"
+    # July 7 2019 section no longer works due to page structure and class name changed (dynamic class name instead of ""ifsget"
     ## abort the action if the target objects failed to load within a timeout of 15s    
     ##if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
     ##    return []	
@@ -1301,7 +1525,6 @@ def Get_like_actioners_list(driver, output_lists):
     #return actioners_list, like_actioners_file_name 
     #-----------    
     # new implementation:
-                          
     # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
         return []	      
@@ -1352,7 +1575,6 @@ def Get_like_actioners_list(driver, output_lists):
             continue
          
     return actioners_list, like_actioners_file_name 
-
 #---------------------------------------------------------------
 def Like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_liked, include_already_liked_photo_in_count = True, close_browser_on_error = True):
     """Like n photo of a given user, starting from the top. Return False if error occurs
@@ -1375,7 +1597,7 @@ def Like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
             Close_chrome_browser(driver)
         return False
                     
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
         return None, None
 
@@ -1422,7 +1644,7 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
     - SIMILAR TO THE PREVIOUS METHOD ( Autolike_photos() )
     """
     title = ''
-    photographer = ''                                            
+    photographer = ''
     photos_done = 0
     current_index = 0   # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                         # ... more photos are appended at the end of the list. We use this current_index to keep track where we were after a list update 
@@ -1483,7 +1705,7 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
                     Hover_by_element(driver, photographer_ele)
                     photographer = photographer_ele.text
                 else:
-                # if the current photos page is a user home page or a user's gallery, there would be no photographer class.
+                # if the current photos page is a user's gallery, there would be no photographer class.
                 # We will extract the photographer name from the photo href, replacing any hex number in it with character, for now '*'
                     href =  photo_link.get_attribute('href')
                     subStrings = href.split('-by-')
@@ -1499,7 +1721,8 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
                 printY('The page structure of this photo gallery is not recognizable. The process will stop.')
                 # we set this to end the outer loop, while:
                 photos_done = number_of_photos_to_be_liked
-                break                                            
+                break
+
 #---------------------------------------------------------------
 def Play_slideshow(driver, time_interval):
     """Play slideshow of photos on the active photo page in browser.
@@ -1518,7 +1741,7 @@ def Play_slideshow(driver, time_interval):
         # show the first photo
         driver.execute_script("arguments[0].click();", photo_links_eles[0])
         
-        # abort the action if the target objects failed to load within a timeout of 15s    
+        # abort the action if the target objects failed to load within a given timeout    
         if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
             return None, None	
         
@@ -1747,6 +1970,34 @@ def Scroll_to_end_by_class_name(driver, class_name, likes_count):
         update_progress(1, ' - Scrolling to load more items:{likes_count}/{likes_count}')
 
 #---------------------------------------------------------------
+def Scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_count):
+    """Scroll the active window to the end, where the last element of the given class name become visible.
+
+    THE likes_count ARGUMENT IS USED FOR CREATING A REALISTIC PROGRESS BAR
+    """
+    #eles = driver.find_elements_by_class_name(class_name)
+    eles = check_and_get_all_elements_by_tag_name(element, tag_name)
+    count = 0
+    new_count = len(eles)
+
+    while new_count != count:
+        try:
+            update_progress(new_count / likes_count, f' - Scrolling to load more items {new_count}/{likes_count}:')
+            the_last_in_list = eles[-1]
+            the_last_in_list.location_once_scrolled_into_view 
+            time.sleep(1)
+            WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
+            count = new_count
+            #eles = driver.find_elements_by_class_name(class_name)
+            eles = check_and_get_all_elements_by_tag_name(element, tag_name)
+            new_count = len(eles)
+        except NoSuchElementException:
+            pass
+    if new_count < likes_count:
+        update_progress(1, ' - Scrolling to load more items:{likes_count}/{likes_count}')
+    return eles
+
+#---------------------------------------------------------------
 def Login(driver, user_inputs):
     """Submit given credentials to the 500px login page. """
 
@@ -1829,55 +2080,106 @@ def CSV_photos_list_to_HTML(csv_file_name, ignore_columns=[]):
     EXPECTING THE FIRST LINE TO BE THE COLUMN HEADERS, WHICH ARE  No, Page, ID, Title, Link, Src
     HIDE THE COLUMNS IN THE GIVEN ignore_columns LIST, BUT THE DATA IN THESE COLUMNS ARE USED TO FORM THE WEB LINK TAG <a href=...>
     """
-    # file name and extension check
+    CUSTOMED_COLUMN_WIDTHS = """
+    <colgroup>
+		<col style="width:4%">
+		<col style="width:20%">
+		<col span= "7" style="width:6%" >
+		<col style="width:22%" >				
+	</colgroup>
+    """
+
+# file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
         return None
 
     html_file = file_path + '.html'
 
-    # Create the document title and description
+    # Create the document description based on the given file name.
+    # Ref: Photo list filename:  [path]\_[user name]\_[count]\_[types of document]\_[date].html
+    # Example of filename: C:\ProgramData\500px_Apiless\Output\johndoe_16_photos_2019-06-17.html
     file_name = file_path.split('\\')[-1]
     splits = file_name.split('_')
     title_string = ''
     if len(splits) >=4:
         title_string = f'\
-    <h2>Photo lists</h2>\n\
-    <p> Date: {splits[-1]} </p>\n\
-    <p> User: {splits[0]} </p>\n\
-    <p> {splits[1]} {splits[2]} </p>\n\
-    <p> File name: {html_file} </p>\n'
+    <h2>Photo lists ({splits[1]})</h2>\n\
+    <p> User / Date: {splits[0]} / {splits[-1]}</p>\n\
+    <p> File: {html_file} </p>\n'
 
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
         headers = reader.fieldnames
 
-        row_string = '<tr>'
-        # write headers row 
-        # Columns    : 0   1     2   3      4     5
-        # Photo List : No, Page, ID, Title, Link, Src
-        for header in reader.fieldnames:
+        row_string = '\t<tr>\n'
+        # Ref:
+        # Columns    : 0   1   2            3     4           5      6      7         8        9       10     11      12    13
+        # Photo List : No, ID, Photo Title, Href, Thumbnail,  Views, Likes, Comments, Gallery, Highest Pulse, Rating, Date, Tags
+
+        # write headers and assign sort method for appropriate columns   
+        # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
+        ignore_columns_count = 0
+        for i, header in enumerate(reader.fieldnames):
+            if header == 'Comments':
+                header = 'Com-<br>ments'
+            elif header == 'Highest Pulse':
+                header = 'Highest<br>Pulse'    
+                
             if header in ignore_columns:
-                continue
-            row_string += f'<th align="left">{header}</th>'
-        
+                ignore_columns_count += 1
+                continue  
+            
+            sort_direction_arrows = f"""
+            <div class="hdr_arrows">
+				<div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
+				<div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>"""
+
+            left_div = f'''
+            <div class="hdr_text">{header}</div>'''
+
+            if header == "No":
+                first_left_div = f'\t\t\t<div class="hdr_text">{header}</div>'
+                # the No column is initially in ascending order, so we donot show the down arrow
+                ascending_arrow_only = f"""
+                <div class="hdr_arrows">
+				    <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
+				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>"""
+                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
+            
+            elif header == "Photo Title":
+                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>\n'
+
+            else:
+                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+
         # write each row 
-        row_string += '</tr>'
+        row_string += '\t</tr>\n'
         for row in reader:
-            row_string += '<tr>'
+            row_string += '\t<tr>\n'
             for i in range(len(headers) ):
                 col_header = headers[i]
-                text = row[headers[i]]
+                if col_header in ignore_columns:
+                    continue  
+                text = row[headers[i]]     
+                # In Photo Tile column, show photo thumbnail and photo title with <a href> link
+                if  col_header == 'Photo Title': 
+                    # write empty html tags if photo thumbnail is empty
+                    if row[headers[5]] == '':
+                        row_string += f'\t\t<td><div"><div>{text}</div></div></td> \n' 
+                    else:
+                        photo_thumbnail = row[headers[4]]
+                        photo_link =  row[headers[3]]                 
+                        row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{photo_link}" target="_blank">\n'
+                        row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
+                        row_string += f'\t\t\t\t<div>{text}</div></div></td>\n'
+                elif  col_header == 'Tags':
+                    row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
+                else: 
+                    row_string += f'\t\t<td>{text}</td> \n' 
+            row_string += '\t</tr>\n'
 
-                if col_header == 'No': 
-                   row_string += f'<td>{text}</td> \n' 
-                
-                elif col_header == 'Title': 
-                    row_string += f'<td><img class="photo" src={row[headers[5]]}></img>\n' 
-                    row_string += f'<a href="{row[headers[4]]}">{text}</a></td> \n'
-            row_string += '</tr>'
-
-        html_string = f'<html>\n{HEAD_STRING_WITH_CSS_STYLE}<body> \n{title_string}<table {row_string} </table> </body> </html>'
+        html_string = f'<html>\n{HEAD_STRING_WITH_CSS_STYLE}\n\n<body> \n{title_string}<table> {CUSTOMED_COLUMN_WIDTHS}\n{row_string} </table>\n{SCRIPT_STRING}</body> </html>'
 
         #write html file 
         with open(html_file, 'wb') as htmlfile:
@@ -1894,6 +2196,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
     EXPECTING FIRST LINE IS COLUMN HEADERS, WHICH VARIES DEPENDING ON THE CSV TYPES
     THE ARGUMENT ignore_columns IS A LIST OF THE COLUMN HEADERS FOR WHICH WE WANT TO HIDE THE ENTIRE COLUMN
     """
+
     # file name and extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
@@ -1901,35 +2204,37 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
 
     html_full_file_name = file_path + '.html'
 
-    # Create document title and description based on these predefined, expected file names:
-    # Notifications   :    [user name]_[count]_notifications_[date].html
-    # Unique users    :    [user name]_[count]_unique-users-last-23-notifications_[date].html
-    # Followers List  :    [user name]_[count]_followers_[date].html
-    # Followings List :    [user name]_[count]_followings_[date].html
-    # Users like photo:    [user name]_[count]_likes_[photo title]_[date].html
+    # Create document title and description based on these predefined file names:
+    # Notifications   :    [user name]_[count]_notifications_                       [date].html
+    # Unique users    :    [user name]_[count]_unique-users-last-n-notifications_   [date].html
+    # Followers List  :    [user name]_[count]_followers_                           [date].html
+    # Followings List :    [user name]_[count]_followings_                          [date].html
+    # Users like photo:    [user name]_[count]_likes_[photo title]_                 [date].html
 
     file_name = file_path.split('\\')[-1]
     splits = file_name.split('_')  
     title = ''
+    table_width =  'style="width:500"'
     if len(splits) >=4:
         if 'unique' in html_full_file_name:
-           parts = splits[2].split('-')
-           title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
+            parts = splits[2].split('-')
+            title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
+            table_width = 'style="width:310"'
         elif 'notifications' in html_full_file_name:
             title = f'Last {splits[1]} notifications'
+            table_width =  'style="width:80%"'
         elif 'followers' in html_full_file_name:
             title = f'List of {splits[1]} followers'
         elif 'followings' in html_full_file_name:
             title = f'List of {splits[1]} followings'
+            table_width = 'style="width:400"'
         elif 'likes' in html_full_file_name:
             title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
         
         title_string = f'\
     <h2>{title}</h2>\n\
-    <p> Date: {splits[-1]} </p>\n\
-    <p> User: {splits[0]} </p>\n\
-    <p> File name: {html_full_file_name} </p>\n'
-
+    <p> User / Date: {splits[0]} / {splits[-1]}</p>\n\
+    <p> File: {html_full_file_name} </p>\n'
  
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
@@ -1938,19 +2243,56 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
             printR(f'File {csv_file_name} is in wrong format!')
             return ''
 
-        row_string = '<tr>'
-        
-        for header in reader.fieldnames:
-            if header not in ignore_columns:
-                row_string += f'<th align="left">{header}</th>'
+        row_string = '\n\t<tr>\n'
+  
+        # write headers and assign sort method for appropriate columns   
+        # each header cell has 2 part: the left div for the header name, the right div for sort direction arrows     
+        ignore_columns_count = 0
+        for i, header in enumerate(reader.fieldnames):
+            if header in ignore_columns:
+                ignore_columns_count += 1
+                continue
+ 
+            sort_direction_arrows = f"""
+            <div class="hdr_arrows">
+				<div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
+				<div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>"""
+
+            left_div = f'''
+            <div class="hdr_text">{header}</div>'''
+           
+            if header == "No":
+                first_left_div = f'\t\t\t<div class="hdr_text">{header}</div>'
+                # the No column is initially in ascending order, so we donot show the down arrow
+                ascending_arrow_only = f"""
+                <div class="hdr_arrows">
+				    <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
+				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div>
+			    </div>"""
+                row_string += f'\t\t<th class="w40" onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
+            
+            elif header == "Display Name" or header == "Photo Title":
+                row_string += f'\t\t<th class="w200" onclick="sortTable({i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>\n'
+ 
+            elif header == "Followers" or header == "Count":
+                row_string += f'\t\t<th class="w80" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+            
+            elif header == "Status"or header == "Content":
+                row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+            
+            elif header == "Time Stamp":
+                row_string += f'\t\t<th class="w120" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+            
+            else:
+                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
 
         # create rows for html table 
-        row_string += '</tr>'       
+        row_string += '\t</tr>'       
         for row in reader:
-            row_string += '<tr>'
+            row_string += '\n\t<tr>\n'
             # Table columns vary depending on 5 different csv files:
-            # Columns:         0   1            2             3          4          5                6            7           8
-            # Notifications  : No, User Avatar, Display Name, User Name, Content,   Photo Thumbnail, Photo Title, Time Stamp, Status
+            # Columns:         0   1            2             3          4          5                6            7           8       9
+            # Notifications  : No, User Avatar, Display Name, User Name, Content,   Photo Thumbnail, Photo Title, Time Stamp, Status, Photo Link
             # Unique users   : No, User Avatar, Display Name, User Name, Count
             # Followers List : No, User Avatar, Display Name, User Name, Followers, Status
             # Followings List: No, User Avatar, Display Name, User Name, Followers, Status
@@ -1965,42 +2307,48 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
 
                 # In Display Name column, show user's avatar and the display name with link 
                 if col_header == 'Display Name' : 
-                    avatar_src = row[headers[1]]
-                    row_string += f'<td><img src={avatar_src}></img> \n'   
-
-                    user_home_page = f'https://500px.com/{row[headers[3]]}'
-                    row_string += f'<a href="{user_home_page}">{text}</a></td> \n'   
+                    avatar_src = row[headers[1]]                            
+                    user_home_page = f'https://500px.com/{row[headers[3]]}'        
+                    user_name = row[headers[2]]
+                    row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{user_home_page}" target="_blank">\n'
+                    row_string += f'\t\t\t\t<img src={avatar_src}></a>\n'
+                    row_string += f'\t\t\t<div>{user_name}</div></div></td>\n'
                
                 # Column 4 varies depending on csv file types
                 elif i == 4:  
                     # Unique Users, Followers or Followings Lists:   
                     if col_header == 'Followers' or col_header == 'Count': 
-                            row_string += f'<td align="right">{text}</td> \n'   # align right for a count number 
+                            row_string += f'\t\t<td>{text}</td> \n'   # align right for a count number 
                     # Notifications or Unique users csv files: 
                     elif col_header == 'Count' or col_header == 'Content':      # write as is    
-                        row_string += f'<td>{text}</td> \n'
+                        row_string += f'\t\t<td>{text}</td> \n'
                     
                 # Column 5 on Followers or Followings list or column 8 on Notifications list
                 elif col_header == 'Status':
                     if text.find('Following') != -1: 
-                        row_string += f'<td bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
+                        row_string += f'\t\t<td bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
                     else:  
-                        row_string += f'<td>{text}</td> \n'          
+                        row_string += f'\t\t<td>{text}</td> \n'          
   
                 # In Photo Tile column, show photo thumbnail and photo title with <a href> link
                 elif  col_header == 'Photo Title': 
                      if row[headers[5]] == '':
-                         row_string += f'<td></td> \n'                          # donot write <img> tag if photo thumbnail is empty
+                         row_string += f'\t\t<td><div><div></div></div></td> \n' # write empty tags if photo thumbnail is empty
                      else:
-                         row_string += f'<td><img class="photo" src={row[headers[5]]}></img>{text}</td> \n' 
+                         photo_thumbnail = row[headers[5]]
+                         photo_link =  row[headers[9]]                 
+                         row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{photo_link}" target="_blank">\n'
+                         row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
+                         row_string += f'\t\t\t\t<div>{text}</div></div></td>\n'
 
                 # All other columns such as 0:No, 7:Time Stamp,...: write text as is
                 else:                            
-                     row_string += f'<td>{text}</td> \n'
+                     row_string += f'\t\t<td>{text}</td> \n'
 
-            row_string += '</tr>'
+            row_string += '\t</tr>'
 
-        html_string = f'<html> {HEAD_STRING_WITH_CSS_STYLE}<body> \n{title_string} \n<table {row_string} </table> </body> </html>'
+        
+        html_string = f'<html>\n{HEAD_STRING_WITH_CSS_STYLE}\n\n<body>\n{title_string}<table {table_width}> {row_string} </ztable>\n{SCRIPT_STRING}</body> </html>'
 
         #write html file 
         with open(html_full_file_name, 'wb') as htmlfile:
@@ -2125,7 +2473,7 @@ def Show_menu(user_inputs):
     printY('      The following options require a user name:')
     printC('   1  Get user statistics (recent activities, last upload date, registration date ...')
     printC('   2  Get user photos list ')
-    printC('   3  Get followers list ')
+    printC('   3  Get followers list (login is optional)')
     printC('   4  Get following list ')
     printC('   5  Get a list of users who liked a given photo')
     printC('')
@@ -2140,7 +2488,7 @@ def Show_menu(user_inputs):
     printC('  12  Like n photos of each users in your last m notifications')
     printC('')
     printY('      The following option does not need credentials:')
-    printC('  13  Play slideshow on a given gallery')
+    printC('  13  Play slideshow on a given gallery (login is optional)')
     #printC(' 14  Get following statuses of users that you are following')
     printC('')
     printC('   r  Restart with different user')
@@ -2267,7 +2615,6 @@ def Define_and_read_arguments():
 #---------------------------------------------------------------
 def Get_additional_user_inputs(user_inputs):
     """ Ask the user for additional inputs based on the option previously selected in user_inputs.choice.  
-
     ALLOW THE USER TO ABORT (QUIT OR RESTART) ANYTIME DURING THE INPUT RECEPTION. RETURN FALSE IF ABORTING, TRUE OTHERWISE    
     """
 
@@ -2443,7 +2790,7 @@ def Handle_option_2(user_inputs, output_lists):
     if output_lists.photos is not None and len(output_lists.photos) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')           
         if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
-            Show_html_result_file(CSV_photos_list_to_HTML(csv_file, ignore_columns=['Page', 'ID', 'Link', 'Src']))  
+            Show_html_result_file(CSV_photos_list_to_HTML(csv_file, ignore_columns=['ID', 'Href', 'Thumbnail']))  
             
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
             print(f'The process took {time_duration} seconds') 
@@ -2559,7 +2906,7 @@ def Handle_option_6(user_inputs, output_lists):
     """ Get n last notifications details (max 5000). Show the detail list and the list of the unique users on it"""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime(DATE_FORMAT)
+    date_string = time_start.strftime(DATETIME_FORMAT)
     csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
     html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
 
@@ -2577,7 +2924,7 @@ def Handle_option_6(user_inputs, output_lists):
     time.sleep(1)
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-    # abort the action if the target objects failed to load within a timeout of 15s        
+    # abort the action if the target objects failed to load within a given timeout        
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
         return None, None	
 
@@ -2598,11 +2945,11 @@ def Handle_option_6(user_inputs, output_lists):
     csv_file_unique_users  = os.path.join(output_lists.output_dir, \
         f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{user_inputs.number_of_notifications}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  Write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
-        Show_html_result_file(CSV_to_HTML(csv_file_unique_users, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail']))     
+        Show_html_result_file(CSV_to_HTML(csv_file_unique_users, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail', 'Photo Link']))     
     
     # Write the notification list to csv. Convert it to html, show it in browser        
     if len(output_lists.notifications) > 0 and  Write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail'])) 
+        Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail',  'Photo Link'])) 
 
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -2637,10 +2984,8 @@ def Handle_option_8(user_inputs, output_lists):
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
         return
-    if user_inputs.number_of_photos_to_be_liked == 1:
-        print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo of user {user_inputs.target_user_name} ...")
-    else:
-        print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of user {user_inputs.target_user_name} ...")
+
+    print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo(s) of user {user_inputs.target_user_name} ...")
     
     # do task   
     Like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False)
@@ -2659,17 +3004,14 @@ def Handle_option_9(user_inputs, output_lists):
         return
     driver.get(user_inputs.gallery_href)
     time.sleep(3)
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     #if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
     #    return None, None	
     innerHtml = driver.execute_script("return document.body.innerHTML")  
     time.sleep(3)
 
     Hide_banners(driver)
-    if user_inputs.number_of_photos_to_be_liked == 1:
-        print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo from {user_inputs.gallery_name} gallery, start index {user_inputs.index_of_start_photo}  ...")
-    else:
-        print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos from {user_inputs.gallery_name} gallery, start index {user_inputs.index_of_start_photo} ...")
+    print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo(s) from {user_inputs.gallery_name} gallery, start index {user_inputs.index_of_start_photo} ...")
 
     # do task
     Like_n_photos_on_current_page(driver, user_inputs.number_of_photos_to_be_liked, user_inputs.index_of_start_photo)
@@ -2753,7 +3095,7 @@ def Handle_option_12(user_inputs, output_lists):
     time.sleep(1)        
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     
-    # abort the action if the target objects failed to load within a timeout of 15s    
+    # abort the action if the target objects failed to load within a given timeout    
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
       return None, None	
 
@@ -2824,7 +3166,6 @@ def Handle_option_14(user_inputs, output_lists):
     #---------------------------------------------------------------
 
 def main():
-
     os.system('color')
     driver = None
 
@@ -2834,7 +3175,7 @@ def main():
     if  user_inputs.use_command_line_args == False:
         Show_menu(user_inputs)
  
-    # declare a dictionary so that functions can be refered as string from "1" to "14"
+    # declare a dictionary so that functions can be referred to from a string from "1" to "14"
     Functions_dictionary = {   
             "1" : Handle_option_1, 
             "2" : Handle_option_2, 
@@ -2855,6 +3196,7 @@ def main():
     while user_inputs.choice != 'q':
         #restart for different user
         if user_inputs.choice == 'r': 
+            printY('Restarted for a different user.')
             user_inputs.Reset()
             output_lists.Reset()
             Show_menu(user_inputs)
