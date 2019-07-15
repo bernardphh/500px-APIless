@@ -1,6 +1,7 @@
 # 500px-APIless: Scraping and automation
 A personal project created by curiosity and for fun, to extract information from 500px web site for data analyzing, and to perform some automated processes.
 
+<br/>
 
 ## A BIT OF HISTORY: ##
 
@@ -31,6 +32,7 @@ Before trying my bots- just for fun, you may say- check out this old but very in
 It is from  Andy Hutchinson and it pretty much said it all:
  [The Real Reason You Suck on Photo Sharing Sites: The Bots are Beating You](https://petapixel.com/2017/02/27/real-reason-suck-photo-sharing-sites-bots-beating/) 
 
+<br/>
 
 ## WHAT IT CAN DO SO FAR: ##
 
@@ -49,15 +51,13 @@ HTML files are used for presentation, which happens after a data collection task
 
 Refer to [500px-APIless.docx](/500px-APIless.docx) for sample outputs, detailed description of each option, and a complete command-line syntaxes.
 
-
+<br/>
 
 ## ENVIRONMENT: ##
 
 This was developed using Visual Studio Code, testing and run on Windows 10, Python version 3.6
 
-
-
-
+<br/>
 
 ## DEPENDENCIES: ##
 
@@ -65,9 +65,7 @@ Python 3.6 or later
 
 Selenium and ChromeDriver
 
-
-
-
+<br/>
 
 ## USAGE FOR WINDOW OS: ##
 
@@ -76,7 +74,9 @@ If Python and Selenium are installed properly, you should be able to double-clic
 If not, make sure the location of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
  python.exe 500px-APIless.py
 
-## SOME SAMPLE OUTPUTS ##
+<br/>
+
+## SOME SAMPLE OUTPUTS: ##
 
 ![](Snapshots/photopage.png)
 
@@ -95,6 +95,11 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 
 <br/>
 
+### Like n photos of each users
+in the last m notifications: ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+
+<br/>
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ## 
 
@@ -110,15 +115,15 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
    - [ ] Play slideshow in random order
    - [ ] Making a GUI 
    - [ ] Automatic data analysis
-   - [ ] Sorting a column in the output HTML file is too long to be practical if the table is big (200+ rows). Break the long table or  sort the list before writting to html.
+   - [ ] Sorting a column in the output HTML file is too long to be practical if the table is big (200+ rows). 
+         Possibl solutions: Break the long html into pages, sort the list before creating html or wait until we have a graphical user  interface(would be in C# WPF).
 
 Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
 
 Feedback, bug report, contributions are more than welcomed.
 
-
-
+<br/>
 
 ## DISCLAIMER: ## 
 
