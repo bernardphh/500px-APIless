@@ -47,7 +47,7 @@ HTML files are used for presentation, which happens after a data collection task
 
 - The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 
-Refer to [500px-APIless.docx](/500px-APIless.docx) for a complete command-line syntaxes and the detailed description of each option and its sample outputs.
+Refer to [500px-APIless.docx](/500px-APIless.docx) for sample outputs, detailed description of each option, and a complete command-line syntaxes.
 
 
 
@@ -76,13 +76,30 @@ If Python and Selenium are installed properly, you should be able to double-clic
 If not, make sure the location of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
  python.exe 500px-APIless.py
 
+## SOME SAMPLE OUTPUTS ##
 
+![](Snapshots/photopage.png)
+
+<br/>
+
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Notification.png" width ="80%">
+
+<br/>
+
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/UniqueUsers.PNG" width="500">
+
+<br/>
+
+### Check if a user is following you: ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CheckFollowingStatus.jpg" width="80%">
+
+<br/>
 
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ## 
 
-- Not all exceptions are handled, especially with Selenium’s find_element… methods
-- For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
+- Not all exceptions are handled, especially with Seleniumâ€™s find_elementâ€¦ methods
+- For the requests involved more than 1000 items (list of notifications, photos, usersâ€¦), processing time takes too long to my liking. 
 - In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - [x] Handling more exceptions
@@ -93,6 +110,7 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
    - [ ] Play slideshow in random order
    - [ ] Making a GUI 
    - [ ] Automatic data analysis
+   - [ ] Sorting a column in the output HTML file is too long to be practical if the table is big (200+ rows). Break the long table or  sort the list before writting to html.
 
 Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
