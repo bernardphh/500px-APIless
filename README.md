@@ -95,8 +95,7 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 
 <br/>
 
-### Like n photos of each users
-in the last m notifications: ###
+### Like n photos of each users in the last m notifications: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
 
 <br/>
