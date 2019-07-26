@@ -31,7 +31,7 @@ MAX_FOLLOWINGS_STATUSES = 100    # max number of users you want to find the foll
 DEBUG = False
 
 DATE_FORMAT = "%Y-%m-%d"                 # ex. 2019-06-15
-DATETIME_FORMAT = "%Y-%b-%d--T%H-%M-%S"  # ex. 2019-Jun-15--T13-21-45
+DATETIME_FORMAT = "%Y-%b-%d--Time%H-%M-%S"  # ex. 2019-Jun-15--Time13-21-45
 
 # for simplicity, we keep everything in one file, including a CSS and a Javascript constant strings below
 HEAD_STRING_WITH_CSS_STYLE ="""
@@ -493,7 +493,7 @@ def Hover_by_element(driver, element):
 def Get_element_text_by_xpath(page, xpath_string):
     """Return the text of element, specified by the element xpath. Return '' if element not found. """
     ele = page.xpath(xpath_string)
-    if len(ele) > 0 : 
+    if ele is not None and len(ele) > 0: 
         return ele[0].text
     return ''
 
@@ -501,7 +501,7 @@ def Get_element_text_by_xpath(page, xpath_string):
 def Get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
     """Get the value of the given attribute name, at the element of the given xpath. Return '' if element not found."""
     ele = page.xpath(xpath)
-    if len(ele) > 0:
+    if ele is not None and len(ele) > 0:
         return ele[0].attrib[attribute_name] 
     return ''
 
@@ -707,36 +707,40 @@ def Get_stats(driver, user_inputs, output_lists):
     affection_note = Get_element_attribute_by_ele_xpath(page, "//li[@class='affection']", 'title' )
     # Following note
     following_note = Get_element_attribute_by_ele_xpath(page, "//li[@class='following']", 'title' )
+
+    # Jul 26 2019: modification due to page structure changes:
     # Views count
-    views_count =  Get_element_text_by_xpath(page,'//*[@id="content"]/div[2]/div[4]/ul/li[2]/span')
+    views_ele = check_and_get_ele_by_class_name(driver,'views' )
+    if views_ele is not None:
+        ele =  check_and_get_ele_by_tag_name(views_ele,'span')
+        if ele is not None:
+            views_count= ele.text
+
+    # Location
+    location =  Get_element_text_by_xpath(page,'//*[@id="content"]/div[1]/div[4]/ul/li[5]')
+    loc_test = check_and_get_all_elements_by_class_name(driver, 'location')
 
     #using regex to extract from the javascript-rendered html the json part that holds user data 
-    userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
+    #   userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
+    i = innerHtml.find('"userdata":') 
+    j = innerHtml.find('</script>', i)
+    userdata = innerHtml[i + 11 : j - 2]
     if len(userdata) == 0:
         return
-    json_data = json.loads(userdata[0])
-    location = ''
-    city = json_data['city']
-    if json_data['state'] != None: 
-        state = json_data['state']  
-    else: 
-        state = ''
-    country = json_data['country'] 
-    if  city == '' and state == '' and country == '':
-        location = 'not specified'
-    else:
-        if city    != '':  location  =  json_data['city']
-        if state   != '':  location += ', ' +  json_data['state']
-        if country != '':  location += ', ' +  json_data['country']
-    user_id = json_data['id']
-    photos = json_data['photos']
-    photosCount = len(photos)
-    #first_upload_date = json_data['photos'][photosCount -1]['created_at'][:10]
-    if photosCount > 0:
-        last_upload_date = photos[0]['created_at'][:10]
-    else:
-        last_upload_date = 'Has no photo'
-
+    
+    json_data = json.loads(userdata)
+    print("Getting the last upload date ...")
+    last_photo_href = Get_element_attribute_by_ele_xpath(page, './/*[@id="content"]/div[3]/div/div/div[1]/a', 'href')
+    driver.get(r'https:/500px.com' + last_photo_href)
+    time.sleep(2)
+ 
+    react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
+    last_upload_date = ''
+    if react_photos_index_container is not None:
+        upload_date_ele =  check_and_get_ele_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[1]/div/p/span')                                                       
+        if upload_date_ele is not None:
+            last_upload_date = upload_date_ele.text
+	
     active_int = json_data['active'] 
     if   active_int == 0 : user_status = 'Not Active'
     elif active_int == 1 : user_status = 'Active'
@@ -749,7 +753,7 @@ def Get_stats(driver, user_inputs, output_lists):
         time_stamp = datetime.datetime.now().replace(microsecond=0).strftime("%Y_%m_%d__%H_%M_%S")
         Write_string_to_text_file(jason_string, os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_json_{time_stamp}.txt'))
 
-    stats = user_stats(json_data['fullname'], user_inputs.user_name,  user_id, location, 
+    stats = user_stats(json_data['fullname'], user_inputs.user_name, json_data['id'], location, 
                        affection_note, following_note, json_data['affection'], views_count, json_data['followers_count'], json_data['friends_count'], 
                        json_data['photos_count'], json_data['galleries_count'], json_data['registration_date'][:10], last_upload_date, user_status)
     return json_data, stats
