@@ -30,7 +30,7 @@ MAX_AUTO_LIKE_REQUEST = 100      # self limitation to avoid abusing
 MAX_FOLLOWINGS_STATUSES = 100    # max number of users you want to find the following statuses with you
 DEBUG = False
 
-DATE_FORMAT = "%Y-%m-%d"                 # ex. 2019-06-15
+DATE_FORMAT = "%Y-%m-%d"                    # ex. 2019-06-15
 DATETIME_FORMAT = "%Y-%b-%d--Time%H-%M-%S"  # ex. 2019-Jun-15--Time13-21-45
 
 # for simplicity, we keep everything in one file, including a CSS and a Javascript constant strings below
@@ -137,16 +137,6 @@ function sortTable(n, special_sort) {
 }
 </script>"""
 
-class photo:
-    """ Represent a photo info."""
-    def __init__(self, order, id, title, href, thumbnail, stats):
-        self.order = order  # ascending order, with the latest uploaded photo being 1
-        self.id = id
-        self.title = title
-        self.href = href
-        self.thumbnail = thumbnail
-        self.stats = stats
-
 class photo_stats:
     """ Photo statistics info """
     def __init__(self,  upload_date = '', views_count=0, votes_count=0, collections_count=0, comments_count=0, highest_pulse=0, rating=0, tags='' ):
@@ -158,6 +148,18 @@ class photo_stats:
         self.highest_pulse = highest_pulse
         self.rating = rating
         self.tags = tags
+
+class photo:
+    """ Represent a photo info."""
+    def __init__(self, author_name='', order='', id='', title='', href='', thumbnail='', galleries='', stats= photo_stats()):
+        self.author_name= author_name
+        self.order = order  # ascending order, with the latest uploaded photo being 1
+        self.id = id
+        self.title = title
+        self.href = href
+        self.thumbnail = thumbnail        
+        self.galleries = galleries
+        self.stats = stats
 
 class notification:
     """ Represent a notification object."""
@@ -377,13 +379,13 @@ def Write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'ID', 'Photo Title', 'Href', 'Thumbnail', 'Views', 'Likes', 'Comments', 'Gallery', 'Highest Pulse', 'Rating', 'Date', 'Tags'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'ID', 'Photo Title', 'Href', 'Thumbnail', 'Views', 'Likes', 'Comments', 'Featured In Galleries', 'Highest Pulse', 'Rating', 'Date', 'Tags'])  
             writer.writeheader()
             for i, a_photo in enumerate(list_of_photos):
                 writer.writerow({'No' : str(a_photo.order), 'ID': str(a_photo.id), 'Photo Title' : str(a_photo.title), 'Href' :a_photo.href, 'Thumbnail': a_photo.thumbnail, \
                                  'Views': str(a_photo.stats.views_count), 'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), \
-                                'Gallery': str(a_photo.stats.collections_count), 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), \
-                                'Date': str(a_photo.stats.upload_date), 'Tags': a_photo.stats.tags}) 
+                                 'Featured In Galleries': str(a_photo.galleries), 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), \
+                                 'Date': str(a_photo.stats.upload_date), 'Tags': a_photo.stats.tags}) 
             printG(f"- List of {user_name}\'s {len(list_of_photos)} photo is saved at:\n  {os.path.abspath(csv_file_name)}")
         return True
 
@@ -493,7 +495,8 @@ def Hover_by_element(driver, element):
 def Get_element_text_by_xpath(page, xpath_string):
     """Return the text of element, specified by the element xpath. Return '' if element not found. """
     ele = page.xpath(xpath_string)
-    if ele is not None and len(ele) > 0: 
+    if ele is not None and len(ele) > 0 : 
+        ele.location_once_scrolled_into_view
         return ele[0].text
     return ''
 
@@ -605,6 +608,22 @@ def check_and_get_all_elements_by_css_selector(element, selector):
         return []
 
 #---------------------------------------------------------------
+def Get_web_ele_text_by_xpath(element_or_driver, xpath):
+    """ Use WebDriver function to find text from a given xpath, return empty string if not found.
+    
+    USE ABSOLUTE XPATH IF THE DRIVER IS PASSED
+    USER RELATIVE XPATH IF AN WEB ELEMENT IS PASSED
+     """
+    if element_or_driver is None:
+        return ''
+    try:
+        ele = element_or_driver.find_element_by_xpath(xpath)
+        if ele is not None:
+            return ele.text       
+    except NoSuchElementException:
+        return ''
+
+#---------------------------------------------------------------
 def GetUploadDate(photo_link):
     """Given a photo link, returns the photo upload date or time. """
 
@@ -707,8 +726,6 @@ def Get_stats(driver, user_inputs, output_lists):
     affection_note = Get_element_attribute_by_ele_xpath(page, "//li[@class='affection']", 'title' )
     # Following note
     following_note = Get_element_attribute_by_ele_xpath(page, "//li[@class='following']", 'title' )
-
-    # Jul 26 2019: modification due to page structure changes:
     # Views count
     views_ele = check_and_get_ele_by_class_name(driver,'views' )
     if views_ele is not None:
@@ -721,6 +738,7 @@ def Get_stats(driver, user_inputs, output_lists):
     loc_test = check_and_get_all_elements_by_class_name(driver, 'location')
 
     #using regex to extract from the javascript-rendered html the json part that holds user data 
+    # Jul 26 2019: modification due to page structure changes: photos list is no longer in included
     #   userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
     i = innerHtml.find('"userdata":') 
     j = innerHtml.find('</script>', i)
@@ -740,7 +758,7 @@ def Get_stats(driver, user_inputs, output_lists):
         upload_date_ele =  check_and_get_ele_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[1]/div/p/span')                                                       
         if upload_date_ele is not None:
             last_upload_date = upload_date_ele.text
-	
+
     active_int = json_data['active'] 
     if   active_int == 0 : user_status = 'Not Active'
     elif active_int == 1 : user_status = 'Active'
@@ -868,7 +886,7 @@ def Get_photos_list(driver, user_inputs):
     Hide_banners(driver)
 
     # We intend to scroll down an indeterminate number of times until the end is reached
-    # In order to have a realistic progress bar, we need give an estimate of the number of scrolls needed
+    # In order to have a realistic progress bar, we need to give an estimate of the number of scrolls needed
     estimate_scrolls_needed = 3  #default value, just in case error occurs
     json_photos_count  = 1
     photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
@@ -876,13 +894,12 @@ def Get_photos_list(driver, user_inputs):
         json_photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
         estimate_scrolls_needed =  math.floor( json_photos_count / PHOTOS_PER_PAGE) +1
 
-    Scroll_down(driver, 2, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
+    Scroll_down(driver, 2, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') 
 
     # abort the action if the target objects failed to load within a given timeout
     success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
     if not success:
-        return []
-    
+        return []  
 
     #if DEBUG:
     #     Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_inputs.user_name + '_innerHTML.txt')
@@ -890,7 +907,7 @@ def Get_photos_list(driver, user_inputs):
 
     #extract photo title and href (alt tag) using lxml and regex
     els = page.xpath("//a[@class='photo_link ']")  
-    titles = page.xpath("//img[@data-src='']")
+    img_ele = page.xpath("//img[@data-src='']")
     num_item = len(els)
     if num_item == 0:
         printR(f'User {user_name} does not upload any photo')
@@ -899,15 +916,17 @@ def Get_photos_list(driver, user_inputs):
     update_progress(0, f' - Extracting 0/{num_item} photos:')
     # Create the photos list
     photo_src = ''
+
     for i in range(num_item): 
         update_progress(i / (num_item -1), f' - Extracting  {i + 1}/{num_item} photos:')
-        on_page = math.floor(i / PHOTOS_PER_PAGE ) + 1
 
-        # open each photo page
+        # get photo link, title and thumbnail 
         photo_href = r'https://500px.com' + els[i].attrib["href"]
-        if i < len(titles):
-            photo_src = titles[i].attrib["src"]
+        if i < len(img_ele):
+            src = img_ele[i].attrib["src"]
+            title = img_ele[i].attrib["alt"]
 
+        # open each photo page to get photo statistics
         try:
             driver.get(photo_href)
         except:
@@ -915,30 +934,95 @@ def Get_photos_list(driver, user_inputs):
             Close_chrome_browser(driver)
             Show_menu(user_inputs)         
             return
+        innerHtml = driver.execute_script("return document.body.innerHTML")
+        time.sleep(1)
+        
+        #--------------------------------------------------------------
+        # update Aug 2 2019: photo details is no longer provided in json format.
+        #if False:
+        ## extract the interested data: Ex: "window.PxPreloadedData = {"photo":[interested data] };"
+        #    json_stats = re.findall('"photo":(.*)', html_source)
+        #    if len(json_stats) == 0:
+        #        return
+        #    if json_stats[0][-2:] == '};':
+        #        json_stats[0] = json_stats[0][:-2]
+        #    stats = json.loads(json_stats[0])   
+        #    #images_src = stats['images'][-1]['https_url']
+        #    up_date = stats['created_at'].split('T') #stats['created_at'].replace('T','\n')[:-6]
+        #    upload_date = up_date[0].replace('-','\n')
+        #    tags = stats['tags'].copy()
+        #    tags.sort()
+        #    tags_string = ",".join(tags)
 
-        #time.sleep(1)
-        html_source = driver.page_source
-        # extract the interested data: Ex: "window.PxPreloadedData = {"photo":[interested data] };"
-        json_stats = re.findall('"photo":(.*)', html_source)
-        if len(json_stats) == 0:
-            return
-        if json_stats[0][-2:] == '};':
-            json_stats[0] = json_stats[0][:-2]
-        stats = json.loads(json_stats[0])   
-        #images_src = stats['images'][-1]['https_url']
-        up_date = stats['created_at'].split('T') #stats['created_at'].replace('T','\n')[:-6]
-        upload_date = up_date[0].replace('-','\n')
-        tags = stats['tags'].copy()
-        tags.sort()
-        tags_string = ",".join(tags)
+        #    photo_statistics = photo_stats(upload_date=upload_date, views_count=stats['times_viewed'], votes_count=stats['positive_votes_count'],
+        #                                   collections_count=stats['collections_count'], comments_count=stats['comments_count'], 
+        #                                   highest_pulse=stats['highest_rating'], rating=stats['rating'], tags=tags_string)
 
-        photo_statistics = photo_stats(upload_date=upload_date, views_count=stats['times_viewed'], votes_count=stats['positive_votes_count'],
-                                       collections_count=stats['collections_count'], comments_count=stats['comments_count'], 
-                                       highest_pulse=stats['highest_rating'], rating=stats['rating'], tags=tags_string)
-
-        new_photo = photo(order=i+1, id=stats['id'], title=stats['name'], href=photo_href, thumbnail=photo_src, stats=photo_statistics)
-        photos_list.append(new_photo)
+        #    new_photo = photo(order=i+1, id=stats['id'], title=stats['name'], href=photo_href, thumbnail=photo_src, stats=photo_statistics)
+        #    photos_list.append(new_photo)
+        #--------------------------------------------------------------
+        # new implementation
+        id = ''
+        galleries_list = []
+        order = i + 1
+        react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
  
+        # upload date
+        upload_date_raw =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[1]/div/p/span')    
+        dt = datetime.datetime.strptime(upload_date_raw, "%b %d, %Y")
+        upload_date = dt.strftime("%Y %m %d")
+        # views count
+        views_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[3]/div[2]/h3/span')                                                       
+        # highest pulse
+        highest_pulse =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[3]/div[1]/h3') 
+        # likes count
+        votes_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[1]/div[1]/a')  
+        # comments count
+        comments_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[4]/div[2]/div/h4').split(' ')[0]
+        #tags
+        tags = []
+        container =  check_and_get_ele_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[5]')
+        if container is not None:
+            a_eles = check_and_get_all_elements_by_tag_name(container, 'a')
+            if a_eles is not None:
+                for item in a_eles:
+                    tag = item.text                  
+                    if tag is not '': tags.append(tag)
+                tags.sort()
+        # galleries list, if user logged in
+        if user_inputs.password is not '':
+            view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
+            if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
+                collections_count = 0
+            else:
+                view_all_ele[0].location_once_scrolled_into_view
+                view_all_ele[0].click()         
+                time.sleep(1)
+                eles = driver.find_elements_by_class_name('ant-modal-body')       
+                galleries_count = 0
+
+                if len(eles)> 0:
+                    containers = check_and_get_all_elements_by_xpath(eles[0],'./div/div')
+                    if containers is not None and len(containers)> 0:
+                        childs =  check_and_get_all_elements_by_xpath(containers[0], './div') #containers[0].find_elements_by_xpath("./div")
+                        if childs is not None:
+                            galleries_count = len(childs)
+                            for child in childs:
+                                a_ele = check_and_get_ele_by_tag_name(child, 'a')
+                                if a_ele is  not None:
+                                    galleries_list.append(a_ele.get_attribute('href'))
+                #galleries_list.sort()
+
+        statictics = photo_stats(upload_date=upload_date, views_count=views_count.replace(',','').replace('.',''), 
+                                 votes_count=votes_count.replace(',','').replace('.',''), collections_count=0, 
+                                 comments_count=comments_count.replace(',','').replace('.',''), 
+                                 highest_pulse=highest_pulse,rating=0, tags=",".join(tags) )
+
+        this_photo = photo(author_name=user_inputs.user_name, order=order, id='', title=title, href=photo_href, 
+                           thumbnail=src, galleries=",".join(galleries_list), stats = statictics )      
+
+        photos_list.append(this_photo)
+
     return photos_list
 
 #---------------------------------------------------------------
@@ -2087,9 +2171,12 @@ def CSV_photos_list_to_HTML(csv_file_name, ignore_columns=[]):
     CUSTOMED_COLUMN_WIDTHS = """
     <colgroup>
 		<col style="width:4%">
-		<col style="width:20%">
-		<col span= "7" style="width:6%" >
-		<col style="width:22%" >				
+		<col style="width:21%">
+		<col span= "3" style="width:6%" >
+		<col style="width:14%">	
+		<col style="width:7%" >
+		<col style="width:6%" >
+		<col style="width:25%" >				
 	</colgroup>
     """
 
@@ -2118,8 +2205,8 @@ def CSV_photos_list_to_HTML(csv_file_name, ignore_columns=[]):
 
         row_string = '\t<tr>\n'
         # Ref:
-        # Columns    : 0   1   2            3     4           5      6      7         8        9       10     11      12    13
-        # Photo List : No, ID, Photo Title, Href, Thumbnail,  Views, Likes, Comments, Gallery, Highest Pulse, Rating, Date, Tags
+        # Columns    : 0   1   2            3     4           5      6      7         8                      9              10      11    12  
+        # Photo List : No, ID, Photo Title, Href, Thumbnail,  Views, Likes, Comments, Featured In Galleries, Highest Pulse, Rating, Date, Tags
 
         # write headers and assign sort method for appropriate columns   
         # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
@@ -2176,9 +2263,21 @@ def CSV_photos_list_to_HTML(csv_file_name, ignore_columns=[]):
                         photo_link =  row[headers[3]]                 
                         row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{photo_link}" target="_blank">\n'
                         row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
-                        row_string += f'\t\t\t\t<div>{text}</div></div></td>\n'
+                        row_string += f'\t\t\t\t<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>\n'
                 elif  col_header == 'Tags':
                     row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
+                
+                elif  col_header == 'Featured In Galleries' and text != '':
+                    # a gallery link has this format: https://500px.com/[photographer_name]/galleries/[gallery_name]
+                    row_string += f'\t\t<td>\n'
+                    galleries = text.split(',')
+                    for j, gallery in enumerate(galleries):
+                        gallery_name = gallery[gallery.rfind('/') + 1:]    
+                        row_string += f'\t\t\t<a href="{gallery}" target="_blank">{gallery_name}</a>'
+                        if j < len(galleries) -1:
+                            row_string += ',\n'                    
+                    row_string += f'\t\t</td> \n'
+                                
                 else: 
                     row_string += f'\t\t<td>{text}</td> \n' 
             row_string += '\t</tr>\n'
@@ -2279,7 +2378,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
                 row_string += f'\t\t<th class="w200" onclick="sortTable({i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>\n'
  
             elif header == "Followers" or header == "Count":
-                row_string += f'\t\t<th class="w80" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+                row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
             
             elif header == "Status"or header == "Content":
                 row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
@@ -2475,9 +2574,9 @@ def Show_menu(user_inputs):
     printC('')
     printC('--------- Chose one of these options: ---------')
     printY('      The following options require a user name:')
-    printC('   1  Get user statistics (recent activities, last upload date, registration date ...')
-    printC('   2  Get user photos list ')
-    printC('   3  Get followers list (login is optional)')
+    printC('   1  Get user statistics')
+    printC('   2  Get user photos list (login is optional)')
+    printC('   3  Get followers list   (login is optional)')
     printC('   4  Get following list ')
     printC('   5  Get a list of users who liked a given photo')
     printC('')
@@ -2515,8 +2614,8 @@ def Show_menu(user_inputs):
     printG(f'Current user: {user_inputs.user_name}')
 
     # password is optional
-    if (sel == 3 or sel == 5) and user_inputs.password == '':
-        expecting_password = getpass.win_getpass('If you also want to obtain your following status to each user,\ntype in password to login now,\nor just press ENTER to ignore this: >')
+    if (sel == 2 or sel == 3 or sel == 5) and user_inputs.password == '':
+        expecting_password = getpass.win_getpass('Optional: you can get info in greater detail if you log in,\ntype in password now,or press ENTER to ignore this option: >')
         if expecting_password == 'q' or expecting_password == 'r':
             user_inputs.choice = sel
             return 
@@ -2786,6 +2885,11 @@ def Handle_option_2(user_inputs, output_lists):
 
     # do the action
     driver = Start_chrome_browser()
+    # if user provided password then login (logged-in users can see the list galleries that feature theirs photos
+    if user_inputs.password != '':
+        if Login(driver, user_inputs) == False :
+            return
+    Hide_banners(driver)
     print(f"Getting {user_inputs.user_name}'s photos list ...")
     output_lists.photos = Get_photos_list(driver, user_inputs)
     Close_chrome_browser(driver)
@@ -2794,7 +2898,7 @@ def Handle_option_2(user_inputs, output_lists):
     if output_lists.photos is not None and len(output_lists.photos) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')           
         if Write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
-            Show_html_result_file(CSV_photos_list_to_HTML(csv_file, ignore_columns=['ID', 'Href', 'Thumbnail']))  
+            Show_html_result_file(CSV_photos_list_to_HTML(csv_file, ignore_columns=['ID', 'Href', 'Thumbnail', 'Rating']))  
             
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
             print(f'The process took {time_duration} seconds') 
@@ -3142,6 +3246,7 @@ def Handle_option_13(user_inputs, output_lists):
         
     driver.get(user_inputs.gallery_href)
     driver.execute_script("return document.body.innerHTML")
+    time.sleep(1)
     Hide_banners(driver)
 
     # do task
