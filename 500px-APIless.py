@@ -15,8 +15,9 @@ from selenium.common.exceptions import TimeoutException
 #from selenium.webdriver.chrome import service
 #import pychromecast
 #import logging
-import getpass 
 
+#import getpass 
+import msvcrt
 from lxml import html
 import os, sys, time, datetime, re, math, csv, json, codecs, argparse
 from time import sleep
@@ -2458,13 +2459,36 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
             htmlfile.write(html_string.encode('utf-16'))
 
     return html_full_file_name
+#--------------------------------------------------------------- 
+# The getpass.win_getpass() does not work properly on window. We implement it for the desired effect.
+# Credit: atbagga at https://github.com/microsoft/knack
+def win_getpass(prompt='Password: ', stream=None):
+    """Mask the passwork characters with character * """
+    for c in prompt:
+        msvcrt.putwch(c)
+    pw = ""
+    while 1:
+        c = msvcrt.getwch()
+        msvcrt.putwch('*')
+        if c == '\r' or c == '\n':
+            break
+        if c == '\003':
+            raise KeyboardInterrupt
+        if c == '\b':
+            pw = pw[:-1]
+        else:
+            pw = pw + c
+    msvcrt.putwch('\r')
+    msvcrt.putwch('\n')
+    return pw
 
 #--------------------------------------------------------------- 
 def Validate_non_empty_input(prompt_message, user_inputs):
     """Prompt user for an input, make sure the input is not empty. Return True if Quit or Restart is requested. False otherwise """
 
     if 'password' in prompt_message:
-        val = getpass.win_getpass(prompt_message)
+       #val = getpass.win_getpass(prompt_message)
+       val = win_getpass(prompt=prompt_message)					    
     else:
         val = input(prompt_message)
     if val == 'q' or val == 'r':
@@ -2615,7 +2639,8 @@ def Show_menu(user_inputs):
 
     # password is optional
     if (sel == 2 or sel == 3 or sel == 5) and user_inputs.password == '':
-        expecting_password = getpass.win_getpass('Optional: you can get info in greater detail if you log in,\ntype in password now,or press ENTER to ignore this option: >')
+        prompt_message = 'Optional: you can get info in greater detail if you log in,\npress ENTER to ignore this option, or type in the password now >'
+        expecting_password = win_getpass(prompt=prompt_message)
         if expecting_password == 'q' or expecting_password == 'r':
             user_inputs.choice = sel
             return 
