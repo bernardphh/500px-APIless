@@ -495,6 +495,8 @@ def Hover_by_element(driver, element):
 #---------------------------------------------------------------
 def Get_element_text_by_xpath(page, xpath_string):
     """Return the text of element, specified by the element xpath. Return '' if element not found. """
+    if page is None or not xpath_string:
+        return ''
     ele = page.xpath(xpath_string)
     if ele is not None and len(ele) > 0 : 
         ele.location_once_scrolled_into_view
@@ -504,6 +506,8 @@ def Get_element_text_by_xpath(page, xpath_string):
 #---------------------------------------------------------------
 def Get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
     """Get the value of the given attribute name, at the element of the given xpath. Return '' if element not found."""
+    if page is None or not xpath or not attribute_name:
+        return ''
     ele = page.xpath(xpath)
     if ele is not None and len(ele) > 0:
         return ele[0].attrib[attribute_name] 
@@ -515,6 +519,8 @@ def check_and_get_ele_by_xpath(element, xpath):
     
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
     """
+    if element is None or not xpath:
+        return  None
     try:
         return element.find_element_by_xpath(xpath)
     except NoSuchElementException:
@@ -526,6 +532,8 @@ def check_and_get_all_elements_by_xpath(element, xpath):
     
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
     """
+    if element is None or not xpath:
+        return  []
     try:
         return element.find_elements_by_xpath(xpath)
     except NoSuchElementException:
@@ -536,6 +544,8 @@ def check_and_get_ele_by_class_name(element, class_name):
     
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
     """
+    if element is None or not class_name:
+        return None 
     try:
         return element.find_element_by_class_name(class_name) 
     except NoSuchElementException:
@@ -547,6 +557,8 @@ def check_and_get_ele_by_id(element, id_name):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
     """
+    if element is None or not id_name:
+        return  None 
     try:
         return element.find_element_by_id(id_name) 
     except NoSuchElementException:
@@ -558,6 +570,8 @@ def check_and_get_ele_by_tag_name(element, tag_name):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR THE WHOLE DOCUMENT, BY PASSING THE BROWSER DRIVER
     """
+    if element is None or not tag_name:
+        return None   
     try:
         return element.find_element_by_tag_name(tag_name) 
     except NoSuchElementException:
@@ -570,6 +584,8 @@ def check_and_get_all_elements_by_tag_name(element, tag_name):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT,  OR ON THE WHOLE DOCUMENT IF THE BROWSER DRIVER IS PASSED
     """
+    if element is None or not tag_name:
+        return []
     try:
         return element.find_elements_by_tag_name(tag_name) 
     except NoSuchElementException:
@@ -581,6 +597,8 @@ def check_and_get_all_elements_by_class_name(element, class_name):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT, OR ON THE WHOLE DOCUMENT IF THE BROWSER DRIVER IS PASSED
     """
+    if element is None or not class_name:
+        return []
     try:
         return element.find_elements_by_class_name(class_name) 
     except NoSuchElementException:
@@ -592,10 +610,12 @@ def check_and_get_ele_by_css_selector(element, selector):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT,  OR ON THE WHOLE DOCUMENT IF THE BROWSER DRIVER IS PASSED
     """
+    if element is None or not selector:
+        return []  
     try:
         return element.find_element_by_css_selector(selector)
     except NoSuchElementException:
-        return None
+        return []
 
 #---------------------------------------------------------------
 def check_and_get_all_elements_by_css_selector(element, selector):
@@ -603,6 +623,8 @@ def check_and_get_all_elements_by_css_selector(element, selector):
 
     THE SEARCH CAN BE LIMITED WITHIN A GIVEN WEB ELEMENT,  OR ON THE WHOLE DOCUMENT IF THE BROWSER DRIVER IS PASSED
     """
+    if element is None or not selector:
+        return  [] 
     try:
         return element.find_elements_by_css_selector(selector)
     except NoSuchElementException:
@@ -615,7 +637,7 @@ def Get_web_ele_text_by_xpath(element_or_driver, xpath):
     USE ABSOLUTE XPATH IF THE DRIVER IS PASSED
     USER RELATIVE XPATH IF AN WEB ELEMENT IS PASSED
      """
-    if element_or_driver is None:
+    if element_or_driver is None or not xpath:
         return ''
     try:
         ele = element_or_driver.find_element_by_xpath(xpath)
@@ -1829,7 +1851,8 @@ def Play_slideshow(driver, time_interval):
     if len(photo_links_eles) > 0:
         # show the first photo
         driver.execute_script("arguments[0].click();", photo_links_eles[0])
-        
+        time.sleep(1)
+					    
         # abort the action if the target objects failed to load within a given timeout    
         if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
             return None, None	
@@ -2460,24 +2483,33 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
 
     return html_full_file_name
 #--------------------------------------------------------------- 
-# The getpass.win_getpass() does not work properly on window. We implement it for the desired effect.
-# Credit: atbagga at https://github.com/microsoft/knack
+# The getpass.win_getpass() does not work properly on Windows. We implement this for the desired effect.
+# Credit: atbagga from https://github.com/microsoft/knack
 def win_getpass(prompt='Password: ', stream=None):
-    """Mask the passwork characters with character * """
+    """Mask the passwork characters with * character, supporting the backspace key """
+ 
+    shown_prompt=''
     for c in prompt:
         msvcrt.putwch(c)
+        shown_prompt += c
     pw = ""
     while 1:
         c = msvcrt.getwch()
-        msvcrt.putwch('*')
         if c == '\r' or c == '\n':
             break
         if c == '\003':
             raise KeyboardInterrupt
         if c == '\b':
             pw = pw[:-1]
+            # rewrite the stdout
+            shown_pwd = '*' * len(pw)
+            shown_pwd += ' '    
+            sys.stdout.write('\r' + shown_prompt + shown_pwd + '\b')
+            sys.stdout.flush()
         else:
+            msvcrt.putwch('*')
             pw = pw + c
+   
     msvcrt.putwch('\r')
     msvcrt.putwch('\n')
     return pw
