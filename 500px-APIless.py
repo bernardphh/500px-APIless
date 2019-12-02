@@ -9,19 +9,23 @@ from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException   
 from selenium.common.exceptions import ElementNotInteractableException
 from selenium.common.exceptions import TimeoutException
-
-#not use yet
-#from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-#from selenium.webdriver.chrome import service
-#import pychromecast
-#import logging
-
-#import getpass 
 import msvcrt
+import pandas as pd
+import glob
+import random
+import requests
+
 from lxml import html
 import os, sys, time, datetime, re, math, csv, json, codecs, argparse
+import errno
 from time import sleep
 from enum import Enum
+#from fake_useragent import UserAgent
+
+from lxml.html import fromstring
+from itertools import cycle
+import traceback
+
 
 PHOTOS_PER_PAGE = 50             # 500px currently loads 50 photos per page
 LOADED_ITEM_PER_PAGE = 50        # it also loads 50 followers, or friends, at a time in the popup window
@@ -34,7 +38,7 @@ DEBUG = False
 DATE_FORMAT = "%Y-%m-%d"                    # ex. 2019-06-15
 DATETIME_FORMAT = "%Y-%b-%d--Time%H-%M-%S"  # ex. 2019-Jun-15--Time13-21-45
 
-# for simplicity, we keep everything in one file, including a CSS and a Javascript constant strings below
+# for simplicity, we keep everything in one file, including a short CSS and a Javascript constant strings below
 HEAD_STRING_WITH_CSS_STYLE ="""
 <head>
 	 <style>
@@ -53,6 +57,7 @@ HEAD_STRING_WITH_CSS_STYLE ="""
         .w100 {width:100px;} 
         .w120 {width:120px;} 
         .w200 {width:200px;}
+        .w210 {width:210px;}
 		.hdr_text   {float:left; vertical-align:top display:table-cell; height:100%;}
 		.hdr_arrows {float:right; position:relative; right:1px; top:32px; font-size:60%;}
      </style
@@ -65,10 +70,10 @@ sort_direction_arrows = """
 			</div>		
             """
 SCRIPT_STRING = """<script>
-/* Sort columns' table for tag "td" and for a specific column, where the sort item can be the innerHtml of the second div tag 
-     To trigger the specific sort, pass ANY value to the 2nd argument "special_sort"*/  
+/* Highly customized Sort table columns: Sort item is either the innerHTML of the "td" tag, or the text of "a" tag, within the second "div" tag 
+   To trigger the specific sort, pass ANY value to the 2nd argument "special_sort"*/  
 function sortTable(n, special_sort) {
-    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+   var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
     table = document.getElementsByTagName("table")[0] /* targer the first table instead of table with id-- getElementById("myTable"); */
     switching = true;
     dir = "asc";
@@ -77,26 +82,32 @@ function sortTable(n, special_sort) {
         rows = table.rows;
         for (i = 1; i < (rows.length - 1); i++) {
             shouldSwitch = false;
-            x = rows[i].getElementsByTagName("TD")[n];
+			x = rows[i].getElementsByTagName("TD")[n];
             y = rows[i + 1].getElementsByTagName("TD")[n];
-		    if (special_sort != undefined){
-			    x =x.getElementsByTagName("DIV")[1];
-			    y =y.getElementsByTagName("DIV")[1];
-            }		  
- 		    if (x.innerHTML == "" && y.innerHTML != "" && dir == "asc"){
+			
+            if (special_sort != undefined){
+			    x =x.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text;
+			    y =y.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text;
+            }
+			else
+			{
+				x = x.innerHTML;
+				y = y.innerHTML;		    		
+			}
+ 		    if (x == "" && y != "" && dir == "asc"){
 		        shouldSwitch = true;	
 			    break;
 		    }	  
-		    if (y.innerHTML == "" && x.innerHTML != ""  && dir == "desc"){
+		    if (y == "" && x != ""  && dir == "desc"){
 		        shouldSwitch = true;
 			    break;
 		    }	           
-		    var xContent = (isNaN(x.innerHTML))
-                ? ((x.innerHTML.toLowerCase() === "-")? 0 : x.innerHTML.toLowerCase() )
-                : parseFloat(x.innerHTML);
-            var yContent = (isNaN(y.innerHTML))
-                ? ((y.innerHTML.toLowerCase() === "-")? 0 : y.innerHTML.toLowerCase() )
-                : parseFloat(y.innerHTML);			  
+		    var xContent = (isNaN(x))
+                ? ((x.toLowerCase() === "-")? 0 : x.toLowerCase() )
+                : parseFloat(x);
+            var yContent = (isNaN(y))
+                ? ((y.toLowerCase() === "-")? 0 : y.toLowerCase() )
+                : parseFloat(y);			  
             if (dir == "asc") {
                 if (xContent > yContent) {
                     shouldSwitch= true;
@@ -134,8 +145,9 @@ function sortTable(n, special_sort) {
 			document.getElementById("arrow-up-" + i).style.display = "block";
 			document.getElementById("arrow-down-" + i).style.display = "block";				
 		}
-	}	   	
+	}	   	   	
 }
+
 </script>"""
 
 class photo_stats:
@@ -223,12 +235,12 @@ class user:
     
     def to_dict(self):
         return {
-            'order': self.order,
-            'user_avatar': self.user_avatar,
-            'display_name': self.display_name,
-            'user_name': self.user_name,
-            'number_of_followers': self.number_of_followers,
-            'following_status': self.following_status
+            'No': self.order,
+            'Avatar': self.user_avatar,
+            'Display Name': self.display_name,
+            'User Name': self.user_name,
+            'Followers': self.number_of_followers,
+            'Status': self.following_status
         }
 
 
@@ -249,7 +261,7 @@ class User_inputs():
     """
 
     def __init__(self, use_command_line_args = False, choice='0', user_name='', password='', target_user_name='', photo_href='', gallery_href='', gallery_name='',
-                 number_of_photos_to_be_liked=2 , index_of_start_photo=1, number_of_notifications=200, time_interval=3, index_of_start_user=1, number_of_users=100):
+                 number_of_photos_to_be_liked=2 , index_of_start_photo=1, number_of_notifications=200, time_interval=3, index_of_start_user=1, number_of_users=100, csv_file=''):
         self.use_command_line_args          = use_command_line_args
         self.choice                         = choice
         self.user_name                      = user_name
@@ -264,6 +276,7 @@ class User_inputs():
         self.time_interval                  = time_interval
         self.index_of_start_user            = index_of_start_user
         self.number_of_users                = number_of_users
+        self.csv_file                       = csv_file
 
     def Reset(self):
         self.use_command_line_args = False
@@ -280,9 +293,11 @@ class User_inputs():
         self.time_interval                  = 3
         self.index_of_start_user            = 1
         self.number_of_users                = 100
+        self.csv_file                       = ''
+
 class Output_data():
     """ Represent all the output lists and data"""
-    def __init__(self, output_dir = '', json_data = [], photos = [],notifications = [], unique_notificators = [], followers_list = [], followings_list = [], like_actioners_list= []):
+    def __init__(self, output_dir = '', avatars_dir = '', thumbnails_dir = '', json_data = [], photos = [],notifications = [], unique_notificators = [], followers_list = [], followings_list = [], like_actioners_list= []):
         self.json_data = json_data      
         self.photos = photos         
         self.notifications = notifications  
@@ -297,6 +312,14 @@ class Output_data():
         output_dir = os.path.join(os.getenv('ProgramData'), r'500px_Apiless\Output')
         os.makedirs(output_dir, exist_ok = True)
         self.output_dir = output_dir
+        
+        temp_dir1 =  os.path.join(output_dir, r'avatars')
+        os.makedirs(temp_dir1, exist_ok = True)
+        self.avatars_dir = temp_dir1
+ 
+        temp_dir2 =  os.path.join(output_dir, r'thumbnails')
+        os.makedirs(temp_dir2, exist_ok = True)
+        self.thumbnails_dir = temp_dir2
  
     def Reset(self):
         self.json_data = []       
@@ -326,6 +349,8 @@ def Start_chrome_browser(options_list = []):
     
     chrome_options.add_argument('--log-level=3')   
     chrome_options.add_argument("--window-size=800,1080")
+    chrome_options.add_argument("--headless")  
+    #chrome_options.add_argument('--disable-gpu')
     # TODO: move these options into a config file and maybe add the headless option
     driver = webdriver.Chrome(options=chrome_options)
     printY('DO NOT INTERACT WITH THE CHROME BROWSER. IT IS CONTROLLED BY THE SCRIPT AND  WILL BE CLOSED WHEN THE TASK FINISHES')
@@ -344,6 +369,8 @@ def Close_chrome_browser(chrome_driver):
 #---------------------------------------------------------------
 def Create_user_statistics_html(stats):
     """ write user statistic object stats to an html file. """
+    if stats is None:
+        return
 
     time_stamp = datetime.datetime.now().replace(microsecond=0).strftime(DATETIME_FORMAT)
 
@@ -445,7 +472,7 @@ def Write_notifications_to_csvfile(notifications_list, csv_file_name):
     except PermissionError:
         retry = input(f'Error writing to file {csv_file_name}.\n Make sure the file is not in use, then type r for retry >')
         if retry == 'r':  
-            Write_notifications_to_csvfile(notifications, csv_file_name)
+            Write_notifications_to_csvfile(notifications_list, csv_file_name)
         else: 
             printR(f'Error writing file {csv_file_name}')
             return False
@@ -499,7 +526,6 @@ def Get_element_text_by_xpath(page, xpath_string):
         return ''
     ele = page.xpath(xpath_string)
     if ele is not None and len(ele) > 0 : 
-        ele.location_once_scrolled_into_view
         return ele[0].text
     return ''
 
@@ -509,8 +535,12 @@ def Get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
     if page is None or not xpath or not attribute_name:
         return ''
     ele = page.xpath(xpath)
+    time.sleep(1)
     if ele is not None and len(ele) > 0:
-        return ele[0].attrib[attribute_name] 
+        try:
+            return ele[0].attrib[attribute_name] 
+        except:
+            printR(f'Error getting attribute {attribute_name}')
     return ''
 
 #---------------------------------------------------------------
@@ -647,14 +677,15 @@ def Get_web_ele_text_by_xpath(element_or_driver, xpath):
         return ''
 
 #---------------------------------------------------------------
-def GetUploadDate(photo_link):
+def GetUploadDate(driver, photo_link):
     """Given a photo link, returns the photo upload date or time. """
 
     driver.get(photo_link)
     last_photo_page_HTML = driver.execute_script("return document.body.innerHTML") 
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     page = html.document_fromstring(last_photo_page_HTML)
-    p = page.xpath('//*[@id="content"]/div/div/div[2]/div/div[1]/div[3]/div[1]/div/p/span')  
+    p = page.xpath('//*[@id="root"]/div[4]/div/div[2]/div[3]/div[1]/div[2]/p/span')
+
                     
     if len(p) > 0:
         return p[0].text_content() 
@@ -663,85 +694,83 @@ def GetUploadDate(photo_link):
 
 #---------------------------------------------------------------
 def Open_user_home_page(driver, user_name):
-    """Open the home page of a given user. If the user page is not found, print error and return false. """ 
-
+    """Open the home page of a given user and wait for the page to load. If the user page is not found or timed out (30s),
+       return False and the error message. If not, return True and a blank message """ 
+       
     driver.get('https://500px.com/' + user_name)
     # waiting until the page is opened
     main_window_handle = None
-    while not main_window_handle:
+    time_out = 30
+    count_down = time_out
+    while not main_window_handle and count_down > 0:
         main_window_handle = driver.current_window_handle
+        count_down -= 1
+    if count_down <=0:
+        return False, f"Timed out ({time_out}s) while opening {user_name}'s home page. Please retry"
 
-    if check_and_get_ele_by_class_name(driver, 'not_found') is not None:
-        printR(f'Error reading {user_name}\'s page. Please make sure a valid user name is used')
-        return False
-    elif check_and_get_ele_by_class_name(driver, 'missing') is None:
-        return True
+    if check_and_get_ele_by_class_name(driver, 'not_found') is None and \
+       check_and_get_ele_by_class_name(driver, 'missing') is None:
+        return True, ''
     else:
-        printR(f'Error reading {user_name}\'s page. Please make sure a valid user name is used')
-        return False
+        Close_chrome_browser(driver)
+        return False, f'Error reading {user_name}\'s page. Please make sure a valid user name is used'
 
 #---------------------------------------------------------------
 def Finish_Javascript_rendered_body_content(driver, time_out=10, class_name_to_check='', css_selector_to_check='', xpath_to_check=''):
-    """ Run the Javascript to render the body content. Log error if it happened. Return the fail/success status and the page content text.
-    
-    THE COMPLETION OF THE JS SCRIPT, WITHIN THE GIVEN TIMEOUT, IS DETERMINED BY CHECKING THE EXISTANCE OF A GIVEN ELEMENT, 
-    IDENTIFIED EITHER BY A GIVEN CLASS_NAME, OR A CSS_SELECTOR
+    """ Run the Javascript to render the body content. Log error if it happened. Return:
+        1) The fail/success status, 
+        2) The page content text 
+           
+    The completion of the js script, within a given timeout, is determined by checking the existance of one of the given elements. 
+    Element to check is one of the following: class_name, css_selector, xpath, prioritied by this order
     """
 
     innerHtml = driver.execute_script("return document.body.innerHTML")  
     
     try:
-        if class_name_to_check != '' and css_selector_to_check == '':
+        if class_name_to_check:
             element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, class_name_to_check)))
-        elif class_name_to_check == '' and css_selector_to_check != '':
+        elif css_selector_to_check:
             element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector_to_check)))
-
+        elif xpath_to_check:
+            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, xpath_to_check)))
+        else:
+            printR('Internal error. No identifier was given for detecting the page loading completion ')
+            return False, ''
     except TimeoutException :
-        printR(f'Time out {time_out}s while loading. Please retry.')
-        return False, ''
+        printR('Time out {time_out}s while loading. Please retry.')
+        return False, '', 
     except:
         printR('Error loading. Please retry.')
         return False, ''   
     
     return True, innerHtml
 #---------------------------------------------------------------
-def Wait_for_element_visibility(driver, web_element, time_out=10 ):
-    """ Wait for an element to be visible within a given timeout. Log error if it occurs."""
-   
-    try:
-        element = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located(web_element))
 
-    except TimeoutException :
-        printR(f'Time out {time_out}s while loading. Please retry.')
-        return False
-    except: # NoSuchElementException:
-        printR('No such Element error. Please retry.')
-        return False  
-
-    return (element is not None)
-
-#---------------------------------------------------------------
 
 def Get_stats(driver, user_inputs, output_lists):
     """Get statistics of a given user: number of likes, views, followers, following, photos, last upload date...
+       If success, return statistics object and a blank message. If not return None and the error message
 
-    OPEN USER HOME PAGE https://500px.com/[user_name]
-    RUN THE DOCUMENT JAVASCRIPT TO RENDER THE PAGE CONTENT
-    USE LXML TO EXTRACT INTERESTED DATA
-    USE REGULAR EXPRESSION TO EXTRACT THE JSON PART IN THE BODY, AND OBTAIN MORE DATA FROM IT.
+       Process:
+       - Open user home page https://500px.com/[user_name]
+       - Run the document javascript to render the page content
+       - Use lxml to extract interested data
+       - Use regular expression to extract the json part in the body, and obtain more data from it.
     """
 
-    if Open_user_home_page(driver, user_inputs.user_name) == False:
-        user_inputs.user_name = ''
-        Show_menu(user_inputs)
-        return None, None
+    success, message = Open_user_home_page(driver, user_inputs.user_name)
+    if not success:
+        if message.find('Error reading') != -1:
+            user_inputs.user_name = ''
+        return None, message
         
     Hide_banners(driver)
   
     # abort the action if the target objects failed to load within a given timeout
-    success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
+    success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')
     if not success:
-        return None, None
+        return None, f"Error loading user {user_inputs.user_name}'s photo page"
     # using lxml for html handling
     page = html.document_fromstring(innerHtml)
 
@@ -761,27 +790,37 @@ def Get_stats(driver, user_inputs, output_lists):
     loc_test = check_and_get_all_elements_by_class_name(driver, 'location')
 
     #using regex to extract from the javascript-rendered html the json part that holds user data 
-    # Jul 26 2019: modification due to page structure changes: photos list is no longer in included
+    # Jul 26 2019: modification due to page structure changes: photos list is no longer included in userdata
     #   userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
     i = innerHtml.find('"userdata":') 
     j = innerHtml.find('</script>', i)
     userdata = innerHtml[i + 11 : j - 2]
     if len(userdata) == 0:
-        return
+       return None, 'Error getting the user data'
     
     json_data = json.loads(userdata)
     print("Getting the last upload date ...")
     last_photo_href = Get_element_attribute_by_ele_xpath(page, './/*[@id="content"]/div[3]/div/div/div[1]/a', 'href')
-    driver.get(r'https:/500px.com' + last_photo_href)
-    time.sleep(2)
- 
-    react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
-    last_upload_date = ''
-    if react_photos_index_container is not None:
-        upload_date_ele =  check_and_get_ele_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[1]/div/p/span')                                                       
-        if upload_date_ele is not None:
-            last_upload_date = upload_date_ele.text
+    if not last_photo_href:
+        #printR('Error getting the last photo href')
+        return None, 'Error getting the last photo href'
 
+    driver.get(r'https:/500px.com' + last_photo_href)
+    time_out = 30
+    try:  
+        info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
+    except  TimeoutException:
+        #printR(f'Time out ({time_out}s)! Please try again')
+        return None, f'Time out ({time_out}s)! Please try again'
+
+    last_upload_date = ''
+    upload_date_ele = check_and_get_ele_by_xpath(info_box,  '//div[1]/div[2]/p/span')        
+    if upload_date_ele is None:
+        upload_date_ele = check_and_get_ele_by_xpath(info_box, '//div[3]/div[1]/div/p/span') 
+
+    if upload_date_ele is not None:
+        last_upload_date = upload_date_ele.text
+ 
     active_int = json_data['active'] 
     if   active_int == 0 : user_status = 'Not Active'
     elif active_int == 1 : user_status = 'Active'
@@ -797,132 +836,45 @@ def Get_stats(driver, user_inputs, output_lists):
     stats = user_stats(json_data['fullname'], user_inputs.user_name, json_data['id'], location, 
                        affection_note, following_note, json_data['affection'], views_count, json_data['followers_count'], json_data['friends_count'], 
                        json_data['photos_count'], json_data['galleries_count'], json_data['registration_date'][:10], last_upload_date, user_status)
-    return json_data, stats
+    return stats, ''
       
-#---------------------------------------------------------------
-# not using this for now. We need more info than the current json data provided (for example, tags list)
-def Get_photos_list_using_JSON(driver, user_inputs):
-    """Return the list of photos from a given user.
-
-    PROCESS: 
-    - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
-    - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
-    - EXTRACT THE user_data, the json section that contains all the photos data
-    """
-
-    photos_list = []
-
-    if Open_user_home_page(driver, user_inputs.user_name) == False:
-        Show_menu(user_inputs)
-        return []
-    Hide_banners(driver)
-
-    # We intend to scroll down an indeterminate number of times until the end is reached
-    # In order to have a realistic progress bar, we need give an estimate of the number of scrolls needed
-    estimate_scrolls_needed = 3  #default value, just in case error occurs
-    json_photos_count  = 1
-    photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
-    if photos_count_ele is not None:
-        json_photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
-        estimate_scrolls_needed =  math.floor( json_photos_count / PHOTOS_PER_PAGE) +1
-
-    Scroll_down(driver, 7, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') # scroll down until end, pause 1.5s between scrolls, 
-
-    # abort the action if the target objects failed to load within a given timeout
-    success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
-    if not success:
-        return []
-    
-    update_progress(0, ' - Extracting data:')
-    #if DEBUG:
-    #     Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_inputs.user_name + '_innerHTML.txt')
-    page = html.document_fromstring(innerHtml)
-
-    userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
-    if len(userdata) == 0:
-        return None
-    json_data = json.loads(userdata[0]) 
-    user_id = json_data['id']
-    
-    # Only the first 50 photos are available in JSON format from 500px. So We will get all the available details
-    # For the rest, we will need go to each photo page to extract the details. This could be done later in a separate methods. 
-    json_photos = json_data['photos']
-    json_photos_count = len(json_photos)
-
-    # 500px only exposes the details of the first 50 photos in the JSON data. We we get what are available. 
-    # for now we have to use the traditional way (parsing the xml by using lxml) 
-
-    #extract photo title and href (alt tag) using lxml and regex
-    els = page.xpath("//a[@class='photo_link ']")  
-    titles = page.xpath("//img[@data-src='']")
-    num_item = len(els)
-    if num_item == 0:
-        printR(f'User {user_name} does not upload any photo')
-        return None
-
-    # Create the photos list
-    for i in range(num_item): 
-        update_progress(i / (num_item -1), ' - Extracting data:')
-        reg = "/photo/([0-9]*)/"  
-        photoId = re.findall(reg, els[i].attrib["href"])
-        if len(photoId) != 0:
-            pId = photoId[0] 
-        else:
-            pId = 0
-        on_page = math.floor(i / PHOTOS_PER_PAGE ) + 1
-        photo_href = f"https://500px.com{els[i].attrib['href']}?ctx_page={on_page}&from=user&user_id={user_id}"
-        photo_src = titles[i].attrib["src"]
-
-        # for photos available in json data
-        photo_statistics = photo_stats()
-        if i < json_photos_count:
-            photo_statistics = photo_stats(upload_date = json_photos[i]['created_at'],
-                                           views_count = json_photos[i]['times_viewed'],
-                                           votes_count = json_photos[i]['votes_count'],\
-                                           collections_count = json_photos[i]['collections_count'],
-                                           comments_count = json_photos[i]['comments_count'],
-                                           highest_pulse = json_photos[i]['highest_rating'],
-                                           rating = json_photos[i]['rating'] )
-
-
-        new_photo = photo(order=i+1, id=pId, title=str(titles[i].attrib["alt"]), href=photo_href, thumbnail=photo_src, stats=photo_statistics)
-        photos_list.append(new_photo)
- 
-    return photos_list
-
 #---------------------------------------------------------------
 
 def Get_photos_list(driver, user_inputs):
     """Return the list of photos from a given user.
 
-    PROCESS: 
-    - OPEN USER HOME PAGE, SCROLL DOWN UNTIL ALL PHOTOS ARE LOADED
-    - MAKE SURE THE DOCUMENT JAVASCRIPT IS CALLED TO GET THE FULL CONTENT OF THE PAGE
-    - EXTRACT PHOTO DATA: No, ID, Photo Title, Href, Thumbnail, Views, Likes, Comments, Gallery, Highest Pulse, Rating, Date, Tags
+    Process: 
+    - Open user home page, scroll down until all photos are loaded
+    - Make sure the document javascript is called to get the full content of the page
+    - Extract photo data: no, id, photo title, href, thumbnail, views, likes, comments, galleries, highest pulse, rating, date, tags
     """
 
     photos_list = []
+    success, message = Open_user_home_page(driver, user_inputs.user_name)
+    if not success:
+        if message.find('Error reading') != -1:
+            user_inputs.user_name = ''
+        return [], message
 
-    if Open_user_home_page(driver, user_inputs.user_name) == False:
-        Show_menu(user_inputs)
-        return []
     Hide_banners(driver)
 
     # We intend to scroll down an indeterminate number of times until the end is reached
     # In order to have a realistic progress bar, we need to give an estimate of the number of scrolls needed
-    estimate_scrolls_needed = 3  #default value, just in case error occurs
-    json_photos_count  = 1
+    estimate_scrolls_needed = 3  #default value, just in case
+    photos_count  = 1
     photos_count_ele = check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
     if photos_count_ele is not None:
-        json_photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
-        estimate_scrolls_needed =  math.floor( json_photos_count / PHOTOS_PER_PAGE) +1
+        photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
+        estimate_scrolls_needed =  math.floor( photos_count / PHOTOS_PER_PAGE) +1
 
-    Scroll_down(driver, 2, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') 
-
+    #Scroll_down(driver, 2, -1, estimate_scrolls_needed, ' - Scrolling down for more photos:') 
+    Scroll_to_end_by_class_name(driver, 'photo_link', photos_count)
+    #Scroll_down_until_the_end(driver, None, '', '', photos_count, 20, ' - Scrolling down to load more photos:' )
+    
     # abort the action if the target objects failed to load within a given timeout
     success, innerHtml = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')
     if not success:
-        return []  
+        return [], f"Error loading user {user_inputs.user_name}'s photo page"
 
     #if DEBUG:
     #     Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_inputs.user_name + '_innerHTML.txt')
@@ -933,13 +885,11 @@ def Get_photos_list(driver, user_inputs):
     img_ele = page.xpath("//img[@data-src='']")
     num_item = len(els)
     if num_item == 0:
-        printR(f'User {user_name} does not upload any photo')
-        return None
+        return [], f'User {user_name} does not upload any photo'
 
     update_progress(0, f' - Extracting 0/{num_item} photos:')
-    # Create the photos list
-    photo_src = ''
 
+    # Create the photos list
     for i in range(num_item): 
         update_progress(i / (num_item -1), f' - Extracting  {i + 1}/{num_item} photos:')
 
@@ -950,121 +900,177 @@ def Get_photos_list(driver, user_inputs):
             title = img_ele[i].attrib["alt"]
 
         # open each photo page to get photo statistics
-        try:
-            driver.get(photo_href)
-        except:
-            printR(f'Invalid href: {test_photo_page}. Please retry.')
-            Close_chrome_browser(driver)
-            Show_menu(user_inputs)         
-            return
-        innerHtml = driver.execute_script("return document.body.innerHTML")
-        time.sleep(1)
-        
-        #--------------------------------------------------------------
-        # update Aug 2 2019: photo details is no longer provided in json format.
-        #if False:
-        ## extract the interested data: Ex: "window.PxPreloadedData = {"photo":[interested data] };"
-        #    json_stats = re.findall('"photo":(.*)', html_source)
-        #    if len(json_stats) == 0:
-        #        return
-        #    if json_stats[0][-2:] == '};':
-        #        json_stats[0] = json_stats[0][:-2]
-        #    stats = json.loads(json_stats[0])   
-        #    #images_src = stats['images'][-1]['https_url']
-        #    up_date = stats['created_at'].split('T') #stats['created_at'].replace('T','\n')[:-6]
-        #    upload_date = up_date[0].replace('-','\n')
-        #    tags = stats['tags'].copy()
-        #    tags.sort()
-        #    tags_string = ",".join(tags)
-
-        #    photo_statistics = photo_stats(upload_date=upload_date, views_count=stats['times_viewed'], votes_count=stats['positive_votes_count'],
-        #                                   collections_count=stats['collections_count'], comments_count=stats['comments_count'], 
-        #                                   highest_pulse=stats['highest_rating'], rating=stats['rating'], tags=tags_string)
-
-        #    new_photo = photo(order=i+1, id=stats['id'], title=stats['name'], href=photo_href, thumbnail=photo_src, stats=photo_statistics)
-        #    photos_list.append(new_photo)
-        #--------------------------------------------------------------
-        # new implementation
+        time_out = 40
         id = ''
         galleries_list = []
-        order = i + 1
-        react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
+        order = i + 1        
+        try:  
+            driver.get(photo_href)
+            #time.sleep(1)
+            info_box = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
+        except  TimeoutException:
+            return photos_list, f'Time out ({time_out}s)! Please try again'
  
-        # upload date
-        upload_date_raw =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[1]/div/p/span')    
-        dt = datetime.datetime.strptime(upload_date_raw, "%b %d, %Y")
-        upload_date = dt.strftime("%Y %m %d")
-        # views count
-        views_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[3]/div[2]/h3/span')                                                       
-        # highest pulse
-        highest_pulse =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[3]/div[1]/h3') 
-        # likes count
-        votes_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[1]/div[1]/a')  
-        # comments count
-        comments_count =  Get_web_ele_text_by_xpath(react_photos_index_container, './div[2]/div/div[4]/div[2]/div/h4').split(' ')[0]
-        #tags
-        tags = []
-        container =  check_and_get_ele_by_xpath(react_photos_index_container, './div[2]/div/div[2]/div[3]/div[5]')
-        if container is not None:
-            a_eles = check_and_get_all_elements_by_tag_name(container, 'a')
-            if a_eles is not None:
-                for item in a_eles:
-                    tag = item.text                  
-                    if tag is not '': tags.append(tag)
-                tags.sort()
-        # galleries list, if user logged in
-        if user_inputs.password is not '':
-            view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
-            if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
-                collections_count = 0
-            else:
-                view_all_ele[0].location_once_scrolled_into_view
-                view_all_ele[0].click()         
-                time.sleep(1)
-                eles = driver.find_elements_by_class_name('ant-modal-body')       
-                galleries_count = 0
+        # using regular expression --------------------------------------------
+        USING_REGULAR_EXPRESSION = True
+ 
+        if USING_REGULAR_EXPRESSION :
+            # uploade date
+            info_box_text = info_box.text
+            upload_date  =  re.search('Calendar.*\n(.*)', info_box_text)
+            upload_date = '' if upload_date is None else str.strip(upload_date.group(1))        
+            if upload_date and ('ago' not in upload_date):
+                try:
+                    dt = datetime.datetime.strptime(upload_date, "%b %d, %Y")
+                    upload_date = dt.strftime("%Y %m %d")
+                except:
+                    # if error occured, write what are available sofar before jumping to the next photo
+                    printR(f'Error converting date-time string: {upload_date}, on photo: {title}')
+                    this_photo = photo(author_name=user_inputs.user_name, order=order, id='', title=title, href=photo_href, thumbnail=src, galleries='', stats = photo_stats() )      
+                    photos_list.append(this_photo)
+                    continue
 
-                if len(eles)> 0:
-                    containers = check_and_get_all_elements_by_xpath(eles[0],'./div/div')
-                    if containers is not None and len(containers)> 0:
-                        childs =  check_and_get_all_elements_by_xpath(containers[0], './div') #containers[0].find_elements_by_xpath("./div")
-                        if childs is not None:
-                            galleries_count = len(childs)
-                            for child in childs:
-                                a_ele = check_and_get_ele_by_tag_name(child, 'a')
-                                if a_ele is  not None:
-                                    galleries_list.append(a_ele.get_attribute('href'))
-                #galleries_list.sort()
+            votes_count = re.search(r'Created with Sketch.*\n(.*)', info_box_text)
+            votes_count = '' if votes_count is None else str.strip(votes_count.group(1)).replace(',','').replace('.','')
 
-        statictics = photo_stats(upload_date=upload_date, views_count=views_count.replace(',','').replace('.',''), 
-                                 votes_count=votes_count.replace(',','').replace('.',''), collections_count=0, 
-                                 comments_count=comments_count.replace(',','').replace('.',''), 
+            highest_pulse  = re.search(r'Pulse\s*\n(.*)', info_box_text)      
+            highest_pulse = '' if highest_pulse is None else str.strip(highest_pulse.group(1)).replace(',','').replace('.','')
+            
+            views_count  =   re.search(r'Views\s*\n(.*)', info_box_text)  
+            views_count = '' if views_count is None else str.strip(views_count.group(1)).replace(',','').replace('.','')
+
+            # comments count
+            comments_count =  Get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0]  
+
+            #category  =  re.search(r'Category(.*)', info_box_text)      
+            #category = '' if category is None else str.strip(category.group(1))
+
+            # list of tags
+            tags = re.search(r'Category.*\n(.*)\nFeatured in these galleries', info_box_text, re.DOTALL).group(0).split('\n')
+            tags.pop(0)
+            tags.pop()
+            tags.sort()
+
+            # get galleries list, if user logged in
+            if user_inputs.password is not '':
+                view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
+                if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
+                    collections_count = 0
+                else:
+                    view_all_ele[0].location_once_scrolled_into_view
+                    view_all_ele[0].click()         
+                    time.sleep(1)
+                    eles = driver.find_elements_by_class_name('ant-modal-body')       
+                    galleries_count = 0
+
+                    if len(eles)> 0:
+                        containers = check_and_get_all_elements_by_xpath(eles[0],'./div/div')
+                        if containers is not None and len(containers)> 0:
+                            childs =  check_and_get_all_elements_by_xpath(containers[0], './div') #containers[0].find_elements_by_xpath("./div")
+                            if childs is not None:
+                                galleries_count = len(childs)
+                                for child in childs:
+                                    a_ele = check_and_get_ele_by_tag_name(child, 'a')
+                                    if a_ele is  not None:
+                                        galleries_list.append(a_ele.get_attribute('href'))
+
+        # using selenium ----------------------------------------
+        else:
+            #upload date
+            upload_date = Get_web_ele_text_by_xpath(info_box, '//div[3]/div[1]/div/p/span' )
+            if upload_date and ('ago' not in upload_date):
+                try:
+                    dt = datetime.datetime.strptime(upload_date, "%b %d, %Y")
+                    upload_date = dt.strftime("%Y %m %d")
+                except:
+                    printR(f'Error converting date-time string: {upload_date}, on photo: {title}')
+                    this_photo = photo(author_name=user_inputs.user_name, order=order, id='', title=title, href=photo_href, thumbnail=src, galleries='', stats = photo_stats() )      
+                    photos_list.append(this_photo)
+                    continue
+
+            #views count
+            views_count =  Get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span').replace(',','').replace('.','')      
+                                          
+            # highest pulse
+            highest_pulse =  Get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
+        
+            # Get votes (likes) count
+            try:
+                photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
+            except  TimeoutException:
+                return [], f'Time out ({time_out}s! Please try again'
+            votes_count = photo_likes_count_ele.text.replace(',','').replace('.','')
+
+            # comments count
+            comments_count =  Get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0].replace(',','').replace('.','')
+
+            #tags
+            tags = []
+            container =  check_and_get_ele_by_xpath(info_box, '//div/div[2]/div[3]/div[6]')
+            if container is not None:
+                a_eles = check_and_get_all_elements_by_tag_name(container, 'a')
+                if a_eles is not None:
+                    for item in a_eles:
+                        tag = item.text                  
+                        if tag is not '': tags.append(tag)
+                    tags.sort()
+
+            # get galleries list, if user logged in
+            if user_inputs.password is not '':
+                view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
+                if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
+                    collections_count = 0
+                else:
+                    view_all_ele[0].location_once_scrolled_into_view
+                    view_all_ele[0].click()         
+                    time.sleep(1)
+                    eles = driver.find_elements_by_class_name('ant-modal-body')       
+                    galleries_count = 0
+
+                    if len(eles)> 0:
+                        containers = check_and_get_all_elements_by_xpath(eles[0],'./div/div')
+                        if containers is not None and len(containers)> 0:
+                            childs =  check_and_get_all_elements_by_xpath(containers[0], './div') 
+                            if childs is not None:
+                                galleries_count = len(childs)
+                                for child in childs:
+                                    a_ele = check_and_get_ele_by_tag_name(child, 'a')
+                                    if a_ele is  not None:
+                                        galleries_list.append(a_ele.get_attribute('href'))
+
+ 
+        # common
+        statistics = photo_stats(upload_date=upload_date, views_count=views_count, 
+                                 votes_count=votes_count, collections_count=0, 
+                                 comments_count=comments_count, 
                                  highest_pulse=highest_pulse,rating=0, tags=",".join(tags) )
-
+ 
         this_photo = photo(author_name=user_inputs.user_name, order=order, id='', title=title, href=photo_href, 
-                           thumbnail=src, galleries=",".join(galleries_list), stats = statictics )      
+                           thumbnail=src, galleries=",".join(galleries_list), stats = statistics )      
 
         photos_list.append(this_photo)
 
-    return photos_list
+    return photos_list, ''
 
 #---------------------------------------------------------------
 
 def Get_followers_list(driver, user_inputs):
-    """Given a user name, return the list of followers, the link to theis pages and the number of followers of each of them.
+    """Given a user name, return the list of followers, the link to theis pages and the number of their followers.
 
-    PROCESS:
-    - OPEN THE USER HOME PAGE, LOCATE THE TEXT followers AND CLICK ON IT TO OPEN THE MODAL WINDONW CONTAINING FOLLOWERS LIST
-    - SCROLL TO THE END FOR ALL ITEMS TO BE LOADED
-    - MAKE SURE THE DOCUMENT JS IS RUNNING FOR ALL THE DATA TO LOAD IN THE PAGE BODY
-    - EXTRACT INFO AND PUT IN A LIST. RETURN THE LIST
+    Process:
+    - Open the user home page, locate the text followers and click on it to open the modal windonw containing followers list
+    - Scroll to the end for all items to be loaded
+    - Make sure the document js is running for all the data to load in the page body
+    - ExtraCT INFO AND PUT IN A LIST. RETURN THE LIST
     """
 
     followers_list = []
-    if Open_user_home_page(driver, user_inputs.user_name) == False:
-        user_inputs.user_name = ''
-        Show_menu(user_inputs)
-        return []
+    success, message = Open_user_home_page(driver, user_inputs.user_name)
+    if not success:
+        if message.find('Error reading') != -1:
+            user_inputs.user_name = ''
+        return None, message
+
     Hide_banners(driver)
     # click on the Followers text to open the modal window
     ele = check_and_get_ele_by_class_name(driver, "followers")    
@@ -1073,7 +1079,7 @@ def Get_followers_list(driver, user_inputs):
 
     # abort the action if the target objects failed to load within a given timeout
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
-        return []
+        return [], f"Error loading {user_inputs.user_name}'s followers page"
 
     # extract number of followers                 
     followers_ele = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span')
@@ -1173,31 +1179,32 @@ def Does_this_user_follow_me(driver, user_inputs):
       ARE PROCESSED. SCROLLING DOWN TO LOAD MORE ITEMS AND REPEAT THE PROCESS.
     """
  
-    if Open_user_home_page(driver, user_inputs.target_user_name) == False:
-        user_inputs.target_user_name = ''
-        return False, f"User name {user_inputs.target_user_name} not found"
+    success, message = Open_user_home_page(driver, user_inputs.target_user_name)
+    if not success:
+        if message.find('Error reading') != -1:
+            user_inputs.target_user_name = ''
+        return False, message
   
     Hide_banners(driver)     
+    ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')   
+    
+    # extract number of following                       
+    following_count_ele = check_and_get_ele_by_tag_name(ele, 'span')    
+    if following_count_ele is None or following_count_ele.text == '0':
+        return  False, "Status unknown. Timed out on getting the Following Count"
+    else:
+        following_count = int(following_count_ele.text.replace(",", "").replace(".", ""))
+        print(f' - User {user_inputs.target_user_name} is following {str(following_count)} user(s)')
+  
     # click on the Following text to open the modal window
-    ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')     
     if ele is not None:
-        ele.click()
+
+       driver.execute_script("arguments[0].click();", ele)
 
     # abort the action if the target objects failed to load within a given timeout
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
-        return  False, ""
+    if not Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='actors')[0]:
+        return  False, "Status unknown. Timed out on loading more users"
 
-    # extract number of following                      
-    following_ele = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span') 
-    if following_ele is None:
-        return  False, ""
-
-    # remode thousand separator character, if existed
-    following_count = int(following_ele.text.replace(",", "").replace(".", ""))
-    printG(f'User {user_inputs.target_user_name} is following {str(following_count)} user(s)')
-    if following_count == 0:
-        return  False, ""
-  
     # start the progress bar
     update_progress(0, ' - Processing loaded data:')
     iteration_num = math.floor(following_count / LOADED_ITEM_PER_PAGE) + 1    
@@ -1206,13 +1213,9 @@ def Does_this_user_follow_me(driver, user_inputs):
     current_index = 0   # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                         # ... more photos are appended at the end of the list. We use this current_index to keep track where we were after a list update 
     
-    # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
-        return  False, ""
-
+ 
     actor_infos = driver.find_elements_by_class_name('actor_info')
     loaded_users_count = len(actor_infos)
-
     while users_done < following_count: 
         # check if we have processed all loaded users, then we have to load more  
         if current_index >= loaded_users_count: 
@@ -1220,28 +1223,34 @@ def Does_this_user_follow_me(driver, user_inputs):
             # loading more users by scrolling into view the last loaded item
             last_item_on_page =  current_index -1  #i * LOADED_ITEM_PER_PAGE - 1
             try:
-                loaded_elements = check_and_get_all_elements_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')                                                                   
-                if len(loaded_elements) > 0:
-                    loaded_elements[-1].location_once_scrolled_into_view
-                    time.sleep(2)
+                last_loaded_item = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')                                                                   
+                if last_loaded_item is not None:
+                    last_loaded_item.location_once_scrolled_into_view
+                    time.sleep(1)
             except NoSuchElementException:
                 pass
 
-            # abort the action if the target objects failed to load within a given timeout    
-            if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
-                return  False, ""
+            # abort the action if the target objects failed to load within a given timeout 
+            if not Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
+               return  False, "Status unknown. Timed out loading more user"
+            time.sleep(1)
 
             # update list with more users
             actor_infos = driver.find_elements_by_class_name('actor_info')
+            time.sleep(1)
             loaded_users_count = len(actor_infos)
  
             # stop when all photos are loaded
             if loaded_users_count == prev_loaded_users:
+                if loaded_users_count < following_count:
+                    return False, f'Status unknown. Timed out {loaded_users_count}/{following_count}'
                 break;
 
         following_user_name = ''
         following_user_page_link = ''
-        for i in range(current_index, loaded_users_count):
+        for i in range(current_index, min(loaded_users_count, following_count)):
+            if current_index > loaded_users_count: 
+                break
             current_index += 1
             actor = actor_infos[i]
             update_progress(current_index / following_count, f' - Processing loaded data {current_index}/{following_count}:')  
@@ -1251,88 +1260,68 @@ def Does_this_user_follow_me(driver, user_inputs):
                     following_user_page_link = ele.get_attribute('href')
                     following_user_name = following_user_page_link.replace('https://500px.com/', '')
 
-                if following_user_name is not None and following_user_name == user_inputs.user_name:
-                    update_progress(1, f' - Processing loaded data {current_index}/{following_count}:')
-                    detail_message = f'({current_index}/{following_count})'
-                    return True, detail_message
+                    if following_user_name is not None and following_user_name == user_inputs.user_name:
+                        update_progress(1, f' - Processing loaded data {current_index}/{following_count}:')
+                        return True, f'Following you ({current_index}/{following_count})'
 
             except NoSuchElementException:
                 continue  #ignore if follower name not found
-
-    return False, ''
+        users_done = current_index
+    return False, "Not following"
 
 #---------------------------------------------------------------
 # This is a time-consuming process, in need for a better solution, either limiting the request number, or doing it in a certain range ( in-progress)
-def Get_following_statuses(driver, user_inputs, start_index, number_of_users, following_list):
+def Get_following_statuses(driver, user_inputs, output_lists, csv_file):
     """ Get the follow statuses of the users that you are following, with the option to specify the range of user in the following list.
    
     start_user_index IS 1-BASED AND WILL BE CONVERTED TO 0-BASED
     number_of_users : THIS IS A LENGTHY PROCESS, SO WE PROVIDE THIS OPTION TO LIMIT THE NUMBER OF USERS WE WILL PROCESS. PASSING -1 TO IGNORE THIS LIMIT
     """
-    import pandas as pd
 
-    csv_file = os.path.join(output_lists.output_dir, user_inputs.user_name + '_followings.csv')
-    result_file = os.path.join(output_lists.output_dir, user_inputs.user_name + '_following_statuses.csv')
-
-    # the end user will use 1-base index, so we will convert the input to 0-base index
-    if start_index > 0: start_index -= 1
-
-    # use the following list if it exists
-    if following_list is not None and len(following_list) > 0:
-        # convert list of users to dataframe
-        # ERROR HERE, WRONG COLUMN ORDER
-        df = pd.DataFrame.from_records([s.to_dict() for s in following_list])
-        df.columns = ["No", "Display Name", "User Name", "Followers", "Status"]
-        #size = str(len(following_list))
-        printY(f'Using the existing list in memory (str(len({following_list})) users)')
-        print(df)
-
-    # use the csv data file on disk if it exists 
-    elif os.path.isfile(csv_file):
-        df = pd.read_csv(csv_file, encoding='utf-16') #, usecols=["User Name"])     
-        # a trick to force column Status content as string instead of the default float      
-        df.Status = df.Status.fillna(value="")      
-        
-        # make sure the user's inputs stay in range with the size of the following list
-        followings_count = df.shape[0]
-        start_index = min(start_index, followings_count -1)
-
-        printY(f'Using the existing csv file on disk {csv_file} ({followings_count} users)')
-    # get the list of followings users
-    # else:
-      
+    # do main task
+    df = pd.read_csv(csv_file, encoding='utf-16') #, usecols=["User Name"])     
+    # a trick to force column Status content as string instead of the default float      
+    df.Status = df.Status.fillna(value="")             
+    # make sure the user's inputs stay in range with the size of the following list
+    #followings_count = df.shape[0]
+    user_inputs.index_of_start_user = min(user_inputs.index_of_start_user, df.shape[0] -1)
+    print('Updating the following statuses on')
+    printY(f'{csv_file}')
+    print(f'({user_inputs.number_of_users} users, starting from {user_inputs.index_of_start_user + 1}) ...')
    
     # process each user in dataframe
+    count = 0
     for index, row in df.iterrows():
-        if index < start_index:
+        if index < user_inputs.index_of_start_user:
             continue
-        if number_of_users != -1 and index > start_index + number_of_users - 1:
+        if user_inputs.number_of_users != -1 and index > user_inputs.index_of_start_user + user_inputs.number_of_users - 1:
             break
         user_inputs.target_user_name = row["User Name"]
+        count += 1
+        #print(f'User {user_inputs.target_user_name} {count}(index {index})/{user_inputs.number_of_users}:')
+        print(f'User {count}/{user_inputs.number_of_users} (index {index + 1}):')
         result, message = Does_this_user_follow_me(driver, user_inputs)
-        status = ''
         if result == True:
-            status = 'Following you ' + message
-            printG(status)
-        elif message == 'User name not found':
-            printR(message)
+            printG('- ' + message)
+            # update the status column in the dataframe with following status
+            df.at[index, 'Status'] = message 
         else:
-            status = 'Not following you'
-            printR(status)
-        df.at[index, 'Status'] = status
-        
-    print(df) 
+            printR('- ' + message) if 'User name not found' in message else printY('- ' + message)
+            continue
     try:
-        df.to_csv(result_file, encoding='utf-16', index = False)
-    except: # pd.Errors.PermissionDenied:
-        printR(f'Error writing file {os.path.abspath(result_file)}.\nMake sure the file is not in use. Then type r for retry >')
+        # write back dataframe to csv file
+        df.to_csv(csv_file, encoding='utf-16', index = False)
+        #return csv_file
+    except: # pd.Errors.csv_file:
+        printR(f'Error writing file {os.path.abspath(csv_file)}.\nMake sure the file is not in use. Then type r for retry >')
         retry = input()
         if retry == 'r': 
-            df.to_csv(result_file, encoding='utf-16', index = False)
+            df.to_csv(csv_file, encoding='utf-16', index = False)
+            #return csv_file
         else:
-            printR('Error witing file' + os.path.abspath(result_file))
-            return 
-    Show_html_result_file(CSV_to_HTML(result_file))
+            printR('Error writing file' + os.path.abspath(csv_file))
+            #return ''
+
 
 #---------------------------------------------------------------
 def Get_followings_list(driver, user_inputs):
@@ -1346,10 +1335,12 @@ def Get_followings_list(driver, user_inputs):
     """
 
     followings_list = []
-    if Open_user_home_page(driver, user_inputs.user_name) == False:
-        user_inputs.user_name = ''
-        Show_menu(user_inputs)
-        return []
+    success, message = Open_user_home_page(driver, user_inputs.user_name)
+    if not success:
+        if message.find('Error reading') != -1:
+            user_inputs.user_name = ''
+        return [], message
+
     Hide_banners(driver)                  
                                           
     # click on the Following text to open the modal window
@@ -1358,13 +1349,14 @@ def Get_followings_list(driver, user_inputs):
         ele.click()
     
     # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
-        return []
+    success, _  = Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')
+    if not success:
+        return [], 'Error loading'
             
     # extract number of following                      
     following_ele = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span') 
     if following_ele is None:
-        return []
+        return [], ''
 
     # remove thousand separator character, if existed
     following_count = int(following_ele.text.replace(",", "").replace(".", ""))
@@ -1412,7 +1404,8 @@ def Get_followings_list(driver, user_inputs):
                     avatar_href =  style[style.find('https'): style.find('\")')]
 
         except NoSuchElementException:
-            continue  #ignore if follower name not found
+            printR(f'Error getting an user')
+            continue  #ignore if either follower name or id or avatar not found
 
         # get followers count
         texts = actor_info.text.split('\n')
@@ -1422,7 +1415,182 @@ def Get_followings_list(driver, user_inputs):
 
         # create user object and add it to the result list 
         followings_list.append(user(str(i+1), avatar_href, following_name, following_user_name, number_of_followers))
-    return followings_list 
+    return followings_list, '' 
+
+#---------------------------------------------------------------
+def Process_notification(item, request_number, notifications_list):
+    """Given a notification element, extract detail info from it into a notification object, then append the object to the notification list. 
+       Show the progress bar on console
+
+       THE ARGUMENT 'notifications_list' IS ALSO SERVED AS AN OUTPUT (IT IS MUTABLE OBJECT) 
+    """
+
+    count_sofar = len(notifications_list)
+    # do nothing if the request number of notifications is reached
+    if count_sofar >=  request_number:
+        return 
+  
+    # get user_name, display_name
+    actor = check_and_get_ele_by_class_name(item, 'notification_item__actor') 
+    if actor is None:
+        return
+    display_name = actor.text
+
+    # ignore Quest notification
+    user_name = actor.get_attribute('href').replace('https://500px.com/', '')
+    if 'quests/' in user_name:
+        return 
+
+    # get user avatar
+    user_avatar = ''
+    avatar_ele = check_and_get_ele_by_class_name(item, 'notification_item__avatar_img') 
+    if avatar_ele is None:
+        return 
+    user_avatar = avatar_ele.get_attribute('src')        
+
+    count_sofar += 1
+
+    # advance the progress bar
+    update_progress(count_sofar/request_number, f' - Extracting data {count_sofar}/{request_number}:') 
+          
+    # the type of notificication
+    item_text = check_and_get_ele_by_class_name(item, 'notification_item__text')  
+    if item_text is not  None:
+        if item_text.text.find('liked') != -1: 
+            content = 'liked'
+        elif item_text.text.find('followed') != -1: 
+            content = 'followed'
+        elif item_text.text.find('added') != -1: 
+            content = 'added to gallery'
+        elif item_text.text.find('commented') != -1: 
+            content = 'commented'
+        else: 
+            content = item_text.text
+
+    # photo title, photo link
+    photo_ele = check_and_get_ele_by_class_name(item_text, 'notification_item__photo_link')
+    photo_title = ''
+    photo_link = ''        
+    status = ''
+    # in case of a new follow, instead of a photo element, there will be 2 overlapping boxes, Follow and Following. We will determine if whether or not this actor has been followered  
+    if photo_ele is None:  
+        following_box = check_and_get_ele_by_class_name(item, 'following')
+        if following_box is not None and following_box.is_displayed():        
+            status = 'Following'
+        else:  
+            status = 'Not Follow' 
+ 
+    else: 
+        photo_title = photo_ele.text
+        photo_link = photo_ele.get_attribute('href') 
+
+    # get photo thumbnail
+    photo_thumbnail = ''
+    photo_thumb_ele = check_and_get_ele_by_class_name(item, 'notification_item__photo_img') 
+    if photo_thumb_ele is not None:
+        photo_thumbnail = photo_thumb_ele.get_attribute('src')
+        
+    # time stamp
+    ele = check_and_get_ele_by_class_name(item, 'notification_item__timestamp')  
+    timestamp  = ele.text if ele is not None else ""
+
+    # creating the notification object
+    new_notitication_item = notification(order=str(count_sofar), user_avatar=user_avatar, display_name=display_name, username=user_name, 
+                                        content=content, photo_thumb=photo_thumbnail, photo_link=photo_link, photo_title=photo_title, timestamp=timestamp, status=status)
+    notifications_list.append(new_notitication_item)
+   
+    return
+
+#---------------------------------------------------------------
+
+def Process_notification_element(notification_element):
+    """Given a notification element, extract detail info from it into a notification object, then append the object to the notification list. 
+       Show the progress bar on console
+
+       THE ARGUMENT 'notifications_list' IS ALSO SERVED AS AN OUTPUT (IT IS MUTABLE OBJECT) 
+    """
+
+    # get user_name, display_name
+    actor = check_and_get_ele_by_class_name(notification_element, 'notification_item__actor') 
+    if actor is None:
+        return None
+    display_name = actor.text
+
+    # ignore Quest notification
+    #user_name = actor.get_attribute('href')
+    user_name = actor.get_attribute('href').replace('https://500px.com/', '')
+
+    if 'quests/' in user_name:
+        return None
+
+    # get user avatar
+    user_avatar = ''
+    avatar_ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__avatar_img') 
+    if avatar_ele is None:
+        return None
+    user_avatar = avatar_ele.get_attribute('src')        
+
+    # the type of notificication
+    item_text = check_and_get_ele_by_class_name(notification_element, 'notification_item__text')  
+    if item_text is not  None:
+        if item_text.text.find('liked') != -1: 
+            content = 'liked'
+        elif item_text.text.find('followed') != -1: 
+            content = 'followed'
+        elif item_text.text.find('added') != -1: 
+            content = 'added to gallery'
+        elif item_text.text.find('commented') != -1: 
+            content = 'commented'
+        else: 
+            content = item_text.text
+
+    # photo title, photo link
+    photo_ele = check_and_get_ele_by_class_name(item_text, 'notification_item__photo_link')
+    photo_title, photo_link, status = '', '', ''
+ 
+    # in case of a new follow, instead of a photo element, there will be 2 overlapping boxes, Follow and Following. We will determine if whether or not this actor has been followered  
+    if photo_ele is None:  
+        following_box = check_and_get_ele_by_class_name(notification_element, 'following')
+        if following_box is not None and following_box.is_displayed():        
+            status = 'Following'
+        else:  
+            status = 'Not Follow' 
+ 
+    else: 
+        photo_title = photo_ele.text
+        photo_link = photo_ele.get_attribute('href') 
+
+    # get photo thumbnail
+    photo_thumbnail = ''
+    photo_thumb_ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__photo_img') 
+    if photo_thumb_ele is not None:
+        photo_thumbnail = photo_thumb_ele.get_attribute('src')
+        
+    # time stamp
+    ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
+    timestamp  = ele.text if ele is not None else ""
+
+    # creating and return the notification object
+    return notification(order=0, user_avatar=user_avatar, display_name=display_name, username=user_name, 
+                        content=content, photo_thumb=photo_thumbnail, photo_link=photo_link, photo_title=photo_title, timestamp=timestamp, status=status)
+   
+#---------------------------------------------------------------
+def Process_notifications(request_number, items):
+
+    notifications =[]
+    for i, item in enumerate(items):
+        count_sofar = len(notifications)    
+        if count_sofar >= request_number:
+            break
+        
+        new_notification = Process_notification_element(item)
+        if new_notification is not None:
+            count_sofar += 1
+            new_notification.order = count_sofar
+            notifications.append(new_notification)
+            # advance the progress bar
+            update_progress(count_sofar/request_number, f' - Extracted data {count_sofar}/{request_number}:') 
+    return notifications
 
 #---------------------------------------------------------------
 def Get_notification_list(driver, user_inputs, get_full_detail = True ):
@@ -1438,111 +1606,36 @@ def Get_notification_list(driver, user_inputs, get_full_detail = True ):
     - EXTRACT INFO, RETURN THE FULL LIST OF A UNIQUE LIST DEPENTING ON THE REQUEST
     """
 
-    unique_notificators = []
-    notifications_list = []
-    short_list = []
+    unique_notificators, notifications_list, simplified_list = [],[], []
 
-    if user_inputs.number_of_notifications == -1: # secret switch: -1 to bypass the limit on number of notifications (could be time-consuming process)
-        scrolls_needed = -1
-    else:                                         # Notifications are loaded 20 items at a time. Ex. to get 80 items we need to scroll 4 times 
-        scrolls_needed =  math.floor(user_inputs.number_of_notifications / NOTIFICATION_PER_LOAD) +1
+    Scroll_down_active_page(driver, None, 'notification_item__photo_link', '', user_inputs.number_of_notifications, ' - Scrolling down for more notifications:' ) 
 
-    pause_between_scrolls = 1.5
-    estimate_scrolls_needed = scrolls_needed
-    # estimate_scrolls_needed is used only when we want unlimited scrolls times (scrolls_needed = -1). We pass irrelevant value here to Scroll_down() just to fill the function signature 
-    Scroll_down(driver, pause_between_scrolls, scrolls_needed, estimate_scrolls_needed, ' - Scrolling down for more notifications:' ) 
-
-    # get the info now that all the needed notifications are loaded
+    # get the info now that all we got all the available notifications
     items = driver.find_elements_by_class_name('notification_item')  
-    count = len(items) 
-    # number of loaded items may exceed the required items: adjust to count accordingly for the correct progresstion
-    if count > user_inputs.number_of_notifications:
-       count = user_inputs.number_of_notifications 
-    for i, item in enumerate(items):
-        # advance the progress bar
-        if user_inputs.number_of_notifications != -1 and i >=  user_inputs.number_of_notifications:
-            update_progress(1, f' - Extracting data {user_inputs.number_of_notifications}/{user_inputs.number_of_notifications}:')
-            break
-        if i > 0:
-            update_progress( i / (count), f' - Extracting data {i}/{count}:')
 
-        # get user_name, display_name
-        actor = check_and_get_ele_by_class_name(item, 'notification_item__actor') 
-        if actor is None:
-            continue
-        display_name = actor.text
-        user_name = actor.get_attribute('href').replace('https://500px.com/', '')
 
-        # get user avatar
-        user_avatar = ''
-        avatar_ele = check_and_get_ele_by_class_name(item, 'notification_item__avatar_img') 
-        if avatar_ele is None:
-            continue 
-        user_avatar = avatar_ele.get_attribute('src')
-          
-        # the type of notificication
-        item_text = check_and_get_ele_by_class_name(item, 'notification_item__text')  
-        if item_text is not  None:
-            if item_text.text.find('liked') != -1: 
-                content = 'liked'
-            elif item_text.text.find('followed') != -1: 
-                content = 'followed'
-            elif item_text.text.find('added') != -1: 
-                content = 'added to gallery'
-            elif item_text.text.find('commented') != -1: 
-                content = 'commented'
-            else: 
-                content = item_text.text
-            # ignore Quest notification
-            if content.find('Quest') != -1:
-                continue
+    ## main task no mp
+    #for i, item in enumerate(items): 
+    #    Process_notification(i, item, user_inputs.number_of_notifications, notifications_list)
+    notifications_list = Process_notifications(user_inputs.number_of_notifications, items)
+    
+    if len(notifications_list) == 0 and len(unique_notificators) == 0: 
+        printG(f'User {user_inputs.user_name} has no notification')
+        return [], []
 
-        # photo title, photo link
-        photo_ele = check_and_get_ele_by_class_name(item_text, 'notification_item__photo_link')
-        photo_title = ''
-        photo_link = ''        
-        status = ''
-        # in case of a new follow, instead of a photo element, there will be 2 overlapping boxex, Follow and Following. We will determine if whether or not this actor has been followered  
-        if photo_ele is None:  
-            following_box = check_and_get_ele_by_class_name(item, 'following')
-            if following_box is not None and following_box.is_displayed():        
-                status = 'Following'
-            else:  
-                status = 'Not Follow' 
- 
-        else: 
-            photo_title = photo_ele.text
-            photo_link = photo_ele.get_attribute('href') 
+    # create the simplified list from the notifications list for easy manipulation
+    simplified_list = [f'{item.user_avatar},{item.display_name.replace(",", " ")},{item.username}' for item in notifications_list]
+    
+    # extract the unique users and the number of times they appear in the notifications list  
+    unique_notificators = Count_And_Remove_Duplications(simplified_list)
 
-        # get photo thumbnail
-        photo_thumbnail = ''
-        photo_thumb_ele = check_and_get_ele_by_class_name(item, 'notification_item__photo_img') 
-        if photo_thumb_ele is not None:
-            photo_thumbnail = photo_thumb_ele.get_attribute('src')
-        
-        # time stamp
-        ele = check_and_get_ele_by_class_name(item, 'notification_item__timestamp')  
-        timestamp  = ele.text if ele is not None else ""
-
-        # creating the notification object
-        new_notitication_item = notification(order=str(i+1), user_avatar=user_avatar, display_name=display_name, username=user_name, 
-                                          content=content, photo_thumb=photo_thumbnail, photo_link=photo_link, photo_title=photo_title, timestamp=timestamp, status=status)
-        notifications_list.append(new_notitication_item)
-
-        # Create the  short list. In some rare cases, the user_name may contain coma. We replace it with space
-        short_list.append(f'{user_avatar},{display_name.replace(",", " ")},{user_name}')
-
-    unique_notificators = Count_And_Remove_Duplications(short_list)
-
-    # add order number at the begining of each row
+    # add order number at the beginning of each row
     for j in range(len(unique_notificators)):
         unique_notificators[j] = f'{str(j+1)},{unique_notificators[j]}'
 
-    if len(notifications_list) == 0 and len(unique_notificators) == 0: 
-        if user_name == '':
-            user_name = user_inputs.user_name
-        printG(f'User {user_name} has no notification')
+
     return notifications_list, unique_notificators
+
 
 #---------------------------------------------------------------
 def Get_like_actioners_list(driver, output_lists):
@@ -1555,101 +1648,66 @@ def Get_like_actioners_list(driver, output_lists):
     - LOCATE THE LIKE COUNT NUMBER THEN CLICK ON IT TO OPEN THE MODAL WINDOW HOSTING THE LIST OF ACTIONER USER
     - SCROLL DOWN TO THE END AND EXTRACT RELEVANT INFO, PUT ALL TO THE LIST AND RETURN IT
     """
-
+    time_out = 20
     actioners_list = []
     date_string = datetime.datetime.now().replace(microsecond=0).strftime(DATE_FORMAT)
 
-    # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='react_photos_index_container')[0]:
-        return None, None
- 
-    # get photographer name and photo title
-    react_photos_index_container = check_and_get_ele_by_class_name(driver, 'react_photos_index_container')
-    if react_photos_index_container is None:
-        printR('Error getting like_actioners list')
+    try:  
+        info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
+    except  TimeoutException:
+        printR(f'Time out ({time_out}s)! Please try again')
         return [], ''
+  
     print(' - Getting photo details ...')
-    styled_link =  check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[2]/div[1]/p[1]/span/a') 
-                                                                             
-    if styled_link is not None: 
-        styled_link.location_once_scrolled_into_view
-        photographer_name = styled_link.text
-    else:                       
-        photographer_name = 'Photographer name not found'
-    printG(f'   Photogapher: {photographer_name}')
+    # get photographer name
+    photographer_ele = check_and_get_ele_by_xpath(info_box, '//div[2]/div[1]/p[1]/span/a')
+    if photographer_ele is None: 
+        photographer_name = ''
+        printR('Error getting photographer name')
+    else:
+        photographer_name = photographer_ele.text
+        printG(f'   Photogapher: {photographer_name}')
 
-    styled_layout_box = check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[2]/div[1]/h3')
-    if styled_layout_box is None: 
-        printR('Error getting like_actioners list')
+    # get photo title
+    title_ele = check_and_get_ele_by_xpath(info_box, '//div[2]/div[1]/h3')
+    if title_ele is None: 
+        photo_title = ''
+        printR('Error getting photo title')
+    else:
+        photo_title = title_ele.text
+        printG(f'   Photo title: {photo_title}')
+
+    # Get the like-count-button and click on it to open the modal window that host the actioners list
+    try:
+        photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
+    except  TimeoutException:
+        printR(f'Time out ({time_out}s! Please try again')
         return [], ''
-    photo_title = styled_layout_box.text
-    printG(f'   Photo title: {photo_title}')
 
-    # make sure the  photo title is visible
-    styled_layout_box.location_once_scrolled_into_view
-
-    # find the affection count number element, get the affection count 
-    count_number_button = check_and_get_ele_by_xpath(react_photos_index_container, '//div/div/div[2]/div/div[2]/div[1]/div[1]/a')
-    if count_number_button is None:                           
-        printG('   Photo has 0 like')
-        return [], ''
-    likes_count_string = count_number_button.text
+    likes_count_string = photo_likes_count_ele.text
     likes_count = int(likes_count_string.replace('.','').replace(',',''))
-    printG(f"   This photo has {likes_count}'s likes")
-    
-    # click on affection count number element to open the modal window, wait for page loading
-    driver.execute_script("arguments[0].click();", count_number_button)
+    printG(f"   This photo has {likes_count} likes")
 
-    #-----------
-    # July 7 2019 section no longer works due to page structure and class name changed (dynamic class name instead of ""ifsget"
-    ## abort the action if the target objects failed to load within a timeout of 15s    
-    ##if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
-    ##    return []	
-    #time.sleep(2)     
-    ## make a meaningful output file name
-    #like_actioners_file_name = os.path.join(output_lists.output_dir, \
-    #    f"{photographer_name.replace(' ', '-')}_{photo_title.replace(' ', '-')}_{likes_count}_ like_actioners_{date_string}.csv")
-
-    ## scroll to the end for all elements of the given class name to load all actioners
-    #Scroll_to_end_by_class_name(driver, 'ifsGet', likes_count)
+    photo_likes_count_ele.click()
     
-    ## create actionners list
-    #actioners = driver.find_elements_by_class_name('ifsGet')
-    #actioners_count = len(actioners)
-    #display_name = ''
-    #followers_count = ''
-    #for i, actioner in enumerate(actioners):
-    #    update_progress(i / (actioners_count - 1), f' - Extracting data {i+1}/{actioners_count}:')
-    #    try:    
-    #        texts = actioner.text.split('\n')
-    #        if len(texts) > 0: 
-    #            display_name = texts[0] 
-    #        if len(texts) > 1:
-    #            followers_count  = re.sub('[^\d]+', '', texts[1]) 
-    #        # extract actioner's user name
-    #        ele = check_and_get_ele_by_tag_name(actioner, 'a') 
-    #        if ele is not None:
-    #            name = ele.get_attribute('href').replace('https://500px.com/','')
-    #        actioners_list.append(user(str(i+1), display_name, name, str(followers_count)) )
-    #    except NoSuchElementException:
-    #        continue
-    #return actioners_list, like_actioners_file_name 
-    #-----------    
-    # new implementation:
-    # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'ant-modal-body')[0]:
-        return []	      
+    try:
+        WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'ant-modal-body')) )
+    except  TimeoutException:
+        printR(f'Time out ({time_out}s! Not all elements are loaded. You may try again later.')
+ 
     # make a meaningful output file name
     like_actioners_file_name = os.path.join(output_lists.output_dir, \
         f"{photographer_name.replace(' ', '-')}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
 
     #get a container element containing all actors
     container= check_and_get_ele_by_class_name(driver,'ant-modal-body')
+    time.sleep(2)
     if container is None:
         return [], ''
     #scrolling down until all the actors are loaded
     img_eles = Scroll_to_end_by_tag_name_within_element(driver, container, 'img', likes_count)
-    
+    #Scroll_down_active_page(driver, container, '', 'img', likes_count, ' - Scrolling down for more items:' ) 
+   
     # create actors list
     actors_count = len(img_eles )
     display_name = ''
@@ -1688,10 +1746,11 @@ def Get_like_actioners_list(driver, output_lists):
     return actioners_list, like_actioners_file_name 
 #---------------------------------------------------------------
 def Like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_liked, include_already_liked_photo_in_count = True, close_browser_on_error = True):
-    """Like n photo of a given user, starting from the top. Return False if error occurs
+    """Like n photo of a given user, starting from the top. Return False and error message if error occured, True and blank string otherwise
 
     IF THE include_already_liked_photo IS TRUE (DEFAULT), THE ALREADY-LIKED PHOTO WILL BE COUNTED AS DONE BY THE AUTO-LIKE PROCESS
-    FOR EXAMPLE, IF YOU NEED TO AUTO-LIKE 3 PHOTOS FROM A USER, BUT THE FIRST TWO ARE ALREADY LIKED, THEN YOU ONLY NEED TO DO ONE
+    FOR EXAMPLE, IF YOU NEED TO AUTO-LIKE 3 PHOTOS FROM A USER, BUT TWO PHOTOS IN THE FIRST THREE PHOTOS ARE ALREADY LIKED, 
+    THEN YOU ONLY NEED TO DO ONE
     IF THE include_already_liked_photo_in_count IS FALSE, THE PROCESS WILL AUTO-LIKE THE EXACT NUMBER REQUESTED
     THE ARGUMENT close_browser_on_error NEEDS TO BE FALSE IF THIS FUNCTION IS CALLED IN A LOOP: IF ERRORS OCCUR, WE WANT TO PROCESS THE NEXT ITEM
     PROCESS:
@@ -1702,25 +1761,33 @@ def Like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
     - WHEN WE HAVE PROCESSED ALL THE LOADED PHOTOS BUT THE REQUIRED NUMBER IS NOT REACHED YET, 
       ... SCROLL DOWN ONCE TO LOAD MORE PHOTOS ( CURRENTLY 500PX LOADS 50 PHOTOS AT A TIME) AND REPEAT THE STEPS UNTIL DONE
       """
-    if Open_user_home_page(driver, target_user_name) == False:
-        #user_inputs.user_name = ''
-        if close_browser_on_error == True:
-            Close_chrome_browser(driver)
+
+    success, message = Open_user_home_page(driver, target_user_name)
+    if not success:
+        #if message.find('Error reading') != -1:
+        #    user_inputs.target_user_name = ''
         return False
-                    
+    
+    # pause a random time between 0.5s, 1.5s for human-like effect
+    time.sleep(random.randint(5, 10) / 10)   
     # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
-        return None, None
+    success = Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]
+    if not success:
+        printR(f"Error loading user {user_inputs.target_user_name}'s photo page")
+        return False, 
+    time.sleep(random.randint(5, 10) / 10)   
 
     Hide_banners(driver)        
     
     new_fav_icons =  check_and_get_all_elements_by_css_selector(driver, '.button.new_fav.only_icon') 
+    time.sleep(random.randint(5, 10) / 10)   
     if len(new_fav_icons) == 0:
         printY('  - user has no photos')
     done_count = 0
 
     for i, icon in enumerate(new_fav_icons):
-       # skip already-liked photo. Count it as done if requested so
+        icon.location_once_scrolled_into_view
+        # skip already-liked photo. Count it as done if requested so
         if done_count < number_of_photos_to_be_liked and 'heart' in icon.get_attribute('class'): 
             if include_already_liked_photo_in_count == True:
                 done_count = done_count + 1          
@@ -1732,14 +1799,15 @@ def Like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
         if done_count >= number_of_photos_to_be_liked:  
             break
         
-        Hover_by_element(driver, icon) # not neccessary, but good for visual demonstration
+        Hover_by_element(driver, icon) # not necessary, but good for visual demonstration
+        time.sleep(random.randint(5, 10) / 10)
         try:
             title =  icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link').find_element_by_tag_name('img').get_attribute('alt')
             driver.execute_script("arguments[0].click();", icon) 
             done_count = done_count + 1
             printG(f'  - liked #{str(done_count):3} Photo {str(i + 1):2} - {title:.50}')
-            # intentional slowing  down a bit to make it look more like human
-            time.sleep(1)
+            # pause a randomized time between 0.5 to 2 seconds between actions 
+            #time.sleep(random.randint(5, 20) / 10)
 
         except Exception as e:
             printR(f'Error after {str(done_count)}, at index {str(i)}, title {title}:\nException: {e}')
@@ -1803,7 +1871,8 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
             Hover_by_element(driver, icon) # not needed, but good to have a visual demonstration
             try:
                 #intentional slowing down a bit to make it look more like human
-                time.sleep(1.5)
+                time.sleep(random.randint(10,25)/10)  
+
                 photo_link = icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link')
                 title =  photo_link.find_element_by_tag_name('img').get_attribute('alt')
                 photographer_ele = check_and_get_ele_by_class_name(photo_link, 'photographer')
@@ -1825,7 +1894,7 @@ def Like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
 
                 driver.execute_script("arguments[0].click();", icon) 
                 photos_done = photos_done + 1
-                print(repr(photographer))
+
                 printG(f'Liked {str(photos_done):>3}/{number_of_photos_to_be_liked:<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
             except Exception as e:
                 printR(f'Error after {str(photos_done)}, at index {str(i+1)}, title {title}:\nException: {e}')
@@ -1919,13 +1988,6 @@ def Like_n_photos_on_homefeed_page(driver, user_inputs):
             parent2_sib1 =  check_and_get_ele_by_xpath(parent2, './following-sibling::div') 
             if parent2_sib1 is None: 
                 continue
-                
-            # Skip if this is your own photo. Show console log in Blue color 
-            child_div_eles = check_and_get_all_elements_by_tag_name(parent2_sib1, 'div')  
-            if len(child_div_eles) > 1:
-                if child_div_eles[1].text.find('disabled') != -1: # this may be your own photo 
-                    printB(f'Skipped  : photo {str(i + 1):<3}, from {photographer_display_name:<32.30}, {title:<35.35}')
-                    continue
 
             parent2_sib2 =  check_and_get_ele_by_xpath(parent2_sib1, './following-sibling::div') 
             if parent2_sib2 is  None: 
@@ -1938,34 +2000,34 @@ def Like_n_photos_on_homefeed_page(driver, user_inputs):
             photographer_display_name  = a_ele.text if a_ele is not None else "not determined"
             photographer_name = a_ele.get_attribute('href').replace('https://500px.com/', '') if a_ele is not None else "not determined"
 
-            # get like status
-            photo_already_liked = False
-            if  parent2_sib1.text.find('Outline') == -1:
-                photo_already_liked = True
-                 
-            # get the like icon to click on           
-            span_ele = check_and_get_ele_by_tag_name(parent2_sib1, 'span')  
-            if span_ele is not None:
-                span_ele.location_once_scrolled_into_view
-            
-            heart_icon = check_and_get_ele_by_xpath(span_ele, './following-sibling::div')
-            # this may be your own photo
-            if heart_icon is None:
-                printB(f'Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
-                continue
-
-            Hover_by_element(driver, heart_icon)
-            if  not photo_already_liked:      
-                # skip consecutive photos of the same photographer
-                if photographer_name == prev_photographer_name:
-                    printY(f'Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
-                    continue
-                if heart_icon is not None:
-                    driver.execute_script("arguments[0].click();", heart_icon) 
-                    photos_done += 1
-                    prev_photographer_name = photographer_name
-                    printG(f'Like {photos_done:>3}/{user_inputs.number_of_photos_to_be_liked:<3}: photo {str(i + 1):<3}, from {photographer_display_name:<32.30}, {title:<40.40}')
-                    time.sleep(1.5)  # slow down a bit to make it look more like a human
+            child_div_eles = check_and_get_all_elements_by_tag_name(parent2_sib1, 'div')
+            if len(child_div_eles) > 2:
+                heart_icon = child_div_eles[2]
+                #get like status
+                photo_already_liked = False
+                svg_ele = check_and_get_ele_by_tag_name(heart_icon, 'svg')
+                if svg_ele is not None:
+                    title_ele = check_and_get_ele_by_tag_name(svg_ele, 'title')
+                    if title_ele is not None:     
+                        like_status = title_ele.get_attribute('innerHTML')
+                        # skip if the photo is one of yours
+                        if like_status.find('disabled') != -1:
+                            printB(f'Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
+                            continue                           
+                        elif like_status.find('Filled') != -1:  # already liked: 'Filled', not-yet like: 'Outline', your own photo: 'disabled'
+                            photo_already_liked = True
+                        if  not photo_already_liked:      
+                            # skip consecutive photos of the same photographer
+                            if photographer_name == prev_photographer_name:
+                                printY(f'Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
+                                continue
+                            if heart_icon is not None:
+                                Hover_by_element(driver, heart_icon)
+                                driver.execute_script("arguments[0].click();", heart_icon) 
+                                photos_done += 1
+                                prev_photographer_name = photographer_name
+                                printG(f'Like {photos_done:>3}/{user_inputs.number_of_photos_to_be_liked:<3}: photo {str(i + 1):<3}, from {photographer_display_name:<32.30}, {title:<40.40}')
+                                time.sleep(random.randint(10,20)/10)  # slow down a bit to make it look more like a human
 
 #---------------------------------------------------------------
 def Count_And_Remove_Duplications(values):
@@ -1994,6 +2056,72 @@ def Count_And_Remove_Duplications(values):
             except:
                 continue
     return output    
+
+
+#---------------------------------------------------------------
+def Scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_to_check, number_of_items_requested = 100, message = '', time_out= 60):
+    """Scrolling down the active window until all the request items of a given class name or a tag name, are loaded.
+
+    - THE PROCESS MONITORS THE CHANGE OF THE PAGE HEIGHT TO DECIDE IF ANOTHER SCROLL DOWN IS NEEDED
+      AFTER A SCROLL DOWN, IF THE SERVER FAILS TO LOAD NEW ITEMS WITHIN A GIVEN TIME OUT (DEFAULT IS 60s), THE PROCESS WILL STOP 
+    - IF BOTH CLASS NAME AND TAG NAME ARE GIVEN, CLASS NAME TAKE PRIORITY. IF NONE IS GIVEN, NO ACTION IS TAKEN
+    - MESSAGE IS THE TEXT SHOWN ON THE PROGRESS BAR
+
+"""
+    if web_element is None:
+        web_element = driver    
+    if class_name_to_check: 
+        items = web_element.find_elements_by_class_name(class_name_to_check) 
+    elif tag_name_to_check: 
+        items = web_element.find_elements_by_tag_name(tag_name_to_check) 
+    else:
+        printR('Items were not specified. The process stopped.')
+        return
+    if items is None or len(items) == 0:
+        printR('No items found.')
+        return
+      
+    if len(items) >= number_of_items_requested:
+        return    
+     
+    # get the current height of the page
+    last_scroll_height = driver.execute_script("return document.body.scrollHeight")
+
+    time_out_count_down = time_out
+    count_sofar = 0
+    if number_of_items_requested == -1:
+        number_of_items_requested  = MAX_NOTIFICATION_REQUEST
+
+    while count_sofar < number_of_items_requested :   
+        update_progress(count_sofar / number_of_items_requested, f' - Scrolling down {count_sofar}/{number_of_items_requested}')
+        # scroll down to bottom
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+        new_scroll_height = driver.execute_script("return document.body.scrollHeight")
+
+        # give the slow server a chance to load the new items
+        while new_scroll_height == last_scroll_height and time_out_count_down >= 0:
+            time_out_count_down -= 1
+            new_scroll_height = driver.execute_script("return document.body.scrollHeight") 
+            time.sleep(1)
+ 
+        last_scroll_height = new_scroll_height
+
+        if class_name_to_check : 
+            items = web_element.find_elements_by_class_name(class_name_to_check)         
+        elif tag_name_to_check: 
+            items = web_element.find_elements_by_tag_name(tag_name_to_check) 
+
+        count_sofar = len(items)    
+
+        if count_sofar < number_of_items_requested and time_out_count_down <= 0:
+            printR(f'\r Time out ({time_out}s)! {count_sofar}/{number_of_items_requested} items obtained. You may try again at another time')
+            break
+ 
+    # normal termination of while loop: show completed progress bar
+    else:
+        update_progress(1, f' - Scrolling down {number_of_items_requested}/{number_of_items_requested}')
+
 
 #---------------------------------------------------------------
 def Scroll_down(driver, scroll_pause_time = 0.5, number_of_scrolls = 10, estimate_scrolls_needed = 3, message = ''):
@@ -2031,17 +2159,19 @@ def Scroll_down(driver, scroll_pause_time = 0.5, number_of_scrolls = 10, estimat
 
         # Scroll down to bottom
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        # Wait to load page
-        time.sleep(scroll_pause_time)
-        innerHTML = driver.execute_script("return document.body.innerHTML") #run JS body scrip after all photos are loaded
 
-        # exit point #1 : number of scrolls requested has been reached
+        # Wait for page to load
+        time.sleep(scroll_pause_time)
+        innerHTML = driver.execute_script("return document.body.innerHTML") #make sure document javascript is executed
+
+        # exit point #1 : when number of scrolls requested has been reached
         if number_of_scrolls != -1:
             iteration_count = iteration_count + 1
             if iteration_count >= number_of_scrolls:
                break
 
-        #  exit point #2: all items are loaded- calculate new scroll height and compare with last scroll height
+        #  exit point #2: when all items are loaded (by calculating new scroll height and compare with last scroll height)
+        #                 or when the server stop responding after the given sleep time (scroll_pause_time)
         new_height = driver.execute_script("return document.body.scrollHeight")
         if new_height == last_height:
             break
@@ -2055,7 +2185,6 @@ def Scroll_down(driver, scroll_pause_time = 0.5, number_of_scrolls = 10, estimat
         update_progress(1, message)                                 # force the display of "100% Done" 
   
     time.sleep(scroll_pause_time)
-
 #---------------------------------------------------------------
 def Scroll_to_end_by_class_name(driver, class_name, likes_count):
     """Scroll the active window to the end, where the last element of the given class name become visible.
@@ -2071,11 +2200,13 @@ def Scroll_to_end_by_class_name(driver, class_name, likes_count):
             update_progress(new_count / likes_count, f' - Scrolling to load more items {new_count}/{likes_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
-            time.sleep(1)
-            WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
+            #time.sleep(1)
+            WebDriverWait(driver, timeout = 10).until(EC.visibility_of(the_last_in_list))
             count = new_count
             eles = driver.find_elements_by_class_name(class_name)
             new_count = len(eles)
+        except TimeoutException :
+            printR(f'Time out while scrolling down. Please retry.')
         except NoSuchElementException:
             pass
     if new_count < likes_count:
@@ -2083,26 +2214,34 @@ def Scroll_to_end_by_class_name(driver, class_name, likes_count):
 
 #---------------------------------------------------------------
 def Scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_count):
-    """Scroll the active window to the end, where the last element of the given class name become visible.
+    """Scroll the active window to the end, where the last element of the given tag name is loaded and visible.
 
-    THE likes_count ARGUMENT IS USED FOR CREATING A REALISTIC PROGRESS BAR
+    THE likes_count ARGUMENT IS USED FOR SHOWING A REALISTIC PROGRESS BAR
     """
-    #eles = driver.find_elements_by_class_name(class_name)
     eles = check_and_get_all_elements_by_tag_name(element, tag_name)
     count = 0
     new_count = len(eles)
-
+    time_out = 20
+    count_down_timer = time_out
     while new_count != count:
         try:
             update_progress(new_count / likes_count, f' - Scrolling to load more items {new_count}/{likes_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(1)
-            WebDriverWait(driver, 5).until(EC.visibility_of(the_last_in_list))
+            WebDriverWait(driver, time_out).until(EC.visibility_of(the_last_in_list))
             count = new_count
-            #eles = driver.find_elements_by_class_name(class_name)
             eles = check_and_get_all_elements_by_tag_name(element, tag_name)
             new_count = len(eles)
+
+            # give the slow server a chance to load the new items 
+            while new_count == count and count_down_timer >= 0 and new_count < likes_count:
+                count_down_timer -= 1
+                the_last_in_list.location_once_scrolled_into_view 
+                time.sleep(1)
+
+        except TimeoutException :
+            printR(f'Time out ({time_out}s) while scrolling down. Please retry.')
         except NoSuchElementException:
             pass
     if new_count < likes_count:
@@ -2111,21 +2250,23 @@ def Scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
 
 #---------------------------------------------------------------
 def Login(driver, user_inputs):
-    """Submit given credentials to the 500px login page. """
+    """Submit given credentials to the 500px login page. Display error message if error occured. Return True/False loggin status 
+    """
 
     if len(user_inputs.password) == 0 or len(user_inputs.user_name) == 0 or driver == None: 
         return False
-    time_out = 3
+    time_out = 30
     driver.get("https://500px.com/login" )
     try:
-        user_name_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.ID, 'email')))
+        user_name_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.ID, 'emailOrUsername'))) # 'email')))
         user_name_ele.send_keys(user_inputs.user_name) 
         
         pwd_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.ID, 'password')))
         pwd_ele.send_keys(user_inputs.password) 
 
-        submit_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'unified_signup__submit_button')))
-        submit_ele.click()
+        submit_ele =  check_and_get_ele_by_xpath(user_name_ele, '../following-sibling::button') 
+        if submit_ele is not None: 
+            submit_ele.click()
         
         # after a sucess login, 500px will automatically load the user's homefeed page. So after submitting the credentials, we
         # wait until one of an element in the login page become unavailable
@@ -2155,6 +2296,9 @@ def Login(driver, user_inputs):
 #---------------------------------------------------------------
 def Write_string_to_text_file(input_string, file_name, encode = ''):
     """Write the given string to a given text file. Create new file if it does not exist."""
+    
+    if not input_string or not file_name:
+        return
 
     if encode == '':
         open_file = open(file_name, "w")
@@ -2323,11 +2467,12 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
     EXPECTING FIRST LINE IS COLUMN HEADERS, WHICH VARIES DEPENDING ON THE CSV TYPES
     THE ARGUMENT ignore_columns IS A LIST OF THE COLUMN HEADERS FOR WHICH WE WANT TO HIDE THE ENTIRE COLUMN
     """
-
-    # file name and extension check
+    if csv_file_name == '':
+        return ''
+    # file extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
-        return None
+        return ''
 
     html_full_file_name = file_path + '.html'
 
@@ -2341,6 +2486,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
     file_name = file_path.split('\\')[-1]
     splits = file_name.split('_')  
     title = ''
+    title_string = ''
     table_width =  'style="width:500"'
     if len(splits) >=4:
         if 'unique' in html_full_file_name:
@@ -2354,7 +2500,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
             title = f'List of {splits[1]} followers'
         elif 'followings' in html_full_file_name:
             title = f'List of {splits[1]} followings'
-            table_width = 'style="width:400"'
+            table_width = 'style="width:500"'
         elif 'likes' in html_full_file_name:
             title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
         
@@ -2405,7 +2551,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
                 row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
             
             elif header == "Status"or header == "Content":
-                row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+                row_string += f'\t\t<th class="w210" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
             
             elif header == "Time Stamp":
                 row_string += f'\t\t<th class="w120" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
@@ -2439,7 +2585,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
                     user_name = row[headers[2]]
                     row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{user_home_page}" target="_blank">\n'
                     row_string += f'\t\t\t\t<img src={avatar_src}></a>\n'
-                    row_string += f'\t\t\t<div>{user_name}</div></div></td>\n'
+                    row_string += f'\t\t\t\t<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>\n'
                
                 # Column 4 varies depending on csv file types
                 elif i == 4:  
@@ -2453,9 +2599,9 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
                 # Column 5 on Followers or Followings list or column 8 on Notifications list
                 elif col_header == 'Status':
                     if text.find('Following') != -1: 
-                        row_string += f'\t\t<td bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
+                        row_string += f'\t\t<td class="alignLeft" bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
                     else:  
-                        row_string += f'\t\t<td>{text}</td> \n'          
+                        row_string += f'\t\t<td class="alignLeft">{text}</td> \n'          
   
                 # In Photo Tile column, show photo thumbnail and photo title with <a href> link
                 elif  col_header == 'Photo Title': 
@@ -2482,6 +2628,7 @@ def CSV_to_HTML(csv_file_name, ignore_columns=[]):
             htmlfile.write(html_string.encode('utf-16'))
 
     return html_full_file_name
+
 #--------------------------------------------------------------- 
 # The getpass.win_getpass() does not work properly on Windows. We implement this for the desired effect.
 # Credit: atbagga from https://github.com/microsoft/knack
@@ -2519,8 +2666,7 @@ def Validate_non_empty_input(prompt_message, user_inputs):
     """Prompt user for an input, make sure the input is not empty. Return True if Quit or Restart is requested. False otherwise """
 
     if 'password' in prompt_message:
-       #val = getpass.win_getpass(prompt_message)
-       val = win_getpass(prompt=prompt_message)					    
+        val = win_getpass(prompt=prompt_message)
     else:
         val = input(prompt_message)
     if val == 'q' or val == 'r':
@@ -2534,7 +2680,8 @@ def Validate_non_empty_input(prompt_message, user_inputs):
 
 #--------------------------------------------------------------- 
 def Validate_input(prompt_message, user_inputs):
-    """ Prompt for input and accepts nothing but digits or letter 'r' or 'q'. Return the valid input and a boolean (True if abort is requested, False otherwise."""
+    """ Prompt for input and accepts nothing but digits or letter 'r' or 'q'. 
+    Return the valid input and a boolean (True if r(estar)t or q(uit) is requested, False otherwise."""
 
     val = input(prompt_message) 
     while True:
@@ -2557,9 +2704,9 @@ def Get_IMG_element_from_homefeed_page(driver):
     """Get all <img> elements on page then remove elmenents that are not from user's friends.
 
     WE WANT TO GET THE LIST OF LOADED PHOTOS ON THE USER HOME FEED PAGE, THE ONES FROM THE PHOTOGRAPHERS THAT YOU ARE FOLLOWING.
-    SINCE ALL THE CLASS NAMES IN THE USER HOMEFEED PAGE ARE POSTFIXED WITH RANDOMIZED TEXTS. 
-    A WORK-AROUND SOLUTION IS TO USE THE TAG IMG AS IDENTIFIER FOR A PHOTO 
-    FROM THERE WE REMOVE IMG ITEM THAT ARE EITHER AVATARS, THUMBNAILS OR RECOMMENDED PHOTOS
+    SINCE ALL THE CLASS NAMES IN THE USER HOMEFEED PAGE ARE NOW POSTFIXED WITH RANDOMIZED TEXTS,
+    WE WILL USE THE IMG TAG AS IDENTIFIER FOR A PHOTO, 
+    FROM THERE, WE REMOVE NON-INTERESTED IMG ITEMS SUCH AS AVATARS, THUMBNAILS OR RECOMMENDED PHOTOS
     """
     # we are interested in items with the tag <img>
     img_eles = check_and_get_all_elements_by_tag_name(driver, 'img') 
@@ -2601,30 +2748,44 @@ def update_progress(progress, message = ''):
 
 #---------------------------------------------------------------
 def Hide_banners(driver):
-    """Hide top and bottom banners that make elements beneath them inaccessible. And click away the sign-in window if it pops up.
+    """Hide or close top popup banners that make elements beneath them inaccessible. And click away the sign-in window if it pops up.
     
-    SPECIFICALLY, TOP BANNER IS IDENTIFIED BY THE ID 'hellobar'
-    AND BOTOOM BANNERS ARE IDENTIFIED BY TAG 'w-div'
+    SPECIFICALLY, TOP BANNER IS IDENTIFIED BY THE ID 'hellobar',
+    BOTTOM BANNERS ARE IDENTIFIED BY TAG 'w-div' AND
+    SIGN-UP BANNER IS IDENTIFIED BY CLASS 'join_500px_banner_close_ele'
     """
 
     top_banner = check_and_get_ele_by_id(driver, 'hellobar')
     if top_banner is not None:
-        driver.execute_script("arguments[0].style.display='none'", top_banner)
+        try:
+            driver.execute_script("arguments[0].style.display='none'", top_banner)
+        except:
+            pass
 
     bottom_banners = check_and_get_all_elements_by_tag_name(driver, 'w-div')
     for banner in bottom_banners:
-        driver.execute_script("arguments[0].style.display='none'", banner)
+        close_ele = check_and_get_ele_by_tag_name(banner, 'span')
+        if close_ele is not None:
+            try:
+                driver.execute_script("arguments[0].click();", close_ele)
+            except:
+                pass   
 
     join_500px_banner_close_ele = check_and_get_ele_by_class_name(driver, 'unified_signup__close')
     if join_500px_banner_close_ele is not None:
-        driver.execute_script("arguments[0].click();", join_500px_banner_close_ele)
+        try:
+            driver.execute_script("arguments[0].click();", join_500px_banner_close_ele)
+        except:
+            pass
 
 #---------------------------------------------------------------
-def Show_menu(user_inputs):
-    """ Display main menu. Accept these inputs from users: user name, password  and the desired option. 
+def Show_menu(user_inputs, special_message=''):
+    """ Display main menu. Validate and accept these inputs from users: user name, password  and the desired option. 
     
-    INPUTS ARE STORED IN THE USER_INPUTS OBJECTS, WHICH IS PASSED BY REFERENCE.  
-    THE RETURN VALUE IS A STRING CONTAINING EITHER 'r', 'q' or any digit characters
+    - Inputs are stored in the user_inputs objects, which is passed by reference.  
+    - The return value is a string containing either 'r', 'q' or any digit characters
+    - The special_message, if given, will be displayed near the end of the menu. It could be used as an alert, warning or error
+      from the last operation.
     """
 
     printC('')
@@ -2633,8 +2794,9 @@ def Show_menu(user_inputs):
     printC('   1  Get user statistics')
     printC('   2  Get user photos list (login is optional)')
     printC('   3  Get followers list   (login is optional)')
-    printC('   4  Get following list ')
-    printC('   5  Get a list of users who liked a given photo')
+    printC('   4  Get followings list ')
+    printC('   5  Get a list of users who liked a given photo (login is optional)')
+
     printC('')
     printY('      The following options require user login:')
     printC('   6  Get n last notifications (max 5000) and the unique users on it')
@@ -2648,11 +2810,14 @@ def Show_menu(user_inputs):
     printC('')
     printY('      The following option does not need credentials:')
     printC('  13  Play slideshow on a given gallery (login is optional)')
-    #printC(' 14  Get following statuses of users that you are following')
     printC('')
     printC('   r  Restart with different user')
     printC('   q  Quit')
     printC('')
+  
+    if special_message:
+        printY(special_message)
+  
     sel, abort = Validate_input('Enter your selection >', user_inputs)
 
     if abort:
@@ -2669,7 +2834,10 @@ def Show_menu(user_inputs):
         user_inputs.user_name = input('Enter 500px user name >')
     printG(f'Current user: {user_inputs.user_name}')
 
-    # password is optional
+    # password is optional:
+    #  - 2  Get user photos list: if logged in, we can get the list of galleries that each of your photo is featured in
+    #  - 3  Get followers list: if logged in, we can get your following status to each of your followers
+    #  - 5  Get a list of users who liked a given photo: if logged in, we can get your following status to each user in the list
     if (sel == 2 or sel == 3 or sel == 5) and user_inputs.password == '':
         prompt_message = 'Optional: you can get info in greater detail if you log in,\npress ENTER to ignore this option, or type in the password now >'
         expecting_password = win_getpass(prompt=prompt_message)
@@ -2741,12 +2909,12 @@ def Show_galllery_selection_menu(user_inputs):
     else:
         Show_galllery_selection_menu(user_inputs)
 #---------------------------------------------------------------
-def Define_and_read_arguments(): 
+def Define_and_read_command_line_arguments(): 
     """ Define all optional user inputs and their default values. Then fill in with the actual values from command lines.
         Return a user_inputs objects filled with given arguments. 
 
-    ALL ARGUMENTS ARE OPTIONAL (AS OPPOSED TO POSTIONAL).  IF OPTION --choice IS NOT SET, ALL OTHER ARGUMENTS WILL BE IGNORED WHETHER THEY ARE SET OR NOT.
-        IN THAT CASE, THE ATTRIBUTE "USE_COMMAND_LINE_ARGS" WILL BE SET TO FALSE 
+    ALL COMMAND LINE ARGUMENTS ARE OPTIONAL (AS OPPOSED TO POSTIONAL).  IF THE ARGURMENT '--choice' IS NOT SET, ALL OTHER ARGUMENTS WILL BE IGNORED WHETHER 
+    THEY ARE SET OR NOT, AND THE ATTRIBUTE "USE_COMMAND_LINE_ARGS" WILL BE SET TO FALSE 
     """
     user_inputs = User_inputs()
     #define arguments and their default values
@@ -2775,6 +2943,7 @@ def Define_and_read_arguments():
 #---------------------------------------------------------------
 def Get_additional_user_inputs(user_inputs):
     """ Ask the user for additional inputs based on the option previously selected in user_inputs.choice.  
+
     ALLOW THE USER TO ABORT (QUIT OR RESTART) ANYTIME DURING THE INPUT RECEPTION. RETURN FALSE IF ABORTING, TRUE OTHERWISE    
     """
 
@@ -2837,9 +3006,28 @@ def Get_additional_user_inputs(user_inputs):
 
         # 10.  Like n photos of each user who likes a given photo or yours: photo_href
         elif choice == 10: 
+            #photo_href
             user_inputs.photo_href, abort =  Validate_non_empty_input('Enter your photo href >', user_inputs)
             if abort: 
-                return False             
+                return False    
+            # these additional options are for next version
+            ## index_of_start_user
+            #input_val, abort =  Validate_input('Enter the start index of the user (default 1)>' , user_inputs)
+            #if abort:
+            #    return False  
+            #else: 
+            #    int_val = int(input_val)
+            #    # the end user will use 1-based index, so we will convert the input to 0-based
+            #    if int_val > 0: int_val -= 1
+            #    user_inputs.index_of_start_user = int_val   
+            
+            ## number of users    
+            #input_val, abort =  Validate_input('Enter the number of users you want to process>' , user_inputs)
+            #if abort:
+            #    return False  
+            #else: 
+            #    int_val = int(input_val)
+            #    user_inputs.number_of_users = int_val        
     
     # 12. Like n photos of each users in your last m notifications         
     elif choice == 12: 
@@ -2883,22 +3071,40 @@ def Get_additional_user_inputs(user_inputs):
             user_inputs.time_interval = int(input_val)
 
             printY(f'Slideshow {user_inputs.gallery_name} will play in fullscreen, covering this control window.\n To stop the slideshow before it ends, and return to this window, press ESC three times.\n Now press ENTER to start >')
+
             wait_for_enter_key = input() 
-        
-  # 14. (in progress) Get following statuses of users you are following ( user_name, start index, number_of_users)
-    elif choice == 14:
-        input_val, abort =  Validate_non_empty_input('Enter the number of users >', user_inputs)
+    
+    # Like n photos of m followers of yours, from a given start index
+    elif choice == 15:
+        # number of followers
+        input_val, abort =  Validate_input('Enter the number of followers you want to process >', user_inputs)
         if abort:
             return False  
         else: 
             user_inputs.number_of_users = int(input_val)
-  
-        input_val, abort =  Validate_non_empty_input('Enter the start index >' , user_inputs)
+
+        # start index of the user
+        input_val, abort =  Validate_input('Enter the user start index (1-based)>' , user_inputs)
         if abort:
             return False  
         else: 
-            user_inputs.index_of_start_user = int(input_val)
+            int_val = int(input_val)
+            # the end user will use 1-based index, so we will convert the input to 0-based
+            if int_val > 0: int_val -= 1
+            user_inputs.index_of_start_user = int_val 
 
+        #number of photos
+        input_val, abort =  Validate_input('Enter the number of photos you want to auto-like >', user_inputs)
+        if abort:
+            return False
+        else: 
+            num = int(input_val)
+            user_inputs.number_of_photos_to_be_liked = num if num < MAX_AUTO_LIKE_REQUEST else MAX_AUTO_LIKE_REQUEST 
+        
+        user_inputs.csv_file, abort =  Validate_non_empty_input('Enter the csv full file name>', user_inputs)
+        if abort: 
+            return False                
+ 
 #---------------------------------------------------------------
 def Handle_option_1(user_inputs, output_lists):
     """ Get user status."""
@@ -2908,16 +3114,17 @@ def Handle_option_1(user_inputs, output_lists):
 
     # do task
     driver = Start_chrome_browser()
-    json_data, stats = Get_stats(driver, user_inputs, output_lists) 
-    if json_data is None or len(json_data) == 0:
-        printR(f'Error reading {user_inputs.user_name}\'s page. Please make sure a valid user name is used')
+    stats, error_message = Get_stats(driver, user_inputs, output_lists) 
+    if error_message:
+        printR(error_message)
+        Close_chrome_browser(driver)
         if user_inputs.use_command_line_args == False:
-            Show_menu(user_inputs)
+            Show_menu(user_inputs, error_message)
     
     # write result to html file, show it on browser
     print(f"Getting user's statistics ...")
     html_file =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
-    Write_string_to_text_file(Create_user_statistics_html(stats), html_file)
+    Write_string_to_text_file(Create_user_statistics_html(stats), html_file, 'utf-16')
     Close_chrome_browser(driver)
     Show_html_result_file(html_file)
 
@@ -2945,11 +3152,17 @@ def Handle_option_2(user_inputs, output_lists):
     # if user provided password then login (logged-in users can see the list galleries that feature theirs photos
     if user_inputs.password != '':
         if Login(driver, user_inputs) == False :
+            Close_chrome_browser(driver)
             return
     Hide_banners(driver)
     print(f"Getting {user_inputs.user_name}'s photos list ...")
-    output_lists.photos = Get_photos_list(driver, user_inputs)
+    output_lists.photos, error_message = Get_photos_list(driver, user_inputs)
     Close_chrome_browser(driver)
+    if error_message:
+        printR(error_message)
+        if len(output_lists.photos) == 0:
+            return
+
 
     # write result to csv, convert it to html, show html in browser
     if output_lists.photos is not None and len(output_lists.photos) > 0:
@@ -2982,6 +3195,7 @@ def Handle_option_3(user_inputs, output_lists):
     # if user provided password then login
     if user_inputs.password != '':
         if Login(driver, user_inputs) == False :
+            Close_chrome_browser(driver)
             return
     Hide_banners(driver)
     print(f"Getting the list of users who follow {user_inputs.user_name} ...")
@@ -3007,18 +3221,23 @@ def Handle_option_4(user_inputs, output_lists):
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followings_list is not None and len(output_lists.followings_list) > 0:
-        html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.html')
+        # find the latest html file on disk and show it
+        files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followings*.html")]
+        files.sort(key=lambda x: os.path.getmtime(x))
+        html_file = files[-1]
         if os.path.isfile(html_file):
-            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...')
+            printY(f'Results exist in memory and on disk. Showing the existing file:\n{os.path.abspath(html_file)} ...')
             Show_html_result_file(html_file) 
             return
 
     # do task
     driver = Start_chrome_browser()
     print(f"Getting the list of users that you are following ...")
-    output_lists.followings_list = Get_followings_list(driver, user_inputs)
+    output_lists.followings_list, error_message = Get_followings_list(driver, user_inputs)
     Close_chrome_browser(driver)
-
+    if error_message:
+        printR(error_message)
+        return
     # write result to csv, convert it to html, show html in browser
     if len(output_lists.followings_list) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
@@ -3040,6 +3259,7 @@ def Handle_option_5(user_inputs, output_lists):
     # if user provided password then login
     if user_inputs.password != '':
         if Login(driver, user_inputs) == False :
+            Close_chrome_browser(driver)    
             return
 
     try:
@@ -3072,7 +3292,7 @@ def Handle_option_6(user_inputs, output_lists):
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(DATETIME_FORMAT)
-    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
+    #csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
     html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
@@ -3084,17 +3304,22 @@ def Handle_option_6(user_inputs, output_lists):
  
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
+    #time.sleep(1)
     driver.get('https://500px.com/notifications')
     time.sleep(1)
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
     # abort the action if the target objects failed to load within a given timeout        
     if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
-        return None, None	
+        return	
 
-    Hide_banners(driver)        
-    print(f"Getting the last {user_inputs.number_of_notifications} notifications and the unique users in that list ...")
+    Hide_banners(driver)
+    if user_inputs.number_of_notifications == -1:
+        print(f"Getting the up to {MAX_NOTIFICATION_REQUEST} notifications and the unique users on that ...")
+    else: 
+        print(f"Getting the last {user_inputs.number_of_notifications} notifications and the unique users in that list ...")
 
     # do task   
     output_lists.notifications, output_lists.unique_notificators = Get_notification_list(driver, user_inputs, True)
@@ -3106,9 +3331,12 @@ def Handle_option_6(user_inputs, output_lists):
 
     Close_chrome_browser(driver)
     
+    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.notifications)}_notifications_{date_string}.csv')
+    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
+
     # write unique users list to csv. Convert it to html, show it in browser
     csv_file_unique_users  = os.path.join(output_lists.output_dir, \
-        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{user_inputs.number_of_notifications}_notifications_{date_string}.csv")
+        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{len(output_lists.notifications)}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  Write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
         Show_html_result_file(CSV_to_HTML(csv_file_unique_users, ignore_columns=['User Avatar', 'User Name', 'Photo Thumbnail', 'Photo Link']))     
     
@@ -3127,14 +3355,19 @@ def Handle_option_7(user_inputs, output_lists):
 
     # do task
     driver = Start_chrome_browser()
-    print(f"Check if the user {user_inputs.target_user_name} follows {user_inputs.user_name} ...")
-    result, detail_message = Does_this_user_follow_me(driver, user_inputs)
+    print(f"Check if user {user_inputs.target_user_name} follows {user_inputs.user_name} ...")
+    result, message = Does_this_user_follow_me(driver, user_inputs)
 
-    # show result on screen
     if result == True:
-        printG(f"User {user_inputs.target_user_name} follows {user_inputs.user_name} {detail_message} ")
+        printG(message)
     else:
-        printY(f"User {user_inputs.target_user_name} does not follow {user_inputs.user_name}")
+        printR(message) if 'User name not found' in message else printR(message)
+
+    ## show result on screen
+    #if result == True:
+    #    printG(f"User {user_inputs.target_user_name} follows {user_inputs.user_name} {detail_message} ")
+    #else:
+    #    printY(f"User {user_inputs.target_user_name} does not follow {user_inputs.user_name}")
         
     Close_chrome_browser(driver)
 
@@ -3148,12 +3381,13 @@ def Handle_option_8(user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
 
     print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo(s) of user {user_inputs.target_user_name} ...")
     
     # do task   
-    Like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False)
+    Like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False) 
     Close_chrome_browser(driver)
 
     # print summary report
@@ -3166,6 +3400,7 @@ def Handle_option_9(user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
     driver.get(user_inputs.gallery_href)
     time.sleep(3)
@@ -3192,6 +3427,7 @@ def Handle_option_10(user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
     try:
         driver.get(user_inputs.photo_href)
@@ -3205,10 +3441,10 @@ def Handle_option_10(user_inputs, output_lists):
     Hide_banners(driver)        
     print(f'Getting the list of users who liked this photo ...')
 
-    # do preliminary task
+    # do preliminary task: get the list of users who liked your given photo
     output_lists.like_actioners_list, dummy_file_name = Get_like_actioners_list(driver, output_lists)
     if len(output_lists.like_actioners_list) == 0: 
-        printG(f'The photo {photo_tilte} has no affection yet')
+        #printG(f'The photo {photo_tilte} has no affection yet')
         Show_menu(user_inputs)
         return 
     actioners_count = len(output_lists.like_actioners_list)
@@ -3217,10 +3453,15 @@ def Handle_option_10(user_inputs, output_lists):
                                                     # if this is set to False, then you will find 3 available photos and Like them 
 
     # do main task
-    for i, actor in enumerate(output_lists.like_actioners_list):
+    # we may have option to process only part of the users list. 
+    # Since the list may be quite large and we don't want to stretch the server by sending too many requests. 
+    #start_index = max(0, user_inputs.index_of_start_user)
+    #end_index   = min(start_index + user_inputs.number_of_users, len(output_lists.like_actioners_list) - 1)
+    #for i, actor in enumerate(output_lists.like_actioners_list[start_index : end_index]):  
+
+    for i, actor in enumerate(output_lists.like_actioners_list):  
         print(f'User {str(i+1)}/{actioners_count}: {actor.display_name}, {actor.user_name}')
-        if Like_n_photos_from_user(driver, actor.user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count, close_browser_on_error=False) == False:
-            continue
+        Like_n_photos_from_user(driver, actor.user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count, close_browser_on_error=False)
     Close_chrome_browser(driver)
 
     # print summary report
@@ -3233,11 +3474,17 @@ def Handle_option_11(user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser()
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
 
-    # after a success login, the user's the homefeed page will automatically open
-     
+    # after a success login, the user's the homefeed page will automatically open     
+    # we may consider this: abort the action if the photos fail to load within a given timeout    
+    #if not Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
+    #  return None, None	    
+  
     Hide_banners(driver) 
+ 
+    
     print(f"Like {user_inputs.number_of_photos_to_be_liked} photos from the {user_inputs.user_name}'s home feed page ...")
 
     # do task
@@ -3255,13 +3502,14 @@ def Handle_option_12(user_inputs, output_lists):
     driver = Start_chrome_browser()
     print(f'Getting the list of unique users in the last {user_inputs.number_of_notifications} notifications ...')
     if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
         return
     driver.get('https://500px.com/notifications')
     time.sleep(1)        
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     
     # abort the action if the target objects failed to load within a given timeout    
-    if not Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='finished')[0]:
+    if not Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
       return None, None	
 
     Hide_banners(driver)  
@@ -3274,14 +3522,11 @@ def Handle_option_12(user_inputs, output_lists):
     # do main task
     users_count = len(output_lists.unique_notificators)
     print(f"Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of each of {users_count} users on the list ...")
-    for i, item in enumerate(output_lists.unique_notificators):
-        name_pair = item.split(',')
+    for i, notification_element in enumerate(output_lists.unique_notificators):
+        name_pair = notification_element.split(',')
         if len(name_pair) > 3: 
             print(f' User {name_pair[0]}/{users_count}: {name_pair[2]}, {name_pair[3]}')
-            if Like_n_photos_from_user(driver, name_pair[3], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False) == False:
-                continue
-        else:
-            continue
+            Like_n_photos_from_user(driver, name_pair[3], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False)
     Close_chrome_browser(driver)
 
     # print summary report
@@ -3293,11 +3538,10 @@ def Handle_option_13(user_inputs, output_lists):
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     driver = Start_chrome_browser(["--kiosk", "--hide-scrollbars", "--disable-infobars"])
-    #driver = Start_chrome_browser(["--hide-scrollbars", "--disable-infobars"])
     #driver.maximize_window()
 
     # login if credentials are provided
-    if user_inputs.user_name is not  None and user_inputs.password is not None:
+    if user_inputs.user_name !='' and user_inputs.password != '':
         if Login(driver, user_inputs) == False :
             printR('Error logging in. Slideshow will be played without a user login.')  
         
@@ -3314,33 +3558,131 @@ def Handle_option_13(user_inputs, output_lists):
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f'The process took {time_duration} seconds') 
 #---------------------------------------------------------------
-# in progress
+#EXTRA OPTIONS
 def Handle_option_14(user_inputs, output_lists):
-    """Get following statuses of users that you are following."""
+    """Check/Update following statused of people you are following."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    driver = Start_chrome_browser()
-    print(f"Get the following statuses of the users that {user_inputs.user_name} is following ...")
+    date_string = time_start.replace(microsecond=0).strftime(DATE_FORMAT)
+    if user_inputs.number_of_users == -1:
+        message = f'Get the following statuses of all users that {user_inputs.user_name} is following'
+    else:
+        message = f'Get the following statuses of {user_inputs.number_of_users} users, starting from index {user_inputs.index_of_start_user + 1} ...'
+    print(message)
 
+    # Provide option whether to use the last Followings list on disk or to start from scratch
+    files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followings*.csv")]
+    files.sort(key=lambda x: os.path.getmtime(x))
+    if len(files) > 0:
+        print('Existing Followings list on disk:')
+        printY(f"{files[-1]}")
+        sel = input("Using this file? (y/n) > ")
+        # use the existing followings list
+        if sel =='y':
+            csv_file = files[-1]
+        # redo the followings list:        
+        else:
+            print(f"Getting {user_inputs.user_name}'s Followings list ...")
+            driver = Start_chrome_browser()
+            output_lists.followings_list = Get_followings_list(driver, user_inputs, output_lists)
+            Close_chrome_browser(driver)
+            # write result to csv
+            if len(output_lists.followings_list) == 0:
+                printR(f'User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
+                return ''
+            csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
+            if Write_users_list_to_csv(output_lists.followings_list, csv_file) == False:
+                printR(f'Error writing the output file\n:{csv_file}')
+                return ''
     # do task
-    Get_following_statuses(driver, user_inputs, user_inputs.index_of_start_user, user_inputs.number_of_users,  output_lists.followings_list )
+    driver = Start_chrome_browser()
+    Get_following_statuses(driver, user_inputs, output_lists, csv_file )
     Close_chrome_browser(driver)
+    Show_html_result_file(CSV_to_HTML(csv_file, ignore_columns=['User Avatar', 'User Name'])) 
 
     # print summary report
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f'The process took {time_duration} seconds') 
-    #---------------------------------------------------------------
+#---------------------------------------------------------------
+def Handle_option_15(user_inputs, output_lists, sort_column_header='No', ascending=True):
+    """Like n photos of m users from a given csv files, starting at a given index. 
+    There is option to process part of the list, by specifying the start index and the number of users   
+    """
+    time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.replace(microsecond=0).strftime(DATE_FORMAT)
 
+
+    # do main task
+    dframe = pd.read_csv(user_inputs.csv_file, encoding='utf-16')    
+    print(f"Like {user_inputs.number_of_photos_to_be_liked} photos from {user_inputs.number_of_users} users, starting from index {user_inputs.index_of_start_user} from the file:")
+    printG({user_inputs.csv_file})    
+    print(f'There are {dframe.shape[1]} columns:')
+    printG(list(dframe))
+    sort_header = input('Enter the desired sort column >')
+    if not sort_header:
+        sort_header = "No" 
+    sort_ascending = True
+    ans = input('Sort descending ?(y/n) >')
+    if ans == 'y':
+        sort_ascending = False
+    df = dframe.sort_values(sort_header, ascending = sort_ascending )   
+    
+    driver = Start_chrome_browser()
+    if Login(driver, user_inputs) == False :
+        Close_chrome_browser(driver)
+        return
+    count = 0
+
+    # if requesting all items:
+    if user_inputs.index_of_start_user == -1:
+        start_index = 0
+        end_index = df.shape[0] -1
+    else:
+        # make sure the user's inputs stay within the size of the csv file 
+        start_index = min(user_inputs.index_of_start_user, df.shape[0] -1)
+        end_index   = min(user_inputs.index_of_start_user + user_inputs.number_of_users, df.shape[0] -1)
+
+    for index, row in df.iloc[start_index:end_index].iterrows():
+        user_inputs.target_user_name = row["User Name"]
+        count += 1
+    
+        # process each user in datafram3
+        print(f'User #{count}: {row["Display Name"]}  at row {row["No"]}   ({row[sort_header]} likes):')
+        Like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False)
+
+    Close_chrome_browser(driver)
+ 
+    # print summary report
+    time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
+    print(f'The process took {time_duration} seconds') 
+#---------------------------------------------------------------
+def Save_avatar(url, path):
+    """ Save the 500px user avatar to the given path on disk. 500px avatar file has this format "stock-photo-[user ID].jpg". 
+        We will extracted it automatically from the header, and use just the id for filename. We also return the id
+     
+    This function is meant to be called repeatedly in the loop, so for better performance, we don't chech the existance of the given path
+    We have to make sure the given path is valid prio to calling this. 
+    """ 
+    r = requests.get(url, allow_redirects=True)
+    #os.makedirs(path ,mode=0o777, exist_ok=True)
+    try:
+        file_name =  r.headers.get('content-disposition').replace('filename=stock-photo-','')
+    except:
+        # default avatar if user does not have one: https://pacdn.500px.org/userpic.png
+        file_name = url.split('/')[-1]
+
+    full_file_name = os.path.join(path + "\\", file_name)
+    if not os.path.isfile(full_file_name):
+        with open(full_file_name, 'wb+') as f:
+            f.write(r.content)
+    return os.path.splitext(file_name)[0]
+
+#---------------------------------------------------------------
 def main():
     os.system('color')
     driver = None
 
-    output_lists = Output_data()
-    user_inputs = Define_and_read_arguments()
-    
-    if  user_inputs.use_command_line_args == False:
-        Show_menu(user_inputs)
- 
+
     # declare a dictionary so that functions can be referred to from a string from "1" to "14"
     Functions_dictionary = {   
             "1" : Handle_option_1, 
@@ -3356,9 +3698,15 @@ def main():
             "11": Handle_option_11,
             "12": Handle_option_12, 
             "13": Handle_option_13,  
-            "14": Handle_option_14 }
+            "14": Handle_option_14,
+            "15": Handle_option_15}
 
-  
+    output_lists = Output_data()
+    user_inputs = Define_and_read_command_line_arguments()
+ 
+    if  user_inputs.use_command_line_args == False:
+        Show_menu(user_inputs)  
+   
     while user_inputs.choice != 'q':
         #restart for different user
         if user_inputs.choice == 'r': 
@@ -3388,10 +3736,7 @@ def main():
     
     sys.exit()
 
-
 #---------------------------------------------------------------
 if __name__== "__main__":
-  main()
-
-
+    main()
 
