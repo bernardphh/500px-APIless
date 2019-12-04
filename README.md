@@ -107,16 +107,16 @@ If not, make sure the location of python executable and the ChromeDriver.exe are
 - In the slideshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - [x] Handling more exceptions
-   - [x] Use WebDriverWait whenever possible, instead of time.sleep()
+   - [x] Using WebDriverWait whenever possible, instead of time.sleep()
    - [x] Putting images thumbnails in the result files
-   - [ ] Add ChromeCast support to slideshow
-   - [x] Support command-line arguments
-   - [ ] Play slideshow in random order
+   - [ ] Adding ChromeCast support to slideshow
+   - [x] Supporting command-line arguments
+   - [ ] Playing slideshow in random order
    - [ ] Making a GUI 
    - [ ] Automatic data analysis
    - [ ] Sorting a column in the output HTML file is too long to be practical, especially if the table is big (200+ rows). 
          Possible solutions: Break the long html into pages, sort the list before creating html or doing it on a GUI.
-   - [ ] Use multiprocessing (on processing already downloaded data, not on requests to servers)      
+   - [ ] Using multiprocessing (on processing already downloaded data, not on requests to servers)      
 
 Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
 I left abundant comments in the code to make the intention clear, just in case someone wants to chip in.
@@ -141,5 +141,5 @@ abusing or over-usage may result in your 500px account being banned.
 The servers don't like scraping and always try their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. 
 For obvious reason, such measures are not included in the code.
 
-**Happy scraping ! (without being caught:)** 
+**Happy scraping !** (without being caught, of course :)* 
 
