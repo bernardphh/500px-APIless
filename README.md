@@ -73,6 +73,8 @@ If Python and Selenium are installed properly, you should be able to double-clic
 
 If not, make sure the location of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python script and type:
  python.exe 500px-APIless.py
+ 
+Also make sure the folder Output is extracted to the same location where the py script is. We need the css and javascript files from this folder for viewing the result html files.
 
 <br/>
 
@@ -141,5 +143,5 @@ abusing or over-usage may result in your 500px account being banned.
 The servers don't like scraping and always try their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. 
 For obvious reason, such measures are not included in the code.
 
-**Happy scraping !** (without being caught, of course :)* 
+**Stay clean, don't get caught and Happy scraping !** )* 
 
