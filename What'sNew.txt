@@ -1,0 +1,62 @@
+Dec 18, 2019:
+- used the external files for CSS and Javascripts:
+		CSS to  [running folder]/css/styles.css  and 
+		JS  to  [running folder]/javascripts/scripts 
+
+- added option to view the result html off-line, by saving the user avatars and photo thumbnails on disk, at these default locations:
+		User avatar:  		./avatars
+		Photo thumbnails:	./thumbnails
+  CON: even the avatar and thumnails images are very small in size, the process will definitely takes longer time to complete
+  PRO: when viewing the result html file, for example, an html file with 1000 notification items on it, we would send 2000 images request to
+       the server. This wouldn't be so nice, would it? Using local images will bring the server request to zero.  
+
+- provided the easier way to change some settings for the whole script:
+		HEADLESS_MODE = True                             
+		USE_LOCAL_THUMBNAIL = True                       
+		OUTPUT_DIR =  [running folder] / Output
+		
+- We no longer close the Chrome Driver after finishing an action. We keep it alive so that 
+  a logged in session is still in affect.
+
+---------------------------
+...
+---------------------------
+
+Aug 3 2019:
+- Adapted to 500px structure changes (after the famous "scheduled maintenance"). Affected option: 2. Get photos list
+
+  The photo detail is no longer provided in the convenient format (json). We have to do harder work to get the data.
+  We now also added one more info from a photo: the list of galleries, with link, that featured the photo.
+
+---------------------------
+
+Jul 15, 2019:
+- Get photo statistics data: Views, Likes, Comments, Gallery count, Highest Pulse, Current Rating, Upload date, Tags list
+- In the HTML file, provided option to sort the data, ascending or descending, on each column of the table
+---------------------------
+
+Jul 2 2019:
+ - added column sort (asc, desc) when click on a talbe column
+ - got more statistics on a photo
+---------------------------
+
+Jun 9 2019:
+- Added thumbnails image on the output files
+---------------------------
+
+Jun 3 6 2019 2nd:
+- support NSFW content when play slideshow if user logins
+- made use of getPass module to mask the password entered
+
+---------------------------
+
+Jun3 6 2019:
+Changed Output folder location from current (running) directory to %PROGRAMDATA%\500px_APIless\Output (C:\ProgramData\500px_Apiless\Output)
+---------------------------
+june 4 2019:
+- Catched more Selenium exceptions: TimeoutException, NoSuchElementException
+- Added new option: check if a user is following you.
+- Merge two options 6, 7 into one: When we get the notifications list, we automatically filter the list to make another list
+  containing just the unique users, along with its count of appearances.
+- Showed process time for each task
+- Minimized the usage of time.sleep() to improve performance.

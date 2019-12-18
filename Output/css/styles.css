@@ -1,0 +1,78 @@
+/* styles.css*/
+
+table {
+	border-collapse: collapse; 
+	width: 100%; 
+	table-layout:fixed;  
+	text-align:center;
+}
+table tr:nth-child(even){
+	background-color: #f2f2f2;
+}
+table tr:hover {
+	background-color: #ddd;
+}
+table, th, td {
+	border: 1px solid #ddd; 
+	padding: 6px; 
+	word-wrap: break-word;
+}
+th {
+	background-color: #248f8f;
+	color: white; 
+	font-size: 16px; 
+	height:65;
+}
+img { 
+	height:50px; 
+	width: 50px; 
+	border-radius: 25px;
+}
+p {
+	line-height:1;
+}
+div {
+	text-align:left;
+}
+
+.photo{
+	height:50px; 
+	width: 80px; 
+	style="vertical-align:top"; 
+	border-radius: 6px; 
+}
+.alignLeft {
+	text-align:left;
+}       
+.w40 {
+	width:40px;
+} 
+.w80 {
+	width:70px;
+} 
+.w100 
+{
+	width:100px;
+} 
+.w120 {
+	width:120px;
+} 
+.w200 {
+	width:200px;
+}
+.w210 {
+	width:210px;
+}
+.hdr_text {
+	float:left; 
+	vertical-align:top 
+	display:table-cell; 
+	height:100%;
+}
+.hdr_arrows {
+	float:right; 
+	position:relative; 
+	right:1px; 
+	top:32px; 
+	font-size:60%;
+}
