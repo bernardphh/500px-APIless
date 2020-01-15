@@ -1,3 +1,18 @@
+Jan 14 2019:
+- Moved classes definitions to a separated module (apiless.py) 
+- Moved constants, configurable settings to a separated module (config.py)
+- Added option to profile a function
+- Added option to check the internet connection and to check whether the 500px server is down or not 
+- Created local database using sqlite library 
+- Added a module to interact with database
+- Renamed classes and function names according to following conventions:
+	- classes   : mixedCase, CapWords with initial lowercase character
+	- functions : lowercase, with words separated by underscores
+- Added column "Author Name" to photo list csv
+- In slidesshow, suppress the popups 'Save password...' and 'Disable Developer Mode Extension'
+- Bug fixes and performance improvements
+---------------------------
+
 Dec 18, 2019:
 - used the external files for CSS and Javascripts:
 		CSS to  [running folder]/css/styles.css  and 
