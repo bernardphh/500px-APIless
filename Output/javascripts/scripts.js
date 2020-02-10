@@ -13,16 +13,16 @@ function sortTable(columnIndex, special_sort) {
         rows = table.rows;
         for (i = 1; i < (rows.length - 1); i++) {
             shouldSwitch = false;
-			x = rows[i].getElementsByTagName("TD")[columnIndex];
+			      x = rows[i].getElementsByTagName("TD")[columnIndex];
             y = rows[i + 1].getElementsByTagName("TD")[columnIndex];
 			
             if (special_sort == "sortByDisplayName"){
-			    x =x.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
-			    y =y.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
+			         x =x.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
+			         y =y.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
             }
-			else if (special_sort == "sortByPhotoTitle"){
-			    x =x.getElementsByTagName("DIV")[1].innerHTML 
-			    y =y.getElementsByTagName("DIV")[1].innerHTML 
+			      else if (special_sort == "sortByPhotoTitle"){
+			         x =x.getElementsByTagName("DIV")[1].innerHTML 
+			         y =y.getElementsByTagName("DIV")[1].innerHTML 
             }
 			else
 			{
@@ -76,7 +76,7 @@ function sortTable(columnIndex, special_sort) {
     }
 	var num_cols = table.rows[0].cells.length;	
 	for ( i=0; i < num_cols; i++) {
-		if ( i != n) {
+		if ( i != columnIndex) {
 			document.getElementById("arrow-up-" + i).style.display = "block";
 			document.getElementById("arrow-down-" + i).style.display = "block";				
 		}
