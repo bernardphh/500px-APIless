@@ -2,16 +2,16 @@
 # module containing all the classes used in 500px_apiless.py
 
 import config
-#from enum import Enum
+from enum import Enum
 import os
 from os import listdir
 from os.path import isfile, join
 
 
-class user:
+class User:
     """ Represents a user. It could be the main user(ie. me, the logged in user), or a target user whose photos we want to auto-like, or a user who had interaction with me(liked, commented, followed)
        
-        - AVATAR_LOCAL : The full file name of the avatar image file, if we decide to save it on disk
+        - AVATAR_LOCAL : The file name of the avatar image file saved to disk
         - FOLLOWING_STATUS is n/a for the main user, if not, it could be either "following" or "not follow"
     """
     def __init__(self, order = '', avatar_href = '', avatar_local = '', display_name = '', user_name = '', id = '0', number_of_followers = '0', following_status = ''):
@@ -23,24 +23,13 @@ class user:
         self.id = id
         self.number_of_followers = number_of_followers
         self.following_status = following_status
-    
-    def to_dict(self):
-        return {
-            'No': self.order,
-            'Avatar Href': self.avatar_href,
-            'Avatar Local': self.avatar_local,
-            'Display Name': self.display_name,
-            'User Name': self.user_name,
-            'ID': self.id,
-            'Followers': self.number_of_followers,
-            'Status': self.following_status
-        }
+     
 #--------------------------------------------------
-class photoStats:
+class PhotoStats:
     """ Photo statistics info.
         - TAGS is the comma-separated strings containing all tags set on the photo    
     """
-    def __init__(self,  upload_date = '', views_count=0, votes_count=0, collections_count=0, comments_count=0, highest_pulse=0, rating=0, tags='' ):
+    def __init__(self,  upload_date = '', views_count=0, votes_count=0, collections_count=0, comments_count=0, highest_pulse=0, rating=0, category='', tags='' ):
         self.upload_date  = upload_date 
         self.views_count = views_count
         self.votes_count = votes_count 
@@ -48,32 +37,34 @@ class photoStats:
         self.comments_count = comments_count 
         self.highest_pulse = highest_pulse
         self.rating = rating
+        self.category = category
         self.tags = tags
 #--------------------------------------------------
-class photo:
+class Photo:
     """ Represent a photo info.
 
     - ORDER is the ascending number with the latest uploaded photo being 1
-    - STATS is an object of type photoStats()
+    - STATS is an object of type PhotoStats()
     - THUMBNAIL_HREF is the link to the photo thumbnail
-    - THUMBNAIL_LOCAL is the full file name of the thumbnail image, dowmloaded from the link thumbnail_href and saved on disk 
-    - GALLERIES is a list containing the links to all the galleries that featured the photo
+    - THUMBNAIL_LOCAL is file name of the thumbnail image, dowmloaded from the link thumbnail_href and saved on disk 
+    - GALLERIES is a comma separated string containing the links to all the galleries that featured the photo
     """
-    def __init__(self, author_name= ' ', order= ' ', id= ' ', title= ' ', href= ' ', thumbnail_href= ' ', thumbnail_local= ' ', galleries= ' ', stats= photoStats()):
+    def __init__(self, author_name= ' ', order= ' ', id= ' ', title= ' ', href= ' ', thumbnail_href= ' ', thumbnail_local= ' ', category= ' ', galleries= ' ', stats= PhotoStats()):
         self.author_name = author_name
         self.order = order  
         self.id = id
         self.title = title
         self.href = href
         self.thumbnail_href = thumbnail_href        
-        self.thumbnail_local = thumbnail_local        
+        self.thumbnail_local = thumbnail_local    
+        self.category = category
         self.galleries = galleries
         self.stats = stats
 
     def __iter__(self):
-        yield (self.author_name, self.order, self.id, self.title, self.href, self.thumbnail_href, self.thumbnail_local, self.galleries, self.stats )
+        yield (self.author_name, self.order, self.id, self.title, self.href, self.thumbnail_href, self.thumbnail_local, delf.category, self.galleries, self.stats )
 #--------------------------------------------------
-class notification:
+class Notification:
     """ Represent a notification object.
         
         - ACTOR is an object of type user(), on which we will make use only 3 members: avatar_href, display_name, username
@@ -82,16 +73,18 @@ class notification:
         - TIMESTAMP is the time when the notification happened
         - STATUS is the following status of the main user toward the actor, ie. 'Following'  or 'Not follow'
         """
-    def __init__(self, order, actor = user(), the_photo = photo(),  content = '', timestamp = '', status = ''): 
-        self.order = order
+    def __init__(self, order, actor = None, the_photo = None,  content = '', timestamp = '', status = ''): 
+        self.order = order      
+        self.actor = User() if actor is None else actor       
+        self.the_photo = Photo() if the_photo is None else the_photo 
         self.actor = actor
         self.content = content
         self.the_photo = the_photo        
         self.timestamp = timestamp
         self.status = status
 #--------------------------------------------------
-class userStats:
-    """ Represent basic statistics of a user. Object of the class is considered mutabble and therefore can be passed as reference"""
+class UserStats:
+    """ Represent basic statistics of a user."""
     def __init__(self, display_name='', user_name='', id='', location='', affection_note='', following_note='', affections_count='', views_count='', 
                  followers_count='', followings_count='', photos_count='', galleries_count='', registration_date='', last_upload_date='', user_status=''):
         self.display_name = display_name
@@ -110,7 +103,7 @@ class userStats:
         self.last_upload_date = last_upload_date
         self.user_status = user_status
 #--------------------------------------------------
-class userInputs():
+class UserInputs():
     """ Represent the input entered by the user. 
     
     Choice is an character string representing available options: [1-13] or 'r','q' . The default value is zero which means commnand line arguments will not be used 
@@ -144,7 +137,7 @@ class userInputs():
         self.photo_href                     = ''
         self.gallery_href                   = ''
         self.gallery_name                   = ''
-        self.number_of_photos_to_be_liked   =  2
+        self.number_of_photos_to_be_liked   = 2
         self.index_of_start_photo           = 1
         self.number_of_notifications        = 200
         self.time_interval                  = 3
@@ -153,7 +146,7 @@ class userInputs():
         self.csv_file                       = ''
         self.db_path                        = ''
 #--------------------------------------------------
-class outputData():
+class OutputData():
     """ Represent all the output lists and data"""
 
     def __init__(self, output_dir = '', avatars_dir = '', thumbnails_dir = '', 
@@ -167,7 +160,7 @@ class outputData():
         self.like_actioners_list = [] if like_actioners_list is None else like_actioners_list     
         #self.avatars_list = [] if avatars_list is None else avatars_list     
         #self.thumbnails_list = [] if thumbnails_list is None else thumbnails_list     
-        self.stats = userStats()  
+        self.stats = UserStats()  
         
         output_dir =  config.OUTPUT_DIR 
         os.makedirs(output_dir, exist_ok = True)
@@ -191,16 +184,15 @@ class outputData():
         self.followers_list = None  
         self.followings_list = None 
         self.like_actioners_list= None
-        self.stats = userStats() 
+        self.stats = UserStats() 
+
 #--------------------------------------------------
-        
-# not used for now
-#class Output_file_type(Enum):
-#   """ Enum representing 5 types of output list"""
-#   NOT_DEFINED          = 0
-#   FOLLOWERS_LIST       = 1                   
-#   FOLLOWINGS_LIST      = 2                  
-#   PHOTOS_LIST          = 3              
-#   NOTIFICATIONS_LIST   = 4
-#   UNIQUE_USERS_LIST    = 5        # Unique users with appearance count, extracted from Notifications list
-#   STATISTICS_HTML_FILE = 6
+class CSV_type(Enum):
+    """ Enum representing 5 types of output list"""
+    Not_defined          = 0
+    Followers_list       = 1                   
+    Followings_list      = 2                  
+    Photos_list          = 3              
+    Notifications_list   = 4
+    Unique_users_list    = 5        # Unique users with appearance count, extracted from Notifications list
+    Like_actors_list     = 6

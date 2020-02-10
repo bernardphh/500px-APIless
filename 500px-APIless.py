@@ -21,17 +21,13 @@ import os, sys, time, datetime, re, math, csv, json, codecs, argparse, errno
 from time import sleep
 from os import listdir
 from os.path import isfile, join
+from dateutil.relativedelta import relativedelta
 import multiprocessing as mp  
-
-#import traceback
-#from pprint import pprint
-#from enum import Enum
-#from itertools import cycle
-#from lxml.html import fromstring
-
+from threading import Thread
+import queue
 
 def profile(func):
-    """A decoratir that users cProfle to profile a function"""
+    """A decoration that users cProfle to profile a function. Add the line '@profile' before a function to profile it"""
     import cProfile, pstats, io
 
     def inner(*args, **kwargs):
@@ -55,15 +51,22 @@ def printC(text): print(f"\033[96m {text}\033[00m") #; logging.info(text)
 def printB(text): print(f"\033[94m {text}\033[00m") #; logging.info(text) 
 
 #---------------------------------------------------------------
-# add this decoration before a function to profile it
+# add this decoration to profile the function
 #@profile
-def start_chrome_browser(options_list = [], headless_mode = True):
-    """ use selenium webdriver to start chrome, with various options. Ex ["--start-maximized", "--log-level=3"] """
+def start_chrome_browser(options_list, headless_mode, my_queue = None):
+    """ Start Chrome Web driver with given options.
+        Suppress the default log messages. 
+        Put the result chrome driver in the queue, if given, so that it can be retrieved in an multithread/multiprocessing environments"""
 
+    driver = None
     chrome_options = Options()
     for option in options_list:
         chrome_options.add_argument(option)   
+    
+    # suppress chrome log info
     chrome_options.add_argument('--log-level=3')   
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+
     if headless_mode:
         print('Starting Chrome browser without the graphical user interface ...')
         chrome_options.add_argument("--headless") 
@@ -71,24 +74,30 @@ def start_chrome_browser(options_list = [], headless_mode = True):
         printY('DO NOT INTERACT WITH THE CHROME BROWSER. IT IS CONTROLLED BY THE SCRIPT AND  WILL BE CLOSED WHEN THE TASK FINISHES')
         chrome_options.add_argument("--window-size=800,1000")
     driver = webdriver.Chrome(options=chrome_options)
-    return driver
+
+    if my_queue is None:
+        return driver
+    else:
+        my_queue.put(driver)
 
 #---------------------------------------------------------------
 def has_server_connection(driver, server_url):
-    """ Check internet connection and whether the 500px server is down or not
-        Print error message if the result on negative result """
+    """ Check the internet connection and check whether a given server is down or not.
+        For 500px it it https://500px.com
+        Print error message on negative result """
 
     OK = True
     try:
         driver.get(server_url)
+        # we aim at this element on the chrome default page on 'No internet connection' error
         ele = driver.find_element_by_xpath('//*[@id="main-message"]/h1/span')
         if ele is not None and ele.text == 'No internet':
             printR('No internet connection')
             return not OK
-        else:
-            if requests.get(server_url).status_code != 200:
-                printR(f'Error connecting to {server_url}')
-                return not OK
+        
+        if requests.get(server_url).status_code != 200:
+            printR(f'Error connecting to {server_url}')
+            return not OK
     except: 
         return OK
 #---------------------------------------------------------------
@@ -121,10 +130,9 @@ def close_chrome_browser(chrome_driver):
         pass
 
 #---------------------------------------------------------------
-def close_popup_windows(chrome_driver):
-    """  close the popup windows, if any """
+def close_popup_windows(chrome_driver, close_ele_class_names):
+    """  Close the popup windows, specified by the given class names, ignoring exceptions, if any"""
 
-    close_ele_class_names = ['close', 'ant-modal-close-x']
     for class_name in close_ele_class_names:
         close_ele = check_and_get_ele_by_class_name(chrome_driver, class_name) 
         if close_ele:
@@ -133,7 +141,6 @@ def close_popup_windows(chrome_driver):
             except:
                 pass
  
-
 #---------------------------------------------------------------
 def create_user_statistics_html(stats):
     """ write user statistic object stats to an html file. """
@@ -174,13 +181,13 @@ def write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Author Name', 'ID', 'Photo Title', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Views', 'Likes', 'Comments', 'Featured In Galleries', 'Highest Pulse', 'Rating', 'Date', 'Tags'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Author Name', 'ID', 'Photo Title', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Views', 'Likes', 'Comments', 'Featured In Galleries', 'Highest Pulse', 'Rating', 'Date', 'Category','Tags'])  
             writer.writeheader()
             for i, a_photo in enumerate(list_of_photos):
                 writer.writerow({'No' : str(a_photo.order), 'Author Name': a_photo.author_name, 'ID': str(a_photo.id), 'Photo Title' : str(a_photo.title), 'Href' :a_photo.href, 'Thumbnail Href': a_photo.thumbnail_href, \
                                  'Thumbnail Local' : a_photo.thumbnail_local, 'Views': str(a_photo.stats.views_count), 'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), \
                                  'Featured In Galleries': str(a_photo.galleries), 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), \
-                                 'Date': str(a_photo.stats.upload_date), 'Tags': a_photo.stats.tags}) 
+                                 'Date': str(a_photo.stats.upload_date), 'Category': a_photo.stats.category, 'Tags': a_photo.stats.tags}) 
             printG(f"List of {user_name}\'s {len(list_of_photos)} photo is saved at:\n {os.path.abspath(csv_file_name)}")
         return True
 
@@ -198,7 +205,7 @@ def write_users_list_to_csv(users_list, csv_file_name):
     """ Write the users list to a csv file with the given  name. Return True if success.h
     
     The users list could be one of the following: followers list, friends list or unique users list. 
-    If the file is currently open, give the user a chance to close it and come back to retry
+    If the file is currently open, give the user a chance to close the file and retry
     """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:  # could user utf-16be
@@ -607,11 +614,34 @@ def get_stats(driver, user_inputs, output_lists):
         time_stamp = datetime.datetime.now().replace(microsecond=0).strftime("%Y_%m_%d__%H_%M_%S")
         write_string_to_text_file(jason_string, os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_json_{time_stamp}.txt'))
 
-    stats = apiless.userStats(json_data['fullname'], user_inputs.user_name, json_data['id'], location, 
+    stats = apiless.UserStats(json_data['fullname'], user_inputs.user_name, json_data['id'], location, 
                        affection_note, following_note, json_data['affection'], views_count, json_data['followers_count'], json_data['friends_count'], 
                        json_data['photos_count'], json_data['galleries_count'], json_data['registration_date'][:10], last_upload_date, user_status)
     return stats, ''
       
+#---------------------------------------------------------------
+def get_user_id_from_user_home_page(driver, user_name):
+    """ Extract the user id from the user home page """
+
+    user_id = 0
+    success, message = open_user_home_page(driver, user_name)
+    if not success:
+        printR(message)
+        return user_id
+  
+    # abort the action if the target objects failed to load within a given timeout
+    success, innerHtml = finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')
+    if not success:
+        printR(f"Error loading user {user_inputs.user_name}'s photo page")
+        return  user_id
+    try:
+        i = innerHtml.find('"userdata"') 
+        j = innerHtml.find('"username":', i)        
+        user_id = innerHtml[i + 17 : j - 1]
+    except:
+        printR(f"Error extracting user {user_inputs.user_name}'s id")
+    return user_id
+
 #---------------------------------------------------------------
 def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele, user_name, user_password, thumbnails_list, thumbnails_dir):
     """Extract photo info from web element, return a photo object"""
@@ -619,7 +649,8 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
     update_progress(index / (items_count -1), f'    - Extracting  {index + 1}/{items_count} photos:')
     # reset variables
     photo_id, title, photo_thumbnail_href, photo_thumbnail_local = '', '0', '', ''
-        
+    photo_stats = apiless.PhotoStats()        
+    
     # get photo link, 
     photo_href = r'https://500px.com' + photo_link_ele.attrib["href"]
 
@@ -639,7 +670,7 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
                 photo_thumbnail_local = save_photo_thumbnail(photo_thumbnail_href, thumbnails_dir )
 
     # open each photo page to get photo statistics
-    time_out = 40
+    time_out = 30
     id = ''
     galleries_list = []
     order = index + 1        
@@ -648,46 +679,48 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
         #time.sleep(random.randint(1, 5) / 10)
         info_box = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
     except  TimeoutException:
-        # log error, add whatever available of the photo, then jumpt to the next photo
-        printR(f'Time out ({time_out}s). Ignoring photo #{index + 1}, {title}!' )
-        #return apiless.photo(apiless.user(), id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, stats = apiless.photoStats() ) 
-        return apiless.photo(author_name = user_name, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, stats = apiless.photoStats() ) 
+        # log error, add the current photo with what are extracted so far, then go on with the next photo
+        printR(f'Time out ({time_out}s). Photo #{index + 1}, {title} will have incomplete info')
+        return apiless.Photo(author_name = user_name, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, 
+                             thumbnail_local = photo_thumbnail_local, stats = photo_stats ) 
 
-    #upload date
+    #category  
+    category_ele = driver.find_element_by_xpath("//span[contains(.,'Category')]")
+    if category_ele:
+        photo_stats.category  = get_web_ele_text_by_xpath(category_ele, '../following-sibling::a' ) 
+
+    #upload date    //*[@id="modal_content"]/div/div/div[2]/div/div[2]/div[3]/div[1]/div[2]/p/span
     upload_date = get_web_ele_text_by_xpath(info_box, '//div[3]/div[1]/div/p/span' )
+        
     if upload_date and ('ago' not in upload_date):
         try:
             dt = datetime.datetime.strptime(upload_date, "%b %d, %Y")
-            upload_date = dt.strftime("%Y %m %d")
+            photo_stats.upload_date = dt.strftime("%Y %m %d")
         except:
             printR(f'Error converting date-time string: {upload_date}, on photo: {title}')
-            return apiless.photo(author_name = user_name, order = order, id = photo_id, title = title, href = photo_href, 
-                                thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries='', stats = apiless.photoStats() )      
 
     #views count
-    views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span').replace(',','').replace('.','')      
+    photo_stats.views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span').replace(',','').replace('.','')      
                                           
     # highest pulse
-    highest_pulse =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
+    photo_stats.highest_pulse =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
         
     # Get votes (likes) count
     try:
         photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
-    except  TimeoutException:
-                 
-        # log error, add whatever available of the photo, then jumpt to the next photo
-        printR(f'Time out ({time_out}s). Ignoring photo #{index + 1}, {title}!' )
-        return apiless.photo(apiless.user(), id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, 
-                                    stats = apiless.photoStats(upload_date = upload_date, views_count = views_count, highest_pulse = highest_pulse) ) 
+    except  TimeoutException:               
+        printR(f'Time out ({time_out}s) getting votes count. Photo #{index + 1}, {title}.')
 
-    votes_count = photo_likes_count_ele.text.replace(',','').replace('.','')
+    # votes count
+    photo_stats.votes_count = photo_likes_count_ele.text.replace(',','').replace('.','')
 
     # comments count
-    comments_count =  get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0].replace(',','').replace('.','')
+    photo_stats.comments_count =  get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0].replace(',','').replace('.','')
 
-    #tags
+    #tags   
     tags = []
-    container =  check_and_get_ele_by_xpath(info_box, '//div/div[2]/div[3]/div[6]')
+    #container =  check_and_get_ele_by_xpath(info_box, '//div/div[2]/div[3]/div[7]')
+    container = check_and_get_ele_by_xpath(category_ele, '../../following-sibling::div')
     if container is not None:
         a_eles = check_and_get_all_elements_by_tag_name(container, 'a')
         if a_eles is not None:
@@ -695,12 +728,13 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
                 tag = item.text                  
                 if tag is not '': tags.append(tag)
             tags.sort()
+            photo_stats.tags =  ",".join(tags)
 
     # get galleries list, if user logged in
-    if user_password is not '':
+    if user_password:
         view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
         if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
-            collections_count = 0
+            photo_stats.collections_count = 0
         else:
             view_all_ele[0].location_once_scrolled_into_view
             view_all_ele[0].click()         
@@ -719,13 +753,9 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
                             if a_ele is  not None:
                                 galleries_list.append(a_ele.get_attribute('href'))
 
-    statistics = apiless.photoStats(upload_date = upload_date, views_count = views_count, votes_count = votes_count, collections_count = 0, 
-                                comments_count = comments_count, highest_pulse = highest_pulse,rating = 0, tags = ",".join(tags) )
- 
-    a_photo = apiless.photo(author_name = user_name, order = order, id = photo_id, title = title, href = photo_href, 
-                           thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries = ",".join(galleries_list), stats = statistics )    
-    print(a_photo)
-    return a_photo
+    #print(photo_stats.__dict__)
+    return apiless.Photo(author_name = user_name, order = order, id = photo_id, title = title, href = photo_href, 
+                        thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries = ",".join(galleries_list), stats = photo_stats )  
 
 #---------------------------------------------------------------
 #@profile
@@ -735,7 +765,7 @@ def get_photos_list(driver, user_inputs, output_lists):
     Process: 
     - Open user home page, scroll down until all photos are loaded
     - Make sure the document javascript is called to get the full content of the page
-    - Extract photo data: no, id, photo title, href, thumbnail, views, likes, comments, galleries, highest pulse, rating, date, tags
+    - Extract photo data: no, id, photo title, href, thumbnail, views, likes, comments, galleries, highest pulse, rating, date, category, tags
     """
 
     photos_list = []
@@ -763,8 +793,6 @@ def get_photos_list(driver, user_inputs, output_lists):
     if not success:
         return [], f"Error loading user {user_inputs.user_name}'s photo page"
 
-    #if config.DEBUG:
-    #     Write_string_to_text_file(str(innerHtml.encode('utf-8')), user_inputs.user_name + '_innerHTML.txt')
     page = html.document_fromstring(innerHtml)
 
     #extract photo title and href (alt tag) using lxml and regex
@@ -778,122 +806,9 @@ def get_photos_list(driver, user_inputs, output_lists):
 
     # Create the photos list
     for i in range(items_count): 
-        update_progress(i / (items_count -1), f'    - Extracting  {i + 1}/{items_count} photos:')
-        # reset variables
-        photo_id, title, photo_thumbnail_href, photo_thumbnail_local = '', '0', '', ''
-        
-        # get photo link, 
-        photo_href = r'https://500px.com' + photo_link_eles[i].attrib["href"]
-
-        # photo id
-        photo_id  =  re.search('\/photo\/(\d+)', photo_href).group(1)
-
-        # title and thumbnail 
-        if i < len(img_eles):
-            title = img_eles[i].attrib["alt"]
-
-            photo_thumbnail_href = img_eles[i].attrib["src"]
-            # save the photo thumbnail to disk
-            if config.USE_LOCAL_THUMBNAIL:
-                photo_thumbnail_local = photo_id + '.jpg'
-                if not photo_thumbnail_local in  output_lists.thumbnails_list:
-                    #time.sleep(random.randint(5, 10) / 10)  
-                    photo_thumbnail_local = save_photo_thumbnail(photo_thumbnail_href, output_lists.thumbnails_dir )
-
-        # open each photo page to get photo statistics
-        time_out = 40
-        id = ''
-        galleries_list = []
-        order = i + 1        
-        try:  
-            driver.get(photo_href)
-            time.sleep(random.randint(1, 5) / 10)
-            info_box = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
-        except  TimeoutException:
-            # log error, add whatever available of the photo, then jumpt to the next photo
-            printR(f'Time out ({time_out}s). Ignoring photo #{i + 1}, {title}!' )
-            photos_list.append(apiless.photo(author_name = user_inputs.user_name, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, 
-                                             thumbnail_local = photo_thumbnail_local, stats = apiless.photoStats() ) )
-            continue
-
-        #upload date
-        upload_date = get_web_ele_text_by_xpath(info_box, '//div[3]/div[1]/div/p/span' )
-        if upload_date and ('ago' not in upload_date):
-            try:
-                dt = datetime.datetime.strptime(upload_date, "%b %d, %Y")
-                upload_date = dt.strftime("%Y %m %d")
-            except:
-                printR(f'Error converting date-time string: {upload_date}, on photo: {title}')
-                this_photo = apiless.photo(author_name = user_inputs.user_name, order = order, id = photo_id, title = title, href = photo_href, 
-                                    thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries='', stats = apiless.photoStats() )      
-                photos_list.append(this_photo)
-                continue
-
-        #views count
-        views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span').replace(',','').replace('.','')      
-                                          
-        # highest pulse
-        highest_pulse =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
-        
-        # Get votes (likes) count
-        try:
-            photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
-        except  TimeoutException:
-                 
-            # log error, add whatever available of the photo, then jumpt to the next photo
-            printR(f'Time out ({time_out}s). Ignoring photo #{i + 1}, {title}!' )
-            photos_list.append(apiless.photo(author_name = user_inputs.user_name, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, 
-                                             thumbnail_local = photo_thumbnail_local, 
-                                             stats = apiless.photoStats(upload_date = upload_date, views_count = views_count, highest_pulse = highest_pulse) ) )
-            continue
-
-        votes_count = photo_likes_count_ele.text.replace(',','').replace('.','')
-
-        # comments count
-        comments_count =  get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0].replace(',','').replace('.','')
-
-        #tags
-        tags = []
-        container =  check_and_get_ele_by_xpath(info_box, '//div/div[2]/div[3]/div[6]')
-        if container is not None:
-            a_eles = check_and_get_all_elements_by_tag_name(container, 'a')
-            if a_eles is not None:
-                for item in a_eles:
-                    tag = item.text                  
-                    if tag is not '': tags.append(tag)
-                tags.sort()
-
-        # get galleries list, if user logged in
-        if user_inputs.password is not '':
-            view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
-            if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
-                collections_count = 0
-            else:
-                view_all_ele[0].location_once_scrolled_into_view
-                view_all_ele[0].click()         
-                time.sleep(1)
-                eles = driver.find_elements_by_class_name('ant-modal-body')       
-                galleries_count = 0
-
-                if len(eles)> 0:
-                    containers = check_and_get_all_elements_by_xpath(eles[0],'./div/div')
-                    if containers is not None and len(containers)> 0:
-                        childs =  check_and_get_all_elements_by_xpath(containers[0], './div') 
-                        if childs is not None:
-                            galleries_count = len(childs)
-                            for child in childs:
-                                a_ele = check_and_get_ele_by_tag_name(child, 'a')
-                                if a_ele is  not None:
-                                    galleries_list.append(a_ele.get_attribute('href'))
-
-        statistics = apiless.photoStats(upload_date = upload_date, views_count = views_count, votes_count = votes_count, collections_count = 0, 
-                                    comments_count = comments_count, highest_pulse = highest_pulse,rating = 0, tags = ",".join(tags) )
- 
-        this_photo = apiless.photo(author_name = user_inputs.user_name, order = order, id = photo_id, title = title, href = photo_href, 
-                            thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries = ",".join(galleries_list), stats = statistics )      
-
+        this_photo = process_a_photo_element(driver, i, items_count, photo_link_eles[i], img_eles[i], 
+                                          user_inputs.user_name, user_inputs.password, output_lists.thumbnails_list, output_lists.thumbnails_dir)
         photos_list.append(this_photo)
-
     return photos_list, ''
 
 #---------------------------------------------------------------
@@ -991,7 +906,6 @@ def get_followers_list(driver, user_inputs, output_lists):
                 if avatar_ele is not None:
                     style = avatar_ele.get_attribute('style')
                     avatar_href =  style[style.find('https'): style.find('\")')]
-  
                     # if user has default avatar
                     if 'userpic.png' in avatar_href:
                         if config.USE_LOCAL_THUMBNAIL:
@@ -1026,9 +940,8 @@ def get_followers_list(driver, user_inputs, output_lists):
         except:  # log any errors during the process but do not stop 
             printR(f'\nError on getting user # {i + 1}: name: {display_name}, user name: {user_name}.Some info may be missing!')
 
-        followers_list.append(apiless.user(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name= display_name, 
+        followers_list.append(apiless.User(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name= display_name, 
                                    user_name = user_name, id = user_id, number_of_followers = number_of_followers, following_status = following_status))
-
     return followers_list 
 
 #---------------------------------------------------------------
@@ -1269,7 +1182,6 @@ def Get_followings_list(driver, user_inputs, output_lists):
     actor_infos = driver.find_elements_by_class_name('actor_info')
     lenght = len(actor_infos)
 
-    
     for i, actor_info in enumerate(actor_infos):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f'    - Extracting data {i + 1}/{following_count}:')
@@ -1290,8 +1202,8 @@ def Get_followings_list(driver, user_inputs, output_lists):
                 avatar_ele = check_and_get_ele_by_class_name(actor_info_parent_ele, 'avatar')
                 if avatar_ele is not None:
                     style = avatar_ele.get_attribute('style')
-                    avatar_href =  style[style.find('https'): style.find('\")')]
-
+                    avatar_href =  style[style.find('https'): style.find('\")')]                   
+                    # if user has default avatar
                     if 'userpic.png' in avatar_href:
                         if config.USE_LOCAL_THUMBNAIL:
                             avatar_local = 'userpic.png'
@@ -1315,11 +1227,53 @@ def Get_followings_list(driver, user_inputs, output_lists):
             printR(f'\nError on getting user # {i + 1}: name: {display_name}, user name: {user_name}.Some info may be missing!')
 
         # create user object and add it to the result list 
-        followings_list.append(apiless.user(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, 
+        followings_list.append(apiless.User(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, 
                                     user_name = user_name, id = user_id, number_of_followers = number_of_followers))   
-
     return followings_list
 
+#---------------------------------------------------------------
+def convert_relative_datetime_string_to_absolute_datetime(relative_time_string, format = "%Y %m %d" ):
+    """ Convert a string of relative time to a date string with a given format. Ex: 'two days ago' --> YYYY-mm-dd 
+        Possible input:
+         an hour ago 
+         2-23 hours ago
+         a day ago
+         yesterday
+         2-31 days ago
+         a month ago,
+         2-11 months ago
+         a year ago 
+         last year
+         xx years ago 
+        """
+    datetime_now = datetime.datetime.now()
+    if not relative_time_string:
+        return ''
+    if 'an hour ago' in relative_time_string:
+        abs_date = datetime_now + datetime.timedelta(hours = -1)
+    elif 'hours ago' in relative_time_string:
+        delta = relative_time_string.replace('hours ago', '').strip()
+        abs_date = datetime_now + datetime.timedelta(hours = -int(delta))
+
+    elif 'a day ago' in relative_time_string or 'yesterday' in relative_time_string:
+        abs_date = datetime_now + datetime.timedelta(days = -1)
+    elif 'days ago' in relative_time_string:
+        delta = relative_time_string.replace('days ago', '').strip()
+        abs_date = datetime_now + datetime.timedelta(days = -int(delta))
+
+    # We use dateutil.relativedelta to handle months and years because datetime.timedelta() support only hours, days, weeks
+    elif 'a month ago' in relative_time_string:
+        abs_date = datetime_now + relativedelta(months = -1)
+    elif 'months ago' in relative_time_string:
+        delta = relative_time_string.replace('months ago', '').strip()
+        abs_date = datetime_now + relativedelta(months = -int(delta))
+
+    elif 'a year ago' in relative_time_string or 'last year' in relative_time_string:
+        abs_date = datetime_now + relativedelta(years = -1)
+    elif 'years ago' in relative_time_string:
+        delta = relative_time_string.replace('years ago', '').strip()
+        abs_date = datetime_now + relativedelta(years = -int(delta))       
+    return  abs_date.strftime(format)
 #---------------------------------------------------------------
 
 def process_notification_element(notification_element, output_lists):
@@ -1328,10 +1282,12 @@ def process_notification_element(notification_element, output_lists):
 
     """
     # Note that we initialize string with a space instead of an empty string. This is because the database sqlite treats empty string as NULL, 
-    # which will cause problem if we choose a NULL column as one of primary key (it will fail to identify record duplication)
-    display_name, user_name, content, photo_title, photo_link, status, timestamp = ' ', ' ', ' ', ' ', ' ', ' ', ' ' 
-    avatar_href, avatar_local, user_id =  ' ', ' ', '0',
-    photo_thumbnail_href, photo_thumbnail_local, photo_id = ' ', ' ',  '0'
+    # which will cause problem if we choose a NULL column as one of primary key (it will fail to identify the record duplication)
+
+    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp =  '', '', '', '', '', '', '', ''
+    user_name, content, relative_time_string, photo_link = ' ', ' ', ' ', ' ',
+    user_id, photo_id=  '0', '0'
+
     try:
         # get user_name, display_name
         actor = check_and_get_ele_by_class_name(notification_element, 'notification_item__actor') 
@@ -1352,8 +1308,7 @@ def process_notification_element(notification_element, output_lists):
         if avatar_ele is None:
             return None
         avatar_href = avatar_ele.get_attribute('src')
-
-        # user has default avatar
+        # if user has default avatar
         if 'userpic.png' in avatar_href:
             if config.USE_LOCAL_THUMBNAIL:
                 avatar_local = 'userpic.png'
@@ -1404,19 +1359,21 @@ def process_notification_element(notification_element, output_lists):
                 if photo_thumbnail_local:
                     photo_id = os.path.splitext(photo_thumbnail_local)[0]
         
-        # time stamp
-        ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
-        timestamp  = ele.text if ele is not None else ""
+        # time stamp       
+        time_stamp_ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
+        if time_stamp_ele: 
+            abs_timestamp = convert_relative_datetime_string_to_absolute_datetime(time_stamp_ele.text, format = "%Y %m %d")
 
     except:  # log any errors during the process but do not stop 
         printR(f'\nError on getting notification: actor: {display_name}, photo_title: {photo_title}\nSome info may be missing!')
 
     # creating and return the notification object
-    the_actor = apiless.user(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
-    the_photo = apiless.photo(thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, id = photo_id, href = photo_link, title = photo_title)
+    the_actor = apiless.User(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
+    the_photo = apiless.Photo(thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, id = photo_id, href = photo_link, title = photo_title)
 
-    return apiless.notification(order = 0, actor = the_actor, the_photo = the_photo, content = content, timestamp = timestamp,  status = status)
-   
+    return apiless.Notification(order = 0, actor = the_actor, the_photo = the_photo, content = content, timestamp = abs_timestamp,  status = status)
+
+
 #---------------------------------------------------------------
 def process_notifications(request_number, items, output_lists):
     """Given a list of notification web elements and a number of requested notifications, extract info and return a list of notification objects """
@@ -1600,10 +1557,10 @@ def get_like_actioners_list(driver, output_lists):
         except:  # log any errors during the process but do not stop 
             printR(f'\nError on getting user # {i + 1}: name: {display_name}, user name: {user_name}.Some info may be missing!')
 
-        actioners_list.append(apiless.user(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, 
-                                    user_name = user_name, id = user_id, number_of_followers = str(followers_count), following_status = following_status) )
-        
-    return actioners_list, like_actioners_file_name 
+        actioners_list.append(apiless.User(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, 
+                                    user_name = user_name, id = user_id, number_of_followers = str(followers_count), following_status = following_status) )        
+    return actioners_list, like_actioners_file_name
+
 #---------------------------------------------------------------
 def like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_liked, include_already_liked_photo_in_count = True, close_browser_on_error = True):
     """Like n photo of a given user, starting from the top. Return False and error message if error occured, True and blank string otherwise
@@ -2184,22 +2141,26 @@ def find_encoding(file_name):
     return charenc 
 
 #--------------------------------------------------------------- 
-def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore_columns=[]):
+def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore_columns = None):
     """Create a html file from a given photos list csv  file. Save it to disk and return the file name.
 
     Save the html file using the same name but with extension '.html'
     Expecting the first line to be the column headers, which are  no, page, id, title, link, src
     Hide the columns specified in the given IGNORE_COLUMNS LIST. The data in these columns are still being used to form the web link tag <a href=...>
     """
+    if ignore_columns is None:
+        ignore_columns = []
+
     CUSTOMED_COLUMN_WIDTHS = """
     <colgroup>
 		<col style="width:4%">
-		<col style="width:21%">
-		<col span= "3" style="width:6%" >
+		<col style="width:18%">
+		<col span= "3" style="width:5%" >
 		<col style="width:14%">	
 		<col style="width:7%" >
 		<col style="width:6%" >
-		<col style="width:25%" >				
+		<col style="width:8%" >				
+		<col style="width:28%" >				
 	</colgroup>
     """
     HEADER_STRING ="""
@@ -2236,8 +2197,8 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
 
         row_string = '\t<tr>\n'
         # Ref:
-        # Columns    : 0   1            2   3            4     5               6                7      8      9         10                     11             12      13    14
-        # Photo List : No, Author Name, ID, Photo Title, Href, Thumbnail Href, Thumbnail Local, Views, Likes, Comments, Featured In Galleries, Highest Pulse, Rating, Date, Tags
+        # Columns    : 0   1            2   3            4     5               6                7      8      9         10                     11             12      13    14        15
+        # Photo List : No, Author Name, ID, Photo Title, Href, Thumbnail Href, Thumbnail Local, Views, Likes, Comments, Featured In Galleries, Highest Pulse, Rating, Date, Category, Tags
 
         # write headers and assign sort method for appropriate columns   
         # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
@@ -2269,6 +2230,7 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
 				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>"""
                 row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
             
+            # special sort for title cell: we want to sort the displayed photo titles, not the photo link
             elif header == "Photo Title":
                 row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>\n'
 
@@ -2300,6 +2262,8 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
                         row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
                         row_string += f'\t\t\t\t<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>\n'
  
+                elif  col_header == 'Category':
+                    row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
 
                 elif  col_header == 'Tags':
                     row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
@@ -2331,7 +2295,7 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     return html_file
 
 #--------------------------------------------------------------- 
-def CSV_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore_columns=[]):
+def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails = True, ignore_columns = None):
     """ Convert csv file of various types into html file and write it to disk . Return the saved html filename.
     
     Expected 5 csv files types: notifications list , unique users list, followers list, followings list, list of users who like a photo.
@@ -2345,6 +2309,8 @@ def CSV_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
         return ''
+    if ignore_columns is None:
+        ignore_columns = []
 
     HEADER_STRING = '''
 <head>
@@ -2370,19 +2336,19 @@ def CSV_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore
     title, title_string = '', ''
     table_width =  'style="width:500"'
     if len(splits) >=4:
-        if 'unique' in html_full_file_name:
+        if csv_file_type == apiless.CSV_type.Unique_users_list:
             parts = splits[2].split('-')
             title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
             table_width = 'style="width:310"'
-        elif 'notifications' in html_full_file_name:
+        elif csv_file_type == apiless.CSV_type.Notifications_list:
             title = f'Last {splits[1]} notifications'
             table_width =  'style="width:80%"'
-        elif 'followers' in html_full_file_name:
+        elif csv_file_type == apiless.CSV_type.Followers_list:
             title = f'List of {splits[1]} followers'
-        elif 'followings' in html_full_file_name:
+        elif csv_file_type == apiless.CSV_type.Followings_list:
             title = f'List of {splits[1]} followings'
             table_width = 'style="width:500"'
-        elif 'likes' in html_full_file_name:
+        elif csv_file_type == apiless.CSV_type.Like_actors_list:
             title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
         
         title_string = f'\
@@ -2490,7 +2456,10 @@ def CSV_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore
                     if text.find('Following') != -1: 
                         row_string += f'\t\t<td class="alignLeft" bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
                     else:  
-                        row_string += f'\t\t<td class="alignLeft">{text}</td> \n'          
+                        if text:
+                            row_string += f'\t\t<td class="alignLeft">{text}</td> \n'                 # default background color (white)
+                        else:
+                            row_string += f'\t\t<td></td> \n'                                         # empty td cell                       
   
                 # In Photo Tile column, show photo thumbnail and photo title with <a href> link
                 elif  col_header == 'Photo Title': 
@@ -2811,7 +2780,7 @@ def define_and_read_command_line_arguments():
     they are set or not, and the attribute "use_command_line_args" will be set to false 
     """
     
-    user_inputs = apiless.userInputs()
+    user_inputs = apiless.UserInputs()
     #define arguments and their default values
     ap = argparse.ArgumentParser()
     ap.add_argument("-c",  "--choice",                      required=False,           nargs='?', const=1, default='0', help="User selection(1-14)") #to set default value, add:  nargs='?', const=1, default=0
@@ -3106,7 +3075,7 @@ def handle_option_3(driver, user_inputs, output_lists):
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')           
         if write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
             # show output and print summary report
-            html_file = CSV_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followers_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                                     ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
             show_html_result_file(html_file) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -3145,7 +3114,7 @@ def handle_option_4(driver, user_inputs, output_lists):
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
         if write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
             # show output and print summary report
-            html_file = CSV_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followings_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                                     ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
             show_html_result_file(html_file) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -3181,7 +3150,7 @@ def handle_option_5(driver, user_inputs, output_lists):
     # write result to csv, convert it to html, show html in browser
     if output_lists.like_actioners_list is not None and  len(output_lists.like_actioners_list) > 0 and \
                                             write_users_list_to_csv(output_lists.like_actioners_list, csv_file) == True:
-        html_file = CSV_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Like_actors_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
         show_html_result_file(html_file) 
 
@@ -3235,13 +3204,13 @@ def handle_option_6(driver, user_inputs, output_lists):
     csv_file_unique_users  = os.path.join(output_lists.output_dir, \
         f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{len(output_lists.notifications)}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
-        html_file = CSV_to_HTML(csv_file_unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+        html_file = CSV_to_HTML(csv_file_unique_users, apiless.CSV_type.Unique_users_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
         show_html_result_file(html_file)     
     
     # Write the notification list to csv. Convert it to html, show it in browser        
     if len(output_lists.notifications) > 0 and  write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        html_file = CSV_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Notifications_list , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'])
         show_html_result_file(html_file) 
 
@@ -3502,7 +3471,7 @@ def handle_option_14(driver, user_inputs, output_lists):
                 return ''
     # do task
     get_following_statuses(driver, user_inputs, output_lists, csv_file )
-    html_file = CSV_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+    html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followings_list , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                             ignore_columns = ['Avatar Href', 'Avatar Local','User Name', 'ID'])
     show_html_result_file(html_file) 
 
@@ -3586,63 +3555,74 @@ def handle_option_16(driver, user_inputs, output_lists):
     db.create_if_not_exists_followers_and_followings_tables(cc)
     db.create_if_not_exists_notifications_tables(cc)
 
+    rows_changed_count = 0
+    # insert photos
     # find the latest photo csv file on disk
     files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*photos*.csv")]
-    files.sort(key=lambda x: os.path.getmtime(x))
-    csv_file = files[-1]
-    printY(f"The latest {user_inputs.user_name}'s photos file is:\n{os.path.abspath(csv_file)}")
-    df = CSV_file_to_dataframe(csv_file)
-    photos_list = df.values.tolist()
-    for item in photos_list:
-        db.insert_photo_to_photo_table(conn, tuple(item))
-    conn.commit()
+    if len(files) > 0:
+        files.sort(key=lambda x: os.path.getmtime(x))
+        csv_file = files[-1]
+        print(f"The latest {user_inputs.user_name}'s photos file is:\n{os.path.abspath(csv_file)}")
+        df = CSV_file_to_dataframe(csv_file)
+        photos_list = df.values.tolist()
+        for item in photos_list:
+            db.insert_photo_to_photo_table(conn, tuple(item))
+        conn.commit()
+        rows_changed_count = conn.total_changes
+        printG(f'Record(s) changed: {rows_changed_count}')
 
+    # insert followers
     # find the latest followers csv file on disk
     files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followers*.csv")]
     if len(files) > 0:
         files.sort(key=lambda x: os.path.getmtime(x))
         csv_file = files[-1]
-        printY(f"The latest {user_inputs.user_name}'s followers file is:\n{os.path.abspath(csv_file)}")
+        print(f"The latest {user_inputs.user_name}'s followers file is:\n{os.path.abspath(csv_file)}")
         df = CSV_file_to_dataframe(csv_file)
         followers_list = df.values.tolist()
         for item in followers_list:
             db.insert_user_to_table(conn, tuple(item), table_name='followers')
         conn.commit()
+        printG(f'Record(s) changed: {conn.total_changes - rows_changed_count}')
+        rows_changed_count = conn.total_changes
 
+    # insert followings
     # find the latest followings csv file on disk
     files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followings*.csv")]
     if len(files) > 0:
         files.sort(key=lambda x: os.path.getmtime(x))
         csv_file = files[-1]
-        printY(f"The latest {user_inputs.user_name}'s followings file is:\n{os.path.abspath(csv_file)}")
+        print(f"The latest {user_inputs.user_name}'s followings file is:\n{os.path.abspath(csv_file)}")
         df = CSV_file_to_dataframe(csv_file)
         followings_list = df.values.tolist()
         for item in followings_list:
             db.insert_user_to_table(conn, tuple(item), table_name='followings')
         conn.commit()
-
+        printG(f'Record(s) changed: {conn.total_changes - rows_changed_count}')
+        rows_changed_count = conn.total_changes
+   
+    # insert notifications
     # find the latest notifications csv file on disk
     all_files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*notifications*.csv")]
     if len(all_files) > 0:
         files = [f for f in all_files if not 'unique' in f]
         files.sort(key=lambda x: os.path.getmtime(x))
         csv_file = files[-1]
-        printY(f"The latest {user_inputs.user_name}'s notifications file is:\n{os.path.abspath(csv_file)}")
+        print(f"The latest {user_inputs.user_name}'s notifications file is:\n{os.path.abspath(csv_file)}")
         df = CSV_file_to_dataframe(csv_file)
         notifications_list = df.values.tolist()
         for item in notifications_list:
             db.insert_notification_to_table(conn, tuple(item))
         conn.commit()
+        printG(f'Record(s) changed: {conn.total_changes - rows_changed_count}')
+
     conn.close()
 
-
 #---------------------------------------------------------------
-
 def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='No', ascending=True):
-    """Read a given csv file from disk and convert it to dataframe.  
-    """
+    """Read a given csv file from disk and convert it to dataframe."""
 
-    printG(f"Convert csv file {csv_file_name} to a dataframe ...")
+    #printG(f"Convert csv file {csv_file_name} to a dataframe ...")
 
     # do main task
     dframe = pd.read_csv(csv_file_name, encoding = encoding)  
@@ -3651,7 +3631,7 @@ def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='
     #    printR(f'The given csv file is not valid. It should  have a header row with  at leat one column named "User Name":.\n\t{user_inputs.csv_file}')
     #    return
 
-    print(f'    There are {dframe.shape[1]} columns:')
+    print(f'Table has {dframe.shape[0]} rows, {dframe.shape[1]} columns')
     
     ##option to sort a selected column
     #printG(list(dframe))
@@ -3663,12 +3643,14 @@ def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='
     #if ans == 'y':
     #    sort_ascending = False
     df = dframe.sort_values(sort_column_header, ascending=ascending )  
+    #df = df.drop(df[df.ID == 0].index)
     return df
+
 #---------------------------------------------------------------   
 def save_avatar(url, path):
-    """ Save the 500px user avatar to the given path on disk. 500px avatar file has this format "stock-photo-[user ID].jpg". 
-        We will extracted it the file from the header, and use just the user id for filename. 
-        The users who do not not provide an avatar have a default avatar, which we will save as well
+    """ Save the 500px user avatar to disk at the given path. The original 500px avatar file has this format "stock-photo-[user ID].jpg" which 
+        we will extract from the header, and use just the user id for filename. 
+        Users who do not not provide their avatars have a default avatar, which will be saved as the original name: 'userpic.png'
         Existing file will be overwritten
         Return the file name
      
@@ -3716,7 +3698,12 @@ def save_photo_thumbnail(url, path):
 #---------------------------------------------------------------
 def main():
     os.system('color')
-    driver = start_chrome_browser(headless_mode = config.HEADLESS_MODE)
+    driver = None
+ 
+    # chrome driver takes a few seconds to load, so we let a thread to handle it while we go on with the menu and user inputs. 
+    my_queue = queue.Queue()
+    th = Thread(target=start_chrome_browser, args=([], config.HEADLESS_MODE, my_queue) )
+    th.start()
 
     # check internet and 500px server connections, if needed  
     #if not has_server_connection(driver, r'https://500px.com'):
@@ -3724,7 +3711,7 @@ def main():
 
     user_inputs = define_and_read_command_line_arguments()
 
-    # declare a dictionary so that functions can be referred to from a string from "1" to "14"
+    # declare a dictionary so that functions can be referred to from a string of digit(s)
     Functions_dictionary = {   
             "1" : handle_option_1, 
             "2" : handle_option_2, 
@@ -3743,7 +3730,7 @@ def main():
             "15": handle_option_15,
             "16": handle_option_16}
 
-    output_lists = apiless.outputData()
+    output_lists = apiless.OutputData()
     
     user_inputs = define_and_read_command_line_arguments()
     if  user_inputs.use_command_line_args == False:
@@ -3755,7 +3742,12 @@ def main():
             user_inputs.Reset()
             output_lists.Reset()
             close_chrome_browser(driver)
-            driver = start_chrome_browser(headless_mode = config.HEADLESS_MODE)
+            driver = None
+            
+            my_queue = queue.Queue()
+            th = Thread(target=start_chrome_browser, args=([], config.HEADLESS_MODE, my_queue) )
+            th.start()
+            
             user_inputs = define_and_read_command_line_arguments()
             show_menu(user_inputs, 'Restarted for a different user.')
             continue
@@ -3764,12 +3756,15 @@ def main():
             if not user_inputs.use_command_line_args and int(user_inputs.choice) >= 5:
                 if get_additional_user_inputs(user_inputs) == False:
                     continue
+            # make sure the driver is ready 
+            while driver == None:
+                driver = my_queue.get()
 
             # dynamically call the function to perform the task 
             Functions_dictionary[user_inputs.choice](driver, user_inputs, output_lists)
 
-            # close the popup window, if it exists from previous task
-            close_popup_windows(driver)
+            # close the popup windows, if they are opened from previous task
+            close_popup_windows(driver, close_ele_class_names = ['close', 'ant-modal-close-x'])
 
         # after finishing a task, if we are in the command-line mode, we are done, since the specific task has finished 
         if  user_inputs.use_command_line_args:
@@ -3784,7 +3779,6 @@ def main():
     close_chrome_browser(driver)
     sys.exit()
 
-		  
 #---------------------------------------------------------------
 if __name__== "__main__":
     main()

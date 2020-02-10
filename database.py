@@ -6,15 +6,25 @@ import sqlite3
 def create_if_not_exists_photos_table(connection_cursor):
     """Create the photos table if it does not exist
        Photo table has 15 columns, with photo id being the primary key
-       0   1            2   3      4     5               6                7            8            9               10         11             12      13           14 
-       no  author_name  id  title  href  thumbnail_href  thumbnail_local  views_count  votes_count  comments_count  galleries  highest_pulse  rating  upload_date  tag
+       0   1            2   3      4     5               6                7            8            9               10         11             12      13           14        15
+       no  author_name  id  title  href  thumbnail_href  thumbnail_local  views_count  votes_count  comments_count  galleries  highest_pulse  rating  upload_date  category, tag
        """
     if connection_cursor is not None: 
         connection_cursor.execute("""CREATE TABLE IF NOT EXISTS photos(no integer, author_name text,
                                     id integer PRIMARY KEY,
-                                    title text, href text, thumbnail_href text, thumbnail_local text,
-                                    views_count integer, votes_count integer, comments_count integer,
-                                    galleries text, highest_pulse real, rating real, upload_date text, tag text )""")
+                                    title text, 
+                                    href text, 
+                                    thumbnail_href  text, 
+                                    thumbnail_local text,
+                                    views_count     integer, 
+                                    votes_count     integer, 
+                                    comments_count  integer,
+                                    galleries       text, 
+                                    highest_pulse   real, 
+                                    rating          real, 
+                                    upload_date     text, 
+                                    category        text, 
+                                    tag text )""")
 
 #---------------------------------------------------------------
 def create_if_not_exists_followers_and_followings_tables(connection_cursor):
@@ -45,8 +55,8 @@ def create_if_not_exists_notifications_tables(connection_cursor):
 def insert_photo_to_photo_table(conn, photo_info):
     """
     """
-    sql = f'''INSERT OR IGNORE INTO photos(no, author_name, id, title, href, thumbnail_href, thumbnail_local, views_count, votes_count,  comments_count, galleries, highest_pulse, rating, upload_date, tag)
-              VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '''
+    sql = f'''INSERT OR IGNORE INTO photos(no, author_name, id, title, href, thumbnail_href, thumbnail_local, views_count, votes_count,  comments_count, galleries, highest_pulse, rating, upload_date, category, tag)
+              VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '''
     cur = conn.cursor()
     cur.execute(sql, photo_info)
     return cur.lastrowid
