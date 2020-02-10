@@ -1,3 +1,12 @@
+Feb 9 2020:
+- Converted relative time string (ex. "3 days ago") to absolute date string (ex. "2020 02 06")
+- Used thread to handle the long process of loading the Chrome web driver, while the main program is showing the menu and taking user inputs
+- Suppress some Chrome Driver log info sent to terminal window
+- Included the photo category (landscapes, nature ...) when extracting each photo info
+- Added optional function to extract the user id, to be called when we cannot extract it from the user avatar links (because it is 500px's generic default avatar)
+
+- Bug fixes and performance improvements
+---------------------------
 Jan 14 2019:
 - Moved classes definitions to a separated module (apiless.py) 
 - Moved constants, configurable settings to a separated module (config.py)
