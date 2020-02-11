@@ -726,7 +726,7 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
         if a_eles is not None:
             for item in a_eles:
                 tag = item.text                  
-                if tag is not '': tags.append(tag)
+                if tag != '': tags.append(tag)
             tags.sort()
             photo_stats.tags =  ",".join(tags)
 
@@ -2917,7 +2917,7 @@ def get_additional_user_inputs(user_inputs):
             if user_inputs.user_name == 'q' or user_inputs.user_name == 'r':
                 user_inputs.choice = user_inputs.user_name
                 return False               
-        if user_inputs.user_name is not '' and user_inputs.password is '':                   
+        if user_inputs.user_name != '' and user_inputs.password == '':                   
             user_inputs.password, abort = validate_non_empty_input('Type your password> ', user_inputs)
             if abort:
                 return False        
