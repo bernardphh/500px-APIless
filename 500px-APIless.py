@@ -2841,7 +2841,7 @@ def get_additional_user_inputs(user_inputs):
 
     # common input for 8 to 11: number of photo to be auto-liked
     elif choice >= 8 and choice <= 11:
-        input_val, abort =  validate_input('Enter the number of photos you want to auto-like >', user_inputs)
+        input_val, abort =  validate_input(f'Enter the number of photos you want to auto-like (1 - {config.MAX_AUTO_LIKE_REQUEST})>', user_inputs)
         if abort:
             return False
         else: 
