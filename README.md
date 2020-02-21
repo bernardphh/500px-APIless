@@ -38,16 +38,25 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ![Main menu](Snapshots/MainMenu.png)
 
-- The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
+### DATA COLLECTION <br/>
+The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
 CSV files are used for statistical analysis, and in the automated processes. 
 HTML files are used for presentation, which happens after a data collection task is completed. They are also served as a tool to sort data in each criteria.
 
+### AUTOMATED PROCESSES <br/>
+The options 8 to 12 are the automated processes, or bots, that will perform some actions.
 
-- The options from 8 to 12, are the automated processes, or bots, that will perform some actions. The descriptions are self-explanatory.
+### ENTERTAINMENT <br/>
+Option 13 allows you to play the slideshow of photos from preselected or customized galleries
 
-- You can play slideshow of photos on various galleries, Popular, Fresh, Upcoming or Editor's choice.  User's galleries or filtered public galleries can also be played by supplying the href.
+### DATA ANALYSIS <br/>
+Followers and followings users are categorized into 3 groups: 
+-	followers that you are also following
+-	followers that you do not follow
+-	users that you  are following but they do not follow you.
 
-- The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
+<br/>
+The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 
 Refer to [500px-APIless.docx](/500px-APIless.docx) for sample outputs, detailed description of each option, and a complete command-line syntaxes.
 
@@ -63,7 +72,7 @@ This was developed using Visual Studio Code, testing and run on Windows 10, Pyth
 
 Python 3.6 or later 
 
-Selenium and ChromeDriver
+Selenium, Pandas and ChromeDriver
 
 <br/>
 
@@ -80,6 +89,14 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 <br/>
 
 ## SOME SAMPLE OUTPUTS: ##
+
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/allUsers.png" width ="80%">
+<br/>
+<br/>
+
+
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
+<br/>
 
 ![](Snapshots/photopage.png)
 
