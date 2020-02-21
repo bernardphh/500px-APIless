@@ -1385,13 +1385,12 @@ def process_notification_element(notification_element, output_lists):
 
     except:  # log any errors during the process but do not stop 
         printR(f'\nError on getting notification: actor: {display_name}, photo_title: {photo_title}\nSome info may be missing!')
-
+	pass
     # creating and return the notification object
     the_actor = apiless.User(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
     the_photo = apiless.Photo(thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, id = photo_id, href = photo_link, title = photo_title)
 
     return apiless.Notification(order = 0, actor = the_actor, the_photo = the_photo, content = content, timestamp = abs_timestamp,  status = status)
-
 
 #---------------------------------------------------------------
 def process_notifications(request_number, start_index, items, output_lists):
