@@ -1,10 +1,40 @@
+---------------------------
+Feb 21 2020:
+
+1. Add one data analysis option: categorize users based on following statuses.
+   Analyzing the Followers and Followings list, we produce 4 users lists: 
+	- Users that followed you and you are following them ( reciprocally)  
+	- Users that followed you but you are not following them
+	- Users that you are following but they do not follow you
+	- A combined list of all your followers and your followings, with the relationship marked down for each user.
+   The user will be provided options to use the latest followers and followings csv files on disk, or start from scratch	
+
+2. When extracting the followers list, we no longer need to extract following status to that user (because we now have (1) above). 
+   So the optional login is no longer offered
+   
+3. Change some csv header names, from "Followers" to "Followers Count" and from "Count" to "Appearances Count"
+    
+4. On getting the notifications list, we now have option to specify the start index (it was always start at zero before)
+
+5. Included some extra options, not available from the menu, not fully tested, for experiment and in progress. These options are 
+   started backward from #99, such as:
+	- handle_option_99 : Check/Update following statuses of people you are following, from the followings csv file
+	- handle_option_98 : Like n photos of m users from a given users csv files.
+	- handle_option_97 : Create SQL local database based on the latest csv files on disk. We then can use 3rd party, free visual app
+                                  such as DB Browser for SQLite, to easy view, select, filter, sort the data.
+    
+6. Bug fixes and performance improvements
+
+Notes: - Documents and snapshots are redone to reflect these changes
+       - Some csv data files created  with the previous version will not work. They need to be re-extracted. 
+---------------------------
+
 Feb 9 2020:
 - Converted relative time string (ex. "3 days ago") to absolute date string (ex. "2020 02 06")
 - Used thread to handle the long process of loading the Chrome web driver, while the main program is showing the menu and taking user inputs
 - Suppress some Chrome Driver log info sent to terminal window
 - Included the photo category (landscapes, nature ...) when extracting each photo info
 - Added optional function to extract the user id, to be called when we cannot extract it from the user avatar links (because it is 500px's generic default avatar)
-
 - Bug fixes and performance improvements
 ---------------------------
 Jan 14 2019:
