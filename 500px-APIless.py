@@ -138,6 +138,7 @@ def close_popup_windows(chrome_driver, close_ele_class_names):
         if close_ele:
             try:
                 close_ele.click()
+                time.sleep(1)
             except:
                 pass
  
@@ -210,11 +211,11 @@ def write_users_list_to_csv(users_list, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:  # could user utf-16be
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers', 'Status'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status'])  
             writer.writeheader()
             for a_user in users_list:
                 writer.writerow({'No' : a_user.order, 'Avatar Href': a_user.avatar_href,'Avatar Local': a_user.avatar_local, 'Display Name' : a_user.display_name, \
-                    'User Name': a_user.user_name, 'ID': a_user.id, 'Followers': a_user.number_of_followers, 'Status': a_user.following_status}) 
+                    'User Name': a_user.user_name, 'ID': a_user.id, 'Followers Count': a_user.number_of_followers, 'Status': a_user.following_status}) 
         printG('The users list is saved at:\n ' + os.path.abspath(csv_file_name) )
         return True
     except PermissionError:
@@ -402,6 +403,7 @@ def check_and_get_all_elements_by_tag_name(element, tag_name):
         return []
 
 #---------------------------------------------------------------
+
 def check_and_get_all_elements_by_class_name(element, class_name):
     """Find all the web elements of a given class name, return empty list if class_name not found.
 
@@ -824,7 +826,8 @@ def get_followers_list(driver, user_inputs, output_lists):
     - Return the list
     """
 
-    followers_list = []   
+    followers_list = []
+    followers_count = 0
     if driver.current_url != 'https://500px.com/' + user_inputs.user_name:
         success, message = open_user_home_page(driver, user_inputs.user_name)
         if not success:
@@ -852,15 +855,19 @@ def get_followers_list(driver, user_inputs, output_lists):
         printF('Error while getting the number off followers')
         return followers_list
 
-    # remode thousand-separator character, if existed
-    followers_count = int(followers_ele.text.replace(",", "").replace(".", ""))
+    # remove thousand-separator character, if existed
+    try:
+        followers_count = int(followers_ele.text.replace(",", "").replace(".", ""))
+    except:
+        printR(f'Error converting followers count to int: {followers_count}')
+        pass
     print(f'    User {user_inputs.user_name} has {str(followers_count)} follower(s)')
 
     # keep scrolling the modal window (config.LOADED_ITEM_PER_PAGE items are loaded at a time), until the end, where the followers count is reached 
     iteration_num = math.floor(followers_count / config.LOADED_ITEM_PER_PAGE) + 1 
            
     for i in range(1, iteration_num + 1):
-        update_progress(i / (iteration_num), f'    - Scrolling down to load more user:')
+        update_progress(i / (iteration_num), f'    - Scrolling down to load more user')
         index_of_last_item_on_page = i * config.LOADED_ITEM_PER_PAGE -1
         try:
             last_ele = check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(index_of_last_item_on_page) + ']')            
@@ -918,16 +925,16 @@ def get_followers_list(driver, user_inputs, output_lists):
                             #time.sleep(random.randint(5, 10) / 10)  
                             avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
         
-            # if logged-in, we can determine if this user has been followed or not
-            if user_inputs.password != '':
-                try:          
-                    class_name_ele = check_and_get_ele_by_xpath(actor_info, '../..')  
-                    if class_name_ele is not None:
-                        class_name = class_name_ele.get_attribute('class')
-                        following_status = 'Following' if class_name.find('following') != -1  else 'Not Follow'
-                except NoSuchElementException:
-                    following_status = 'Unknown'
-                    pass
+            ## if logged-in, we can determine if this user has been followed or not
+            #if user_inputs.password != '':
+            #    try:          
+            #        class_name_ele = check_and_get_ele_by_xpath(actor_info, '../..')  
+            #        if class_name_ele is not None:
+            #            class_name = class_name_ele.get_attribute('class')
+            #            following_status = 'Following' if class_name.find('following') != -1  else 'Not Follow'
+            #    except NoSuchElementException:
+            #        following_status = 'Unknown'
+            #        pass
 
             # get followers count
             number_of_followers = ''
@@ -967,12 +974,18 @@ def does_this_user_follow_me(driver, user_inputs):
     hide_banners(driver)     
     ele = check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')   
     
-    # extract number of following                       
+    # extract number of following
+    following_count = 0                       
     following_count_ele = check_and_get_ele_by_tag_name(ele, 'span')    
     if following_count_ele is None or following_count_ele.text == '0':
         return  False, "Status unknown. Timed out on getting the Following Count"
     else:
-        following_count = int(following_count_ele.text.replace(",", "").replace(".", ""))
+        try:
+            following_count = int(following_count_ele.text.replace(",", "").replace(".", ""))
+        except:
+            printR(f'Error converting followers count to int: {following_count}')
+            pass
+ 
         print(f'    - User {user_inputs.target_user_name} is following {str(following_count)} user(s)')
   
     # click on the Following text to open the modal window
@@ -1112,7 +1125,7 @@ def get_following_statuses(driver, user_inputs, output_lists, csv_file):
 
 
 #---------------------------------------------------------------
-def Get_followings_list(driver, user_inputs, output_lists):
+def get_followings_list(driver, user_inputs, output_lists):
     """Get the list of users who I'm  following. Info for each item in the list are: 
        No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
 
@@ -1125,6 +1138,7 @@ def Get_followings_list(driver, user_inputs, output_lists):
     """
 
     followings_list = []
+    following_count = 0
     if driver.current_url != 'https://500px.com/' + user_inputs.user_name:
         success, message = open_user_home_page(driver, user_inputs.user_name)
         if not success:
@@ -1158,7 +1172,12 @@ def Get_followings_list(driver, user_inputs, output_lists):
         return followings_list
 
     # remove thousand separator character, if existed
-    following_count = int(following_ele.text.replace(",", "").replace(".", ""))
+    try:
+        following_count = int(following_ele.text.replace(",", "").replace(".", ""))
+    except:
+        printR(f'Error converting followers count to int: {following_count}')
+        pass
+ 
     print(f'    User {user_inputs.user_name} is following { str(following_count)} user(s)')
     
 
@@ -1171,8 +1190,8 @@ def Get_followings_list(driver, user_inputs, output_lists):
             the_last_in_list = driver.find_elements_by_xpath('//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')[-1]                                                             
             the_last_in_list.location_once_scrolled_into_view
             time.sleep(1)
-        except NoSuchElementException:
-            printR('    Error while scrolling down to load more item')
+        except:
+            printR('    Error while scrolling down to load more item. We may not get all requested items.')
             pass
 
     #Scroll_to_end_by_class_name(driver, 'actor_info', following_count)
@@ -1375,7 +1394,7 @@ def process_notification_element(notification_element, output_lists):
 
 
 #---------------------------------------------------------------
-def process_notifications(request_number, items, output_lists):
+def process_notifications(request_number, start_index, items, output_lists):
     """Given a list of notification web elements and a number of requested notifications, extract info and return a list of notification objects """
 
     notifications =[]
@@ -1387,10 +1406,10 @@ def process_notifications(request_number, items, output_lists):
         new_notification = process_notification_element(item, output_lists)
         if new_notification is not None:
             count_sofar += 1
-            new_notification.order = count_sofar
+            new_notification.order = count_sofar + start_index
             notifications.append(new_notification)
             # advance the progress bar
-            update_progress(count_sofar/request_number, f'    - Extracted data {count_sofar}/{request_number}:') 
+            update_progress(count_sofar/request_number, f'    - Extracted data {count_sofar}/{request_number}') 
     return notifications
 
 #---------------------------------------------------------------
@@ -1411,13 +1430,19 @@ def get_notification_list(driver, user_inputs, output_lists, get_full_detail = T
 
     unique_notificators, notifications_list, simplified_list = [],[], []
 
-    scroll_down_active_page(driver, None, 'notification_item__photo_link', '', user_inputs.number_of_notifications, '    - Scrolling down for more notifications:' ) 
+    # Feb 19 2020: we now can get the notifications from a certain index
+    start_index = user_inputs.index_of_start_notification
+    length_required = user_inputs.number_of_notifications
+    length_needed = start_index + length_required
+
+    scroll_down_active_page(driver, None, 'notification_item__photo_link', '', length_needed, '    - Scrolling down for more notifications:' ) 
 
     # get the info now that all we got all the available notifications
-    items = driver.find_elements_by_class_name('notification_item')  
+    items_full = driver.find_elements_by_class_name('notification_item')  
+    # we slice the list at a desired location and with a desired length
+    items = items_full[start_index: length_needed]
 
-    notifications_list = process_notifications(user_inputs.number_of_notifications, items, output_lists)
-    
+    notifications_list = process_notifications(user_inputs.number_of_notifications, user_inputs.index_of_start_notification, items, output_lists)
     if len(notifications_list) == 0 and len(unique_notificators) == 0: 
         printG(f'User {user_inputs.user_name} has no notification')
         return [], []
@@ -2188,8 +2213,12 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     if len(splits) >=4:
         title_string = f'\
     <h2>Photo lists ({splits[1]})</h2>\n\
-    <p> User / Date: {splits[0]} / {splits[-1]}</p>\n\
-    <p> File: {html_file} </p>\n'
+    <div><span>User:</span> <span><b>{splits[0]}</b></span></div>\n\
+    <div><span>Date recorded:</span> <span><b>{splits[-1]}</b></span></div>\n\
+	<div>\
+    <span> File: {os.path.dirname(html_file)}\</span><br/>\n\
+	<span><b>{file_name}.html</b> </span>\n\
+	</div>\n'
 
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
@@ -2318,54 +2347,120 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
 	<link   charset="UTF-8" type = "text/css" rel  = "stylesheet"  href = "css/styles.css" />
 </head>''' 
 
+    LEGENDS_BOX_ALL = '''
+   <div class="legends" style="width:670px; height:180px;" >
+		<p><b>Legends:</b></p>
+		<p><span class="box reciprocal">Reciprocal</span>You and this user follow each other </p>
+		<p><span class="box not_following">Follower only</span>You do not follow your follower</p>
+		<p><span class="box not_follower"> Following only</span>Your follower does not follow you</p>
+		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
+		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
+	</div>'''
+
+    LEGENDS_BOX_RECIPROCAL = '''
+   <div class="legends" style="width:670px; height:130px;" >
+		<p><b>Legends:</b></p>
+		<p><span class="box reciprocal">Reciprocal</span>You and this user follow each other </p>
+		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
+		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
+	</div>'''
+    LEGENDS_BOX_NOT_FOLLOWING = '''
+   <div class="legends" style="width:670px; height:130px;" >
+		<p><b>Legends:</b></p>
+		<p><span class="box not_following">Follower only</span>You do not follow your follower</p>
+		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
+		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
+	</div>'''
+    LEGENDS_BOX_NOT_FOLLOWER = '''
+   <div class="legends" style="width:670px; height:130px;" >
+		<p><b>Legends:</b></p>
+		<p><span class="box not_follower"> Following only</span>Your follower does not follow you</p>
+		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
+		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
+	</div>'''
+
     html_full_file_name = file_path + '.html'
 
     avatars_folder    = os.path.basename(os.path.normpath(output_lists.avatars_dir))
     thumbnails_folder = os.path.basename(os.path.normpath(output_lists.thumbnails_dir))
 
 
-    # Create document title and description based on these predefined file names:
-    # Notifications   :    [user name]_[count]_notifications_                       [date].html
-    # Unique users    :    [user name]_[count]_unique-users-last-n-notifications_   [date].html
-    # Followers List  :    [user name]_[count]_followers_                           [date].html
-    # Followings List :    [user name]_[count]_followings_                          [date].html
-    # Users like photo:    [user name]_[count]_likes_[photo title]_                 [date].html
+    # Create document title and description based on these predefined file names, under the format:
+    # 0             1               2                    3    
+    # [user name] _ [items count] _ [type of document] _ [date string].html
+    #
+    # Type of documents are:
+    #
+    # Notifications   :   notifications                       
+    # Unique users    :   unique-users-in-the-last-n-notifications
+    # Followers List  :   followers                          
+    # Followings List :   followings                         
+    # Users like photo:   likes_[photo title]_                
+    # all             :   all                                
+    # reciprocal      :   reciprocal                         
+    # not_following   :   not_following                      
+    # not_follower    :   not_follower                       
+
 
     file_name = file_path.split('\\')[-1]
     splits = file_name.split('_')  
     title, title_string = '', ''
-    table_width =  'style="width:500"'
+    legends_box = ""
     if len(splits) >=4:
-        if csv_file_type == apiless.CSV_type.Unique_users_list:
+        if csv_file_type == apiless.CSV_type.unique_users:
             parts = splits[2].split('-')
             title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
-            table_width = 'style="width:310"'
-        elif csv_file_type == apiless.CSV_type.Notifications_list:
-            title = f'Last {splits[1]} notifications'
-            table_width =  'style="width:80%"'
-        elif csv_file_type == apiless.CSV_type.Followers_list:
+            table_width =  'style="width:500"'
+        elif csv_file_type == apiless.CSV_type.notifications:
+            title = f'{splits[1]} notifications'
+            table_width =  'style="width:960"'
+        elif csv_file_type == apiless.CSV_type.followers:
             title = f'List of {splits[1]} followers'
-        elif csv_file_type == apiless.CSV_type.Followings_list:
-            title = f'List of {splits[1]} followings'
-            table_width = 'style="width:500"'
-        elif csv_file_type == apiless.CSV_type.Like_actors_list:
+            table_width =  'style="width:460"'
+        elif csv_file_type == apiless.CSV_type.followings:
+            title = f'List of {splits[1]} followings'            
+            table_width =  'style="width:460"'
+        elif csv_file_type == apiless.CSV_type.like_actors:
             title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
-        
+            table_width = 'style="width:600"'
+
+        elif csv_file_type == apiless.CSV_type.reciprocal:
+            title = f'List of {splits[1]} followers that you are following'
+            table_width =  'style="width:900"'
+            legends_box = LEGENDS_BOX_RECIPROCAL
+        elif csv_file_type == apiless.CSV_type.not_following:
+            title = f'List of {splits[1]} followers that you are not following'
+            table_width =  'style="width:760"'
+            legends_box = LEGENDS_BOX_NOT_FOLLOWING
+        elif csv_file_type == apiless.CSV_type.not_follower:
+            title = f'List of {splits[1]} users whom you follow but they do not follow you'
+            table_width =  'style="width:760"'
+            legends_box = LEGENDS_BOX_NOT_FOLLOWER
+        elif csv_file_type == apiless.CSV_type.all:
+            title = f'List all {splits[1]} users (your followers and your followings)'
+            table_width =  'style="width:900"'
+            legends_box = LEGENDS_BOX_ALL
+
         title_string = f'\
     <h2>{title}</h2>\n\
-    <p> User / Date: {splits[0]} / {splits[-1]}</p>\n\
-    <p> File: {html_full_file_name} </p>\n'
- 
+    <div><span>User:</span> <span><b>{splits[0]}</b></span></div>\n\
+    <div><span>Date recorded:</span> <span><b>{splits[-1]}</b></span></div>\n\
+	<div>\
+    <span> File: {os.path.dirname(csv_file_name)}\</span><br/>\n\
+	<span><b>{file_name}.html</b> </span>\n\
+	</div>\n'
+
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
         headers = reader.fieldnames
-        if len(headers) < 4:
+        if len(headers) < 3:
             printR(f'File {csv_file_name} is in wrong format!')
             return ''
         row_string = '\n\t<tr>\n'
   
         # write headers and assign sort method for appropriate columns   
-        # each header cell has 2 parts: the left div for the header name, the right div for sort direction arrows     
+        #['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status', 'Follower Order', 'Following Order', 'Relationship', ]       
+        # # each header cell has 2 parts: the left div for the header name, the right div for sort direction arrows     
         ignore_columns_count = 0
         for i, header in enumerate(reader.fieldnames):
             if header in ignore_columns:
@@ -2389,18 +2484,27 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
 				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div>
 			    </div>"""
                 row_string += f'\t\t<th class="w40" onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
+
+            elif header == "Follower Order" or header == "Following Order":
+                row_string += f"""\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n"""
             
             elif header == "Display Name":
-                row_string += f"""\t\t<th class="w200" onclick="sortTable({i-ignore_columns_count}, 'sortByDisplayName')">{left_div}{sort_direction_arrows}</th>\n"""
+                row_string += f"""\t\t<th class="w240" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n"""
             
             elif header == "Photo Title":
-                row_string += f"""\t\t<th class="w200" onclick="sortTable({i-ignore_columns_count}, 'sortByPhotoTitle')">{left_div}{sort_direction_arrows}</th>\n"""
+                row_string += f"""\t\t<th class="w240" onclick="sortTable({i-ignore_columns_count}, 'sortByPhotoTitle')">{left_div}{sort_direction_arrows}</th>\n"""
  
-            elif header == "Followers" or header == "Count":
-                row_string += f'\t\t<th class="w100" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+            elif header == "Followers Count" or header == "Appearances Count":
+                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
             
-            elif header == "Status"or header == "Content":
-                row_string += f'\t\t<th class="w210" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+            elif header == "Content":
+                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+
+            elif header == "Relationship":
+                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
+         
+            elif header == "Status":
+                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
             
             elif header == "Time Stamp":
                 row_string += f'\t\t<th class="w120" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
@@ -2419,6 +2523,8 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
             # Unique users   : No, Avatar Href, Avatar Local, Display Name, User Name, ID, Count,    
             # Followers List : No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
             # Followings List: No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
+            #                  1              2             3             4             5          6   7                8       9                10   
+            # new userformat   Follower Order, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers Count, Status, Following Order, _merg
 
             for i in range(len(headers)): 
                 col_header = headers[i]   
@@ -2442,16 +2548,6 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
                     row_string += f'\t\t\t\t<img src={user_avatar}></a>\n'
                     row_string += f'\t\t\t\t<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>\n'
 
-                    #row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{user_home_page}" target="_blank">\n'
-                    #user_avatar = row['Avatar Local'] if use_local_thumbnails else row['Avatar Href']
-                    #row_string += f'\t\t\t\t<img src={avatars_folder}/{user_avatar}></a>\n'
-                    #row_string += f'\t\t\t\t<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>\n'
-               
-                # Column 6:  Content, Count for Followers columns: 
-                elif i == 6:  
-                    row_string += f'\t\t<td>{text}</td> \n'
-                    
-                # Column 7 on Followers or Followings list 
                 elif col_header == 'Status':
                     if text.find('Following') != -1: 
                         row_string += f'\t\t<td class="alignLeft" bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
@@ -2476,15 +2572,21 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
                         row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
                         row_string += f'\t\t\t\t<div>{text}</div></div></td>\n'
 
+                elif  col_header == 'Relationship':
+                    if text == 'both':
+                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightgreen">Reciprocal</td> \n'   # green cell for following users   
+                    if text == 'left_only':
+                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightskyblue">Follower only</td> \n'   # green cell for following users   
+                    if text == 'right_only':
+                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightpink">Following only</td> \n'   # green cell for following users   
                 # All other columns, write text as is
                 else:                            
                      row_string += f'\t\t<td>{text}</td> \n'
 
             row_string += '\t</tr>'
 
+        html_string = f'<html>\n{HEADER_STRING}\n\n<body>\n{title_string}\n{legends_box}<table {table_width}> {row_string} </table>\n</body> </html>'
         
-        html_string = f'<html>\n{HEADER_STRING}\n\n<body>\n{title_string}<table {table_width}> {row_string} </ztable>\n</body> </html>'
-
         #write html file 
         with open(html_full_file_name, 'wb') as htmlfile:
             htmlfile.write(html_string.encode('utf-16'))
@@ -2654,8 +2756,8 @@ def show_menu(user_inputs, special_message=''):
     printY('      The following options require a user name:')
     printC('   1  Get user statistics')
     printC('   2  Get user photos list (login is optional)')
-    printC('   3  Get followers list   (login is optional)')
-    printC('   4  Get followings list ')
+    printC('   3  Get followers list')
+    printC('   4  Get followings list')
     printC('   5  Get a list of users who liked a given photo (login is optional)')
 
     printC('')
@@ -2672,6 +2774,10 @@ def show_menu(user_inputs, special_message=''):
     printY('      The following option does not need credentials:')
     printC('  13  Play slideshow on a given gallery (login is optional)')
     printC('')
+    printY('      Data Analysis:')
+    printC('  14  Categorize users based on following statuses')
+    printC('')
+ 
     printC('   r  Restart with different user')
     printC('   q  Quit')
     printC('')
@@ -2690,17 +2796,21 @@ def show_menu(user_inputs, special_message=''):
         user_inputs.choice = str(sel)
         return 
     
-    # user name is mandatory
+    # user name is mandatory for all options, except playing the slideshow
     if user_inputs.user_name == '':
         user_inputs.user_name = input('Enter 500px user name >')
         user_inputs.db_path =  config.OUTPUT_DIR +  r'\500px_' + user_inputs.user_name + '.db'
     printG(f'Current user: {user_inputs.user_name}')
 
+    # analysis for users' relationship 
+    if sel == 14:
+        user_inputs.choice = str(sel)
+        return 
+
     # password is optional:
     #  - 2  Get user photos list: if logged in, we can get the list of galleries that each of your photo is featured in
-    #  - 3  Get followers list: if logged in, we can get your following status to each of your followers
     #  - 5  Get a list of users who liked a given photo: if logged in, we can get your following status to each user in the list
-    if (sel == 2 or sel == 3 or sel == 5) and user_inputs.password == '':
+    if (sel == 2  or sel == 5) and user_inputs.password == '':
         prompt_message = 'Optional: you can get info in greater detail if you log in,\npress ENTER to ignore this option, or type in the password now >'
         expecting_password = win_getpass(prompt=prompt_message)
         if expecting_password != 'q' and expecting_password != 'r':
@@ -2714,13 +2824,13 @@ def show_menu(user_inputs, special_message=''):
         return
     
     # password is mandatory ( quit or restart are also possible at this step )
-    if sel >= 6 and sel <= 15:
+    if sel >= 6 :
         if user_inputs.user_name == '':
             user_inputs.user_name, abort = validate_non_empty_input('Enter 500px user name >', user_inputs)
             if abort:
                 return
 
-        if user_inputs.password == '':
+        if user_inputs.password == '' and sel != 97:
             user_inputs.password, abort =  validate_non_empty_input('Enter password >', user_inputs)
             if abort:
                 return
@@ -2832,6 +2942,16 @@ def get_additional_user_inputs(user_inputs):
         else:
             num = int(input_val)
             user_inputs.number_of_notifications = num if num < config.MAX_NOTIFICATION_REQUEST else config.MAX_NOTIFICATION_REQUEST
+
+        input_val, abort =  validate_input(f'Enter the desired start index >', user_inputs)
+        if abort: 
+            return False
+        else:
+            num = int(input_val)
+            if num > 0:
+                num -= 1   # assuming ordinary end user will enter 1-based number 
+            user_inputs.index_of_start_notification = num if num < config.MAX_NOTIFICATION_REQUEST -  user_inputs.number_of_notifications else \
+                                                      config.MAX_NOTIFICATION_REQUEST - user_inputs.number_of_notifications
   
     # 7. Check if a user is following you : target user name
     elif choice == 7:
@@ -2841,7 +2961,7 @@ def get_additional_user_inputs(user_inputs):
 
     # common input for 8 to 11: number of photo to be auto-liked
     elif choice >= 8 and choice <= 11:
-        input_val, abort =  validate_input(f'Enter the number of photos you want to auto-like (1 - {config.MAX_AUTO_LIKE_REQUEST})>', user_inputs)
+        input_val, abort =  validate_input(f'Enter the number of photos you want to auto-like (1-{config.MAX_AUTO_LIKE_REQUEST})>', user_inputs)
         if abort:
             return False
         else: 
@@ -2936,9 +3056,12 @@ def get_additional_user_inputs(user_inputs):
 
             wait_for_enter_key = input() 
  
-    # 14. (in progress) Get following statuses of users you are following ( user_name, start index, number_of_users)
-    # 15. Like n photos from each of m users, starting at a given start index, from a given csv files
-    elif choice == 14 or choice == 15:
+    # Options not yet available from the menu:
+    # 99. (in progress) Get following statuses of users you are following ( user_name, start index, number_of_users)
+    # 98. Like n photos from each of m users, starting at a given start index, from a given csv files
+    # 97. Create local database from latest csv files
+    # more to come ...
+    elif choice >= 98 :
         # number of followers
         input_val, abort =  validate_input('Enter the number of followers you want to process >', user_inputs)
         if abort:
@@ -2957,7 +3080,7 @@ def get_additional_user_inputs(user_inputs):
             user_inputs.index_of_start_user = int_val 
 
         
-        if choice == 15:
+        if choice == 98:
             #number of photos
             input_val, abort =  validate_input('Enter the number of photos you want to auto-like >', user_inputs)
             if abort:
@@ -3075,8 +3198,8 @@ def handle_option_3(driver, user_inputs, output_lists):
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')           
         if write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
             # show output and print summary report
-            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followers_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
+            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
             show_html_result_file(html_file) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
             print(f' The process took {time_duration} seconds') 
@@ -3107,14 +3230,14 @@ def handle_option_4(driver, user_inputs, output_lists):
         #    return
 
     # do task
-    output_lists.followings_list = Get_followings_list(driver, user_inputs, output_lists)
+    output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
     
     # write result to csv, convert it to html, show html in browser
     if len(output_lists.followings_list) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
         if write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
             # show output and print summary report
-            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followings_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+            html_file = CSV_to_HTML(csv_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                                     ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
             show_html_result_file(html_file) 
             time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
@@ -3150,7 +3273,7 @@ def handle_option_5(driver, user_inputs, output_lists):
     # write result to csv, convert it to html, show html in browser
     if output_lists.like_actioners_list is not None and  len(output_lists.like_actioners_list) > 0 and \
                                             write_users_list_to_csv(output_lists.like_actioners_list, csv_file) == True:
-        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Like_actors_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.like_actors, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
         show_html_result_file(html_file) 
 
@@ -3164,10 +3287,11 @@ def handle_option_6(driver, user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATETIME_FORMAT)
     if user_inputs.number_of_notifications == -1:
-        printG(f"Getting up to {config.MAX_NOTIFICATION_REQUEST} notifications and the unique users on that list:")
+        printG(f"Getting up to {config.MAX_NOTIFICATION_REQUEST} notifications and the unique users on that list ...")
+    elif user_inputs.index_of_start_notification > 0:
+        printG(f"Getting {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification}, and the unique users on that list:")
     else: 
-        printG(f"Getting the last {user_inputs.number_of_notifications} notifications and the unique users on that list:")
-    #csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.csv')
+        printG(f"Getting the last {user_inputs.number_of_notifications} notifications and the unique users on that list ...")
     html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
@@ -3192,7 +3316,7 @@ def handle_option_6(driver, user_inputs, output_lists):
 
     # do task   
     output_lists.notifications, output_lists.unique_notificators = get_notification_list(driver, user_inputs, output_lists, True)
-        
+    
     if len(output_lists.notifications) == 0 and len(output_lists.unique_notificators) == 0:
         show_menu(user_inputs)
         return
@@ -3204,13 +3328,13 @@ def handle_option_6(driver, user_inputs, output_lists):
     csv_file_unique_users  = os.path.join(output_lists.output_dir, \
         f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{len(output_lists.notifications)}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
-        html_file = CSV_to_HTML(csv_file_unique_users, apiless.CSV_type.Unique_users_list, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+        html_file = CSV_to_HTML(csv_file_unique_users, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
         show_html_result_file(html_file)     
     
     # Write the notification list to csv. Convert it to html, show it in browser        
     if len(output_lists.notifications) > 0 and  write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Notifications_list , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+        html_file = CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'])
         show_html_result_file(html_file) 
 
@@ -3411,7 +3535,7 @@ def handle_option_13(driver, user_inputs, output_lists):
     
     driver_with_GUI = webdriver.Chrome(options=chrome_options)
     # login if credentials are provided
-    if user_inputs.user_name !='' and user_inputs.password != '':
+    if user_inputs.user_name != '' and user_inputs.password != '':
         if login(driver_with_GUI, user_inputs) == False :
             printR('Error logging in. Slideshow will be played without a user login.')  
         
@@ -3429,11 +3553,11 @@ def handle_option_13(driver, user_inputs, output_lists):
     close_chrome_browser(driver_with_GUI)
 
 #---------------------------------------------------------------
-# EXTRA OPTIONS, not yet available from the menu.
-def handle_option_14(driver, user_inputs, output_lists):
+# EXTRA OPTIONS, not yet available from the menu. Starting backward from 99
+def handle_option_99(driver, user_inputs, output_lists):
     """Check/Update following statused of people you are following.
     
-    This function checks all users that you are following to see whether they are following you or not.
+    This function checks all users that you are following, to see whether they are following you or not.
     If you already have a following list on  disk, this will offer you to update the file, instead of doing everything from scratch.
     Note: this is a time-cosumming process. Use it responsibly and respectfully 
     """
@@ -3448,9 +3572,8 @@ def handle_option_14(driver, user_inputs, output_lists):
     
     csv_file = ''
     # Provide option whether to use the last Followings list on disk or to start from scratch
-    files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followings*.csv")]
-    files.sort(key=lambda x: os.path.getmtime(x))
-    if len(files) > 0:
+    following_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
+    if following_file != '':
         print('    Existing Followings list on disk:')
         printY(f"{files[-1]}")
         sel = input("Using this file? (y/n) > ")
@@ -3460,7 +3583,7 @@ def handle_option_14(driver, user_inputs, output_lists):
         # redo the followings list:        
         else:
             print(f"    Getting {user_inputs.user_name}'s Followings list ...")
-            output_lists.followings_list = Get_followings_list(driver, user_inputs, output_lists)
+            output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
             # write result to csv
             if len(output_lists.followings_list) == 0:
                 printR(f'    User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
@@ -3471,7 +3594,7 @@ def handle_option_14(driver, user_inputs, output_lists):
                 return ''
     # do task
     get_following_statuses(driver, user_inputs, output_lists, csv_file )
-    html_file = CSV_to_HTML(csv_file, apiless.CSV_type.Followings_list , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+    html_file = CSV_to_HTML(csv_file, apiless.CSV_type.followings , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                             ignore_columns = ['Avatar Href', 'Avatar Local','User Name', 'ID'])
     show_html_result_file(html_file) 
 
@@ -3479,13 +3602,13 @@ def handle_option_14(driver, user_inputs, output_lists):
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f' The process took {time_duration} seconds') 
 #---------------------------------------------------------------
-def handle_option_15(driver, user_inputs, output_lists, sort_column_header='No', ascending=True):
+def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No', ascending=True):
     """Like n photos of m users from a given csv files. 
 
     - The given csv file is supposed to have a header row, with at least one column named 'User Name'.
       All the csv files produced by this program, except the photo list file, satisfy this requirement and can be used.
     - There is an option to process part of the list, by specifying the start index and the number of users   
-    - There is also option to sort a column in the csv file before processing 
+    - There is also option to sort a selectable column in the csv file before processing 
     """
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.replace(microsecond=0).strftime(config.DATE_FORMAT)
@@ -3542,7 +3665,7 @@ def handle_option_15(driver, user_inputs, output_lists, sort_column_header='No',
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f' The process took {time_duration} seconds') 
 #---------------------------------------------------------------
-def handle_option_16(driver, user_inputs, output_lists):
+def handle_option_97(driver, user_inputs, output_lists):
     """Create local database based on the latest csv files on disk
        - create a database for current user if it does not exist.
        - search the output directory for the latest relevant csv files: photos, followers, followings, notifications list
@@ -3558,11 +3681,8 @@ def handle_option_16(driver, user_inputs, output_lists):
     rows_changed_count = 0
     # insert photos
     # find the latest photo csv file on disk
-    files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*photos*.csv")]
-    if len(files) > 0:
-        files.sort(key=lambda x: os.path.getmtime(x))
-        csv_file = files[-1]
-        print(f"The latest {user_inputs.user_name}'s photos file is:\n{os.path.abspath(csv_file)}")
+    csv_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.photos)
+    if csv_file != '':
         df = CSV_file_to_dataframe(csv_file)
         photos_list = df.values.tolist()
         for item in photos_list:
@@ -3573,11 +3693,8 @@ def handle_option_16(driver, user_inputs, output_lists):
 
     # insert followers
     # find the latest followers csv file on disk
-    files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followers*.csv")]
-    if len(files) > 0:
-        files.sort(key=lambda x: os.path.getmtime(x))
-        csv_file = files[-1]
-        print(f"The latest {user_inputs.user_name}'s followers file is:\n{os.path.abspath(csv_file)}")
+    csv_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers)
+    if csv_file != '':
         df = CSV_file_to_dataframe(csv_file)
         followers_list = df.values.tolist()
         for item in followers_list:
@@ -3588,11 +3705,8 @@ def handle_option_16(driver, user_inputs, output_lists):
 
     # insert followings
     # find the latest followings csv file on disk
-    files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*followings*.csv")]
-    if len(files) > 0:
-        files.sort(key=lambda x: os.path.getmtime(x))
-        csv_file = files[-1]
-        print(f"The latest {user_inputs.user_name}'s followings file is:\n{os.path.abspath(csv_file)}")
+    csv_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
+    if csv_file != '':
         df = CSV_file_to_dataframe(csv_file)
         followings_list = df.values.tolist()
         for item in followings_list:
@@ -3603,12 +3717,8 @@ def handle_option_16(driver, user_inputs, output_lists):
    
     # insert notifications
     # find the latest notifications csv file on disk
-    all_files = [f for f in glob.glob(output_lists.output_dir + f"**/{user_inputs.user_name}*notifications*.csv")]
-    if len(all_files) > 0:
-        files = [f for f in all_files if not 'unique' in f]
-        files.sort(key=lambda x: os.path.getmtime(x))
-        csv_file = files[-1]
-        print(f"The latest {user_inputs.user_name}'s notifications file is:\n{os.path.abspath(csv_file)}")
+    csv_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.notifications)
+    if csv_file != '':
         df = CSV_file_to_dataframe(csv_file)
         notifications_list = df.values.tolist()
         for item in notifications_list:
@@ -3617,8 +3727,119 @@ def handle_option_16(driver, user_inputs, output_lists):
         printG(f'Record(s) changed: {conn.total_changes - rows_changed_count}')
 
     conn.close()
+#--------------------------------------------------------------
+def handle_option_14(driver, user_inputs, output_lists):
+    """ Data analysis: caterorize users based on following statuses"""
 
-#---------------------------------------------------------------
+    time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.strftime(config.DATE_FORMAT)
+    print("We need to get the followers and followings lists ...")
+
+    # Provide option whether to use the last followers csv file on disk or to start from scratch
+    followers_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers)
+    if followers_file != '':
+        use_followers_file_on_disk = input("Using this file? (y/n) > ")
+
+    # Provide option whether to use the last following csv file on disk or to start from scratch
+    followings_file = get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
+    if followings_file != '':
+        use_followings_file_on_disk = input("Using this file? (y/n) > ")
+    
+    # Extract list from 500px server    
+    if use_followers_file_on_disk == 'n':
+        print(f"    Getting {user_inputs.user_name}'s Followers list ...")
+        output_lists.followers_list = get_followers_list(driver, user_inputs, output_lists)
+        # write result to csv
+        if len(output_lists.followers_list) == 0:
+            printR(f'    User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
+            return ''
+        followers_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')
+        if write_users_list_to_csv(output_lists.followers_list, followers_file) == False:
+            printR(f'    Error writing the output file\n:{followers_file}')
+            return ''
+        CSV_to_HTML(followers_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
+
+    # close the popup windows, if they are opened from previous task
+    close_popup_windows(driver, close_ele_class_names = ['close', 'ant-modal-close-x'])
+
+    # Extract list from 500px server    
+    if use_followings_file_on_disk == 'n':
+        print(f"    Getting {user_inputs.user_name}'s Followings list ...")
+        output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
+        # write result to csv
+        if len(output_lists.followings_list) == 0:
+            printR(f'    User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
+            return ''
+        followings_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
+        if write_users_list_to_csv(output_lists.followings_list, followings_file) == False:
+            printR(f'    Error writing the output file\n:{followings_file}')
+            return ''
+        CSV_to_HTML(followings_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
+    
+    # create followers dataframe
+    df_followers= CSV_file_to_dataframe(followers_file)
+
+    # create followings dataframe
+    df_followings = CSV_file_to_dataframe(followings_file)
+
+    # merge followers and followings dataframes, preserving all data 
+    df_all_ = pd.merge(df_followers, df_followings, how='outer', indicator = True,  suffixes=('_follower_order', '_following_order'), 
+                      on=['Avatar Href', 'Avatar Local', 'Display Name', 'ID', 'Followers Count', 'Status', 'User Name'] )   
+
+    # removed the combined values in the overlap columns after merging
+    # I'm using pandas 1.0.1 and yet to find out how to avoid this: different values of the same column name are combined with a dot in between, eg 23.5, 
+    # even they are already separate by two extra columns. If you khow how please let me know
+    df_all_['No_follower_order']   = df_all_['No_follower_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
+    df_all_['No_following_order'] = df_all_['No_following_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
+
+    # renamed some columns
+    df_all = df_all_.rename(columns={'No_follower_order': 'Follower Order', 'No_following_order': 'Following Order', '_merge': 'Relationship'})
+    
+    # users who follow you and you follow them 
+    df_reciprocal = df_all[df_all['Relationship'] == 'both']
+
+    # users who follow you but you do not follow them
+    df_not_follow =  df_all[df_all['Relationship'] == 'left_only']
+
+    # users who you follow but they do not follow you
+    df_right_only =  df_all[df_all['Relationship'] == 'right_only']                                              # getting the names
+    df_not_follower = pd.merge(df_followings, df_right_only[['User Name']], how='inner', on='User Name')         # from names, getting the detail info  
+    df_not_follower = df_not_follower.rename(columns={'No': 'Following Order', 'Followers': 'Followers Count'})  # renaming some columns
+    df_not_follower['Follower Order'] = ''                                                                       # add missing column with empty values
+    df_not_follower['Relationship'] = 'right_only'                                                               # finally assigning the merged indicator info 
+
+    # write dataframe to csv, html. Show html
+    df_to_process = [df_reciprocal, df_not_follow, df_not_follower, df_all]
+    csv_type_to_process= [apiless.CSV_type.reciprocal, apiless.CSV_type.not_following, apiless.CSV_type.not_follower, apiless.CSV_type.all]
+    for df, csv_type in zip(df_to_process, csv_type_to_process):
+        # add an index column, started at 1
+        pd.options.mode.chained_assignment = None # this bypass the pandas' SettingWithCopyWarning, which we don't care because we are going to throw way 
+                                                  # the copied and modified dataframe df after each loop iteration
+        df['No'] = range(1, len(df) + 1)
+
+        # Reorder columns to make it easier to generate html file . Original order:
+        # Follower Order, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers Count, Status, Following Order, Relationship, No
+        new_columns_order = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status', 'Follower Order', 'Following Order', 'Relationship', ]
+        df = df[new_columns_order]
+
+        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status']
+        if csv_type == apiless.CSV_type.not_following:
+            ignore_columns.extend(['Following Order'])
+        elif csv_type == apiless.CSV_type.not_follower:
+            ignore_columns.extend(['Follower Order'])
+
+        csv_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(df)}_{csv_type.name}_{date_string}.csv')           
+        df.to_csv(csv_file_name, encoding='utf-16', index = False)
+        html_file = CSV_to_HTML(csv_file_name, csv_type, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  ignore_columns = ignore_columns)
+        show_html_result_file(html_file) 
+
+    # print summary report
+    time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
+    print(f' The process took {time_duration} seconds') 
+
+#---------------------------------------------------------------  
 def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='No', ascending=True):
     """Read a given csv file from disk and convert it to dataframe."""
 
@@ -3626,12 +3847,12 @@ def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='
 
     # do main task
     dframe = pd.read_csv(csv_file_name, encoding = encoding)  
-    ## validate the given  csv file
+    ## validate the given  csv file, if needed
     #if len(list(dframe)) == 0 or not 'User Name' in list(dframe):
     #    printR(f'The given csv file is not valid. It should  have a header row with  at leat one column named "User Name":.\n\t{user_inputs.csv_file}')
     #    return
 
-    print(f'Table has {dframe.shape[0]} rows, {dframe.shape[1]} columns')
+    #print(f'Table has {dframe.shape[0]} rows, {dframe.shape[1]} columns')
     
     ##option to sort a selected column
     #printG(list(dframe))
@@ -3696,6 +3917,22 @@ def save_photo_thumbnail(url, path):
     return file_name
 
 #---------------------------------------------------------------
+def get_latest_cvs_file(file_path, user_name, csv_file_type):
+    """ Find the latest csv file for the given csv_file_type, from the given user, at the given folder"""
+    files = [f for f in glob.glob(file_path + f"**/{user_name}*_{csv_file_type.name}_*.csv")]
+    if len(files) > 0:
+        if csv_file_type == apiless.CSV_type.notifications:
+            files = [f for f in files if not 'unique' in f]
+
+        files.sort(key=lambda x: os.path.getmtime(x))
+        csv_file = files[-1]
+        print(f"Found the latest {user_name}'s {csv_file_type.name} file on disk:")
+        printG(f"{os.path.abspath(csv_file)}")
+        return csv_file
+    else:
+        return ""
+
+#---------------------------------------------------------------
 def main():
     os.system('color')
     driver = None
@@ -3709,9 +3946,9 @@ def main():
     #if not has_server_connection(driver, r'https://500px.com'):
     #    return   
 
-    user_inputs = define_and_read_command_line_arguments()
+    #user_inputs = define_and_read_command_line_arguments()
 
-    # declare a dictionary so that functions can be referred to from a string of digit(s)
+    #declare a dictionary so that functions can be referred to from a string of digit(s)
     Functions_dictionary = {   
             "1" : handle_option_1, 
             "2" : handle_option_2, 
@@ -3727,8 +3964,11 @@ def main():
             "12": handle_option_12, 
             "13": handle_option_13,  
             "14": handle_option_14,
-            "15": handle_option_15,
-            "16": handle_option_16}
+            # options not yet available from the menu
+            "99": handle_option_99,
+            "98": handle_option_98,
+            "97": handle_option_97
+            }
 
     output_lists = apiless.OutputData()
     
@@ -3777,7 +4017,10 @@ def main():
             continue
 
     close_chrome_browser(driver)
-    sys.exit()
+    try:
+        sys.exit()
+    except:
+        pass
 
 #---------------------------------------------------------------
 if __name__== "__main__":

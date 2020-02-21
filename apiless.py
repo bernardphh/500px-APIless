@@ -110,7 +110,7 @@ class UserInputs():
     """
 
     def __init__(self, use_command_line_args = False, choice='0', user_name='', password='', target_user_name='', photo_href='', gallery_href='', gallery_name='',
-                 number_of_photos_to_be_liked=2 , index_of_start_photo=1, number_of_notifications=200, time_interval=3, index_of_start_user=1, number_of_users=100, csv_file='', db_path=''):
+                 number_of_photos_to_be_liked=2 , index_of_start_photo=1, number_of_notifications=200, time_interval=3, index_of_start_user=1, number_of_users=100, csv_file='', db_path='', index_of_start_notification=0):
         self.use_command_line_args          = use_command_line_args
         self.choice                         = choice
         self.user_name                      = user_name
@@ -127,6 +127,7 @@ class UserInputs():
         self.number_of_users                = number_of_users
         self.csv_file                       = csv_file
         self.db_path                        = config.OUTPUT_DIR + r'/500px_' + user_name + '.db'
+        self.index_of_start_notification    = index_of_start_notification
 
     def Reset(self):
         self.use_command_line_args = False
@@ -145,6 +146,7 @@ class UserInputs():
         self.number_of_users                = 100
         self.csv_file                       = ''
         self.db_path                        = ''
+        self.index_of_start_notification    = 0
 #--------------------------------------------------
 class OutputData():
     """ Represent all the output lists and data"""
@@ -189,10 +191,16 @@ class OutputData():
 #--------------------------------------------------
 class CSV_type(Enum):
     """ Enum representing 5 types of output list"""
-    Not_defined          = 0
-    Followers_list       = 1                   
-    Followings_list      = 2                  
-    Photos_list          = 3              
-    Notifications_list   = 4
-    Unique_users_list    = 5        # Unique users with appearance count, extracted from Notifications list
-    Like_actors_list     = 6
+    not_defined              = 0
+    photos                   = 1         # your photos     
+    notifications            = 2         # notification of liked, comment, added to gallery
+    unique_users             = 3         # Unique users in a notifications list, with the count of their appearances in the list 
+    like_actors              = 4         # users that liked one specific photos of yours
+
+    followers                = 5         # users who follow you          
+    followings               = 6         # users who you follow 
+
+    all                      = 7         # combined your followers and your followings
+    reciprocal               = 8         # users who follow you and you follow them 
+    not_following            = 9         # users who follow you but you do not follow them 
+    not_follower             = 10        # users who you follow but they do not follow you

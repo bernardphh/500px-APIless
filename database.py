@@ -48,9 +48,22 @@ def create_if_not_exists_notifications_tables(connection_cursor):
        no  avatar_href  avatar_local  display_name  user_name  id  content  photo_thumbnail_href  photo_thumbnail_local  title  time_stamp  status, photo_link  
        """
     if connection_cursor is not None: 
-        connection_cursor.execute("""CREATE TABLE IF NOT EXISTS notifications(no integer, avatar_href text, avatar_local text, display_name text, user_name text,
-                                      id integer, content text, photo_thumbnail_href text, photo_thumbnail_local text, title text, time_stamp text, status text, photo_link text,
-                                      PRIMARY KEY (user_name, content, time_stamp, photo_link))""")
+        connection_cursor.execute("""CREATE TABLE IF NOT EXISTS notifications(
+                                     no integer, 
+                                     avatar_href text, 
+                                     avatar_local text, 
+                                     display_name text, 
+                                     user_name text,
+                                     id integer, 
+                                     content text, 
+                                     photo_thumbnail_href text, 
+                                     photo_thumbnail_local text, 
+                                     title text, 
+                                     time_stamp text, 
+                                     status text, 
+                                     photo_link text,
+                                     PRIMARY KEY (user_name, content, photo_link))""")
+   #note: time_stamp is taken out from primary key set due to it unreliability. After 450 notifications or so, the 500px server stops updating it.
 #---------------------------------------------------------------
 def insert_photo_to_photo_table(conn, photo_info):
     """

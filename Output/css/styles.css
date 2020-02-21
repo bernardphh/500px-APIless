@@ -5,6 +5,8 @@ table {
 	width: 100%; 
 	table-layout:fixed;  
 	text-align:center;
+	margin-top:10px;
+	
 }
 table tr:nth-child(even){
 	background-color: #f2f2f2;
@@ -28,11 +30,22 @@ img {
 	width: 50px; 
 	border-radius: 25px;
 }
-p {
-	line-height:1;
-}
+ p {
+	line-height:2;
+	margin: 0; 
+} 
 div {
 	text-align:left;
+}
+	
+div.legends {
+	padding-left: 5px;
+ 	font-size: 15px;
+  	line-height:1;
+  	width:670px; height:180px;
+ 	border:1px solid #aaa;
+	margin-top: 10px; 
+	margin-bottom: 10px;	
 }
 
 .photo{
@@ -63,6 +76,10 @@ div {
 .w210 {
 	width:210px;
 }
+.w240 {
+	width:240px;
+}
+
 .hdr_text {
 	float:left; 
 	vertical-align:top 
@@ -75,4 +92,27 @@ div {
 	right:1px; 
 	top:32px; 
 	font-size:60%;
+}
+.box {
+    /*]float: left;*/
+	display: inline-block;
+    width: 110px;
+    height: 24px;
+	margin-right: 10px;	
+ 	padding-left: 4px; 
+  }
+
+.reciprocal {
+    background: lightgreen;
+}
+
+.not_following {
+    background: lightskyblue;
+}
+
+.not_follower {
+    background: lightpink;
+}
+.transparent_white {
+    background: white;
 }
