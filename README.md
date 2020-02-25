@@ -57,7 +57,7 @@ Followers and followings users are categorized into 3 groups:
 
 <br/>
 The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
-
+<br/>
 Refer to [500px-APIless.docx](/500px-APIless.docx) for sample outputs, detailed description of each option, and a complete command-line syntaxes.
 
 <br/>
@@ -90,16 +90,15 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 
 ## SOME SAMPLE OUTPUTS: ##
 
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/allUsers.png" width ="80%">
-<br/>
-<br/>
-
-
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
 <br/>
 
-![](Snapshots/photopage.png)
+<br/>
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/allUsers.png" width ="80%">
+<br/>
 
+![](Snapshots/photopage.png)
+The goal for this photo list is that we want to be able to search or filter our photos based on mulitple categories, such as tag, title, type ... (in future versions)
 <br/>
 
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Notification.png" width ="80%">
@@ -117,6 +116,11 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 
 ### Like n photos of each users in the last m notifications: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+
+<br/>
+
+### Like n photos from a gallery: ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
 
 <br/>
 
@@ -158,8 +162,8 @@ abusing or over-usage may result in your 500px account being banned.
 
 **Use this at your own risk**.
 
-The servers don't like scraping and always try their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. 
+No web servers like being scrapped. They are trying their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. Rotating IP and user agents, among others, are some options that you may consider.  
 For obvious reason, such measures are not included in the code.
 
-**Stay clean, don't get caught and Happy scraping !** )* 
+**Stay clean, be reasonalble and respectfull. Don't get caught and Happy scraping !** )* 
 
