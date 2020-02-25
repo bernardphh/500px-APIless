@@ -99,30 +99,26 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 
 ![](Snapshots/photopage.png)
 The goal for this photo list is that we want to be able to search or filter our photos based on mulitple categories, such as tag, title, type ... (in future versions)
-<br/>
+<br/><br/>
 
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Notification.png" width ="80%">
+List of 200 notifications from index #50
+<br/></br>
 
-<br/>
-
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/UniqueUsers.PNG" width="500">
-
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/UniqueUsers.png" width="500">
 <br/>
 
 ### Check if a user is following you: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CheckFollowingStatus.jpg" width="80%">
-
-<br/>
+<br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
-
-<br/>
+<br/><br/>
 
 ### Like n photos from a gallery: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
-
-<br/>
+<br/><br/>
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ## 
 
@@ -140,6 +136,7 @@ The goal for this photo list is that we want to be able to search or filter our 
    - [ ] Automatic data analysis
    - [ ] Sorting a column in the output HTML file is too long to be practical, especially if the table is big (200+ rows). 
          Possible solutions: Break the long html into pages, sort the list before creating html or doing it on a GUI.
+         
    - [ ] Using multiprocessing (on processing already downloaded data, not on requests to servers)      
 
 Prior to this project, I have zero knowledge about python and web scraping. No doubt there are rooms for improvements. 
