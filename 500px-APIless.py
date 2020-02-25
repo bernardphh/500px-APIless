@@ -267,13 +267,13 @@ def write_unique_notificators_list_to_csv(unique_users_list, csv_file_name):
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Count'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Appearances Count'])  
             writer.writeheader()
 
             for actor in unique_users_list:
                 items = actor.split(',')
                 if len(items) == 7:
-                    writer.writerow({'No': items[0], 'Avatar Href': items[1], 'Avatar Local': items[2], 'Display Name': items[3], 'User Name': items[4], 'ID' : items[5], 'Count': items[6]}) 
+                    writer.writerow({'No': items[0], 'Avatar Href': items[1], 'Avatar Local': items[2], 'Display Name': items[3], 'User Name': items[4], 'ID' : items[5], 'Appearances Count': items[6]}) 
             printG('Unique notificators is saved at:\n ' + os.path.abspath(csv_file_name))
             return True 
 
@@ -1385,7 +1385,7 @@ def process_notification_element(notification_element, output_lists):
 
     except:  # log any errors during the process but do not stop 
         printR(f'\nError on getting notification: actor: {display_name}, photo_title: {photo_title}\nSome info may be missing!')
-	pass
+
     # creating and return the notification object
     the_actor = apiless.User(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
     the_photo = apiless.Photo(thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, id = photo_id, href = photo_link, title = photo_title)
@@ -1427,7 +1427,7 @@ def get_notification_list(driver, user_inputs, output_lists, get_full_detail = T
     - Return two lists, the notifications list, and a simplified list, containing the unique users on the first list. 
     """
 
-    unique_notificators, notifications_list, simplified_list = [],[], []
+    unique_notificators, notifications_list, simplified_list = [], [], []
 
     # Feb 19 2020: we now can get the notifications from a certain index
     start_index = user_inputs.index_of_start_notification
@@ -2408,7 +2408,7 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
     if len(splits) >=4:
         if csv_file_type == apiless.CSV_type.unique_users:
             parts = splits[2].split('-')
-            title = f'{splits[1]} unique users in the last {parts[-1]} notifications'
+            title = f'{splits[1]} unique users in {parts[-1]} notifications'
             table_width =  'style="width:500"'
         elif csv_file_type == apiless.CSV_type.notifications:
             title = f'{splits[1]} notifications'
@@ -2935,21 +2935,21 @@ def get_additional_user_inputs(user_inputs):
 
     # 6. Get n last notifications (max 5000) and the unique users on it: number_of_notifications 
     if choice == 6 : 
-        input_val, abort =  validate_input(f'Enter the number of notifications you want to retrieve(max {config.MAX_NOTIFICATION_REQUEST}) >', user_inputs)
+        input_val, abort =  validate_input(f'Enter the number of notifications you want to retrieve(1-{config.MAX_NOTIFICATION_REQUEST}) >', user_inputs)
         if abort: 
             return False
         else:
-            num = int(input_val)
-            user_inputs.number_of_notifications = num if num < config.MAX_NOTIFICATION_REQUEST else config.MAX_NOTIFICATION_REQUEST
+            num1 = int(input_val)
+            user_inputs.number_of_notifications = num1 if num1 < config.MAX_NOTIFICATION_REQUEST else config.MAX_NOTIFICATION_REQUEST
 
-        input_val, abort =  validate_input(f'Enter the desired start index >', user_inputs)
+        input_val, abort =  validate_input(f'Enter the desired start index (1-{config.MAX_NOTIFICATION_REQUEST - num1}) >', user_inputs)
         if abort: 
             return False
         else:
-            num = int(input_val)
-            if num > 0:
-                num -= 1   # assuming ordinary end user will enter 1-based number 
-            user_inputs.index_of_start_notification = num if num < config.MAX_NOTIFICATION_REQUEST -  user_inputs.number_of_notifications else \
+            num2 = int(input_val)
+            if num2 > 0:
+                num2 -= 1   # assuming ordinary end user will enter 1-based number 
+            user_inputs.index_of_start_notification = num2 if num2 < config.MAX_NOTIFICATION_REQUEST -  user_inputs.number_of_notifications else \
                                                       config.MAX_NOTIFICATION_REQUEST - user_inputs.number_of_notifications
   
     # 7. Check if a user is following you : target user name
@@ -3325,7 +3325,7 @@ def handle_option_6(driver, user_inputs, output_lists):
 
     # write unique users list to csv. Convert it to html, show it in browser
     csv_file_unique_users  = os.path.join(output_lists.output_dir, \
-        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-last-{len(output_lists.notifications)}_notifications_{date_string}.csv")
+        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-{len(output_lists.notifications)}_notifications_{date_string}.csv")
     if len(output_lists.unique_notificators) > 0 and  write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
         html_file = CSV_to_HTML(csv_file_unique_users, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
                                 ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
@@ -3882,7 +3882,8 @@ def save_avatar(url, path):
         r = requests.get(url, allow_redirects=True)
         time.sleep(random.randint(1, 5) / 10)         
         file_name =  r.headers.get('content-disposition').replace('filename=stock-photo-','')
-    except:
+    except requests.exceptions.RequestException as e:
+        #print(e)
         # default avatar if user does not have one: https://pacdn.500px.org/userpic.png
         file_name = url.split('/')[-1]
 
