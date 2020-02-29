@@ -920,21 +920,11 @@ def get_followers_list(driver, user_inputs, output_lists):
                     else:
                         user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
                         avatar_local = user_id + '.jpg'
-                        # save avatar to disk if requested, and if it does not already exist
-                        if config.USE_LOCAL_THUMBNAIL and not avatar_local in output_lists.avatars_list: 
-                            #time.sleep(random.randint(5, 10) / 10)  
-                            avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
-        
-            ## if logged-in, we can determine if this user has been followed or not
-            #if user_inputs.password != '':
-            #    try:          
-            #        class_name_ele = check_and_get_ele_by_xpath(actor_info, '../..')  
-            #        if class_name_ele is not None:
-            #            class_name = class_name_ele.get_attribute('class')
-            #            following_status = 'Following' if class_name.find('following') != -1  else 'Not Follow'
-            #    except NoSuchElementException:
-            #        following_status = 'Unknown'
-            #        pass
+                        
+                    avatar_full_file_name = os.path.join(config.OUTPUT_DIR, 'avatars', avatar_local)
+                    # save avatar to disk if requested, and if it does not already exist
+                    if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
+                        save_avatar(avatar_href, avatar_full_file_name)
 
             # get followers count
             number_of_followers = ''
@@ -984,7 +974,6 @@ def does_this_user_follow_me(driver, user_inputs):
             following_count = int(following_count_ele.text.replace(",", "").replace(".", ""))
         except:
             printR(f'Error converting followers count to int: {following_count}')
-            pass
  
         print(f'    - User {user_inputs.target_user_name} is following {str(following_count)} user(s)')
   
@@ -1176,7 +1165,6 @@ def get_followings_list(driver, user_inputs, output_lists):
         following_count = int(following_ele.text.replace(",", "").replace(".", ""))
     except:
         printR(f'Error converting followers count to int: {following_count}')
-        pass
  
     print(f'    User {user_inputs.user_name} is following { str(following_count)} user(s)')
     
@@ -1192,7 +1180,6 @@ def get_followings_list(driver, user_inputs, output_lists):
             time.sleep(1)
         except:
             printR('    Error while scrolling down to load more item. We may not get all requested items.')
-            pass
 
     #Scroll_to_end_by_class_name(driver, 'actor_info', following_count)
  
@@ -1230,9 +1217,13 @@ def get_followings_list(driver, user_inputs, output_lists):
                         user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
                         avatar_local = user_id + '.jpg'
                         # save avatar to disk if requested, and if it does not already exist
-                        if config.USE_LOCAL_THUMBNAIL and not avatar_local in output_lists.avatars_list: 
-                            #time.sleep(random.randint(5, 10) / 10)  
-                            avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+                        #if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(os.path.join(output_lists.avatars_dir, avatar_local)):    
+                        #    avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+                    
+                    avatar_full_file_name = os.path.join(config.OUTPUT_DIR, 'avatars', avatar_local)
+                    # save avatar to disk if requested, and if it does not already exist
+                    if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
+                        save_avatar(avatar_href, avatar_full_file_name)
 
 
             # get followers count
@@ -1335,9 +1326,13 @@ def process_notification_element(notification_element, output_lists):
             user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
             avatar_local = user_id + '.jpg'
             # save avatar to disk if requested, and if it does not already exist
-            if config.USE_LOCAL_THUMBNAIL and not avatar_local in output_lists.avatars_list: 
-                #time.sleep(random.randint(5, 10) / 10)  
-                avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+            #if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(os.path.join(output_lists.avatars_dir, avatar_local)):  
+            #    avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+
+            avatar_full_file_name = os.path.join(config.OUTPUT_DIR, 'avatars', avatar_local)
+            # save avatar to disk if requested, and if it does not already exist
+            if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
+                save_avatar(avatar_href, avatar_full_file_name)
 
         # the type of notificication
         item_text = check_and_get_ele_by_class_name(notification_element, 'notification_item__text')  
@@ -1554,9 +1549,14 @@ def get_like_actioners_list(driver, output_lists):
                 # save avatar to disk if requested, and only if it does not exist
                 # this means that if the users changed theirs avatars we won't see the change. 
                 # To get the latest version of an avatar, we have to identify the file on the list and delete it before running the script
-                if config.USE_LOCAL_THUMBNAIL and not avatar_local in output_lists.avatars_list:
-                    #time.sleep(random.randint(5, 10) / 10)  
-                    avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+            
+                #if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(os.path.join(output_lists.avatars_dir, avatar_local)):   
+                #    avatar_local = save_avatar(avatar_href, output_lists.avatars_dir)
+
+            avatar_full_file_name = os.path.join(config.OUTPUT_DIR, 'avatars', avatar_local)
+            # save avatar to disk if requested, and if it does not already exist
+            if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
+                save_avatar(avatar_href, avatar_full_file_name)
 
             img_ele_parent =  check_and_get_ele_by_xpath(img, '..')
             if img_ele_parent is None:
@@ -3867,31 +3867,17 @@ def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='
     return df
 
 #---------------------------------------------------------------   
-def save_avatar(url, path):
-    """ Save the 500px user avatar to disk at the given path. The original 500px avatar file has this format "stock-photo-[user ID].jpg" which 
-        we will extract from the header, and use just the user id for filename. 
-        Users who do not not provide their avatars have a default avatar, which will be saved as the original name: 'userpic.png'
-        Existing file will be overwritten
-        Return the file name
+def save_avatar(url, full_file_name):
+    """ Save the image from the given url to disk, at the given full file name."""
      
-    This function is meant to be called repeatedly in the loop, so for better performance, we don't chech the existance of the given path
-    We have to make sure the given path is valid prio to calling this. 
-    """ 
-    file_name = '' 
     try:
-        r = requests.get(url, allow_redirects=True)
-        time.sleep(random.randint(1, 5) / 10)         
-        file_name =  r.headers.get('content-disposition').replace('filename=stock-photo-','')
+        r = requests.get(url, allow_redirects=True )
+        #time.sleep(random.randint(1, 5) / 10)         
     except requests.exceptions.RequestException as e:
-        #print(e)
-        # default avatar if user does not have one: https://pacdn.500px.org/userpic.png
-        file_name = url.split('/')[-1]
-
-    full_file_name = os.path.join(path + "\\", file_name)
-    #if not os.path.isfile(full_file_name):
+        printR(f'Error saving user avatar {full_file_name}')
     with open(full_file_name, 'wb+') as f:
         f.write(r.content)
-    return file_name
+
 #---------------------------------------------------------------
 def save_photo_thumbnail(url, path):
     """ Save the photo thumbnail to the given path on disk. 500px thumbnail files has this format "stock-photo-[photo ID].jpg". 
