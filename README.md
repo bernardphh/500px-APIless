@@ -58,7 +58,7 @@ Followers and followings users are categorized into 3 groups:
 <br/>
 The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 <br/>
-Refer to the document **500px-APIless.docx**  for algorithm of each option, sample outputs and a complete command-line syntaxes.
+Refer to the document **500px-APIless.docx **  for algorithm of each option, sample outputs and a complete command-line syntaxes.
 
 <br/>
 
