@@ -58,7 +58,8 @@ Followers and followings users are categorized into 3 groups:
 <br/>
 The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 <br/>
-Refer to the document "500px-APIless.docx"  for algorithm of each option, sample outputs and a complete command-line syntaxes.
+<br/>
+Refer to the document **500px-APIless.docx** for algorithm of each option, sample outputs and a complete command-line syntaxes.
 
 <br/>
 
@@ -162,5 +163,5 @@ abusing or over-usage may result in your 500px account being banned.
 No web servers like being scrapped. They are trying their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. Rotating IP and user agents, among others, are some options that you may consider.  
 For obvious reason, such measures are not included in the code.
 
-**Stay clean, be reasonalble and respectful. Don't get caught and Happy scraping !** )* 
+**Stay clean, be reasonable and respectful. Don't get caught and Happy scraping !** )* 
 
