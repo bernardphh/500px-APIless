@@ -65,6 +65,12 @@ def start_chrome_browser(options_list, headless_mode, my_queue = None):
     
     # suppress chrome log info
     chrome_options.add_argument('--log-level=3')   
+    chrome_options.add_argument('--disable-dev-shm-usage')    
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--enable-automation")
+
     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
     if headless_mode:
@@ -75,10 +81,10 @@ def start_chrome_browser(options_list, headless_mode, my_queue = None):
         chrome_options.add_argument("--window-size=800,1000")
     driver = webdriver.Chrome(options=chrome_options)
 
-    if my_queue is None:
-        return driver
-    else:
+    if my_queue:
         my_queue.put(driver)
+
+    return driver
 
 #---------------------------------------------------------------
 def has_server_connection(driver, server_url):
@@ -702,7 +708,8 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
             printR(f'Error converting date-time string: {upload_date}, on photo: {title}')
 
     #views count
-    photo_stats.views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span').replace(',','').replace('.','')      
+    views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span')
+    photo_stats.views_count  =  int(re.sub('[.,.]', '', views_count))  
                                           
     # highest pulse
     photo_stats.highest_pulse =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
@@ -860,7 +867,6 @@ def get_followers_list(driver, user_inputs, output_lists):
         followers_count = int(followers_ele.text.replace(",", "").replace(".", ""))
     except:
         printR(f'Error converting followers count to int: {followers_count}')
-        pass
     print(f'    User {user_inputs.user_name} has {str(followers_count)} follower(s)')
 
     # keep scrolling the modal window (config.LOADED_ITEM_PER_PAGE items are loaded at a time), until the end, where the followers count is reached 
@@ -876,7 +882,6 @@ def get_followers_list(driver, user_inputs, output_lists):
                 time.sleep(random.randint(10, 20) / 10)  
         except NoSuchElementException:
             printR('Error while scrolling down to load more item')
-            pass
 
     # now that we have all followers loaded, start extracting the info
     update_progress(0, f'    - Extracting data 0/{followers_count}:')
@@ -895,7 +900,7 @@ def get_followers_list(driver, user_inputs, output_lists):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f'    - Extracting data {i + 1}/{followers_count}:')
 
-        user_name, display_name, follower_page_link, following_status = '', '', '', ''
+        user_name, display_name, follower_page_link, following_status = ('' for i in range(4))'
         count = ' '
   
         try:
@@ -1192,7 +1197,7 @@ def get_followings_list(driver, user_inputs, output_lists):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f'    - Extracting data {i + 1}/{following_count}:')
 
-        user_name, display_name, followings_page_link, count, number_of_followers = '', '', '','', ''  
+        user_name, display_name, followings_page_link, count, number_of_followers = ('' for i in range(5))   
         avatar_href, avatar_local, user_id = '', ' ', '0'
         try:
             # get user name 
@@ -1242,29 +1247,29 @@ def get_followings_list(driver, user_inputs, output_lists):
     return followings_list
 
 #---------------------------------------------------------------
-def convert_relative_datetime_string_to_absolute_datetime(relative_time_string, format = "%Y %m %d" ):
-    """ Convert a string of relative time to a date string with a given format. Ex: 'two days ago' --> YYYY-mm-dd 
-        Possible input:
-         an hour ago 
-         2-23 hours ago
-         a day ago
-         yesterday
-         2-31 days ago
-         a month ago,
-         2-11 months ago
-         a year ago 
-         last year
-         xx years ago 
+def convert_relative_datetime_string_to_absolute_date(relative_time_string, format = "%Y %m %d" ):
+    """ Convert a string of relative time (e.g. "2 days ago") to a datetime object, strip the time part and return 
+        the date string in the given format (e.g. YYYY-mm-dd )
+        Possible inputs:
+         in a few seconds
+         in 1 minute, in 2 minutes, 3-59 minutes ago
+         an hour ago, 2-23 hours ago
+         a day ago,   yesterday,        2-31 days ago
+         a month ago, 2-11 months ago
+         a year ago,  last year,        xx years ago 
         """
+    abs_date = None
     datetime_now = datetime.datetime.now()
     if not relative_time_string:
         return ''
-    if 'an hour ago' in relative_time_string:
+    
+    if 'an hour ago' in relative_time_string or 'minutes ago' in relative_time_string:
         abs_date = datetime_now + datetime.timedelta(hours = -1)
+    elif 'minute' in relative_time_string or 'second' in relative_time_string :
+        abs_date = datetime_now  #ignoring seconds amount and time less than 2 minutes           
     elif 'hours ago' in relative_time_string:
         delta = relative_time_string.replace('hours ago', '').strip()
         abs_date = datetime_now + datetime.timedelta(hours = -int(delta))
-
     elif 'a day ago' in relative_time_string or 'yesterday' in relative_time_string:
         abs_date = datetime_now + datetime.timedelta(days = -1)
     elif 'days ago' in relative_time_string:
@@ -1280,10 +1285,12 @@ def convert_relative_datetime_string_to_absolute_datetime(relative_time_string, 
 
     elif 'a year ago' in relative_time_string or 'last year' in relative_time_string:
         abs_date = datetime_now + relativedelta(years = -1)
+    # it seems 500px does not report the correct year if it is dated back more than 1 year. i.e. any date later than 12 months or so will be recorded as last year,
+    # so, for now, this following case will unlikely happen:
     elif 'years ago' in relative_time_string:
         delta = relative_time_string.replace('years ago', '').strip()
         abs_date = datetime_now + relativedelta(years = -int(delta))       
-    return  abs_date.strftime(format)
+    return  "" if abs_date is None else abs_date.strftime(format)
 #---------------------------------------------------------------
 
 def process_notification_element(notification_element, output_lists):
@@ -1294,8 +1301,8 @@ def process_notification_element(notification_element, output_lists):
     # Note that we initialize string with a space instead of an empty string. This is because the database sqlite treats empty string as NULL, 
     # which will cause problem if we choose a NULL column as one of primary key (it will fail to identify the record duplication)
 
-    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp =  '', '', '', '', '', '', '', ''
-    user_name, content, relative_time_string, photo_link = ' ', ' ', ' ', ' ',
+    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp =  ('' for i in range(8))
+    user_name, content, relative_time_string, photo_link = (' ' for i in range(4))
     user_id, photo_id=  '0', '0'
 
     try:
@@ -1373,13 +1380,16 @@ def process_notification_element(notification_element, output_lists):
                 if photo_thumbnail_local:
                     photo_id = os.path.splitext(photo_thumbnail_local)[0]
         
-        # time stamp       
+        # time stamp 	
         time_stamp_ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
-        if time_stamp_ele: 
+	
+        # we convert the relative time(e.g "4 hours ago") to absolute time (e.g. 2020-03-08. 10:30:12AM)
+        # so that we can put the notifications into a database without duplication, regardless of when we extracted them
+	if time_stamp_ele: 
             abs_timestamp = convert_relative_datetime_string_to_absolute_datetime(time_stamp_ele.text, format = "%Y %m %d")
 
     except:  # log any errors during the process but do not stop 
-        printR(f'\nError on getting notification: actor: {display_name}, photo_title: {photo_title}\nSome info may be missing!')
+        printR(f'\nError on getting notification: actor: {display_name}, photo: {photo_title}\nSome info may be missing!')
 
     # creating and return the notification object
     the_actor = apiless.User(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
@@ -1532,7 +1542,7 @@ def get_like_actioners_list(driver, output_lists):
     for i, img in enumerate(img_eles):
         update_progress(i / (actors_count - 1), f'    - Extracting data {i+1}/{actors_count}:')
 
-        display_name, user_name, followers_count, following_status = '', '', '', ''
+        display_name, user_name, followers_count, following_status = ('' for i in range(4))
         avatar_href, avatar_local, user_id = '', ' ', '0'
 
         try: 
@@ -3932,8 +3942,6 @@ def main():
     #if not has_server_connection(driver, r'https://500px.com'):
     #    return   
 
-    #user_inputs = define_and_read_command_line_arguments()
-
     #declare a dictionary so that functions can be referred to from a string of digit(s)
     Functions_dictionary = {   
             "1" : handle_option_1, 
@@ -4003,10 +4011,6 @@ def main():
             continue
 
     close_chrome_browser(driver)
-    try:
-        sys.exit()
-    except:
-        pass
 
 #---------------------------------------------------------------
 if __name__== "__main__":
