@@ -54,8 +54,11 @@ Followers and followings users are categorized into 3 groups:
 -	followers that you are also following
 -	followers that you do not follow
 -	users that you  are following but they do not follow you.
-
 <br/>
+To falicitate the analysis tasks, we have option to create a local SQL database using the csv files obtained in the data collection processes.
+<br/>
+<br/>
+
 The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
 <br/>
 <br/>
@@ -119,6 +122,10 @@ List of 200 notifications from index #50
 
 ### Like n photos from a gallery: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
+<br/><br/>
+
+### Playing a slideshow: ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/13.slideshow.png" width="90%">
 <br/><br/>
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ## 
