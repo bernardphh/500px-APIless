@@ -709,7 +709,7 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
 
     #views count
     views_count =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span')
-    photo_stats.views_count  =  int(re.sub('[.,.]', '', views_count))  
+    photo_stats.views_count  =  int(re.sub('[.,.]', '', views_count))
                                           
     # highest pulse
     photo_stats.highest_pulse =  get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
@@ -900,7 +900,7 @@ def get_followers_list(driver, user_inputs, output_lists):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f'    - Extracting data {i + 1}/{followers_count}:')
 
-        user_name, display_name, follower_page_link, following_status = ('' for i in range(4))'
+        user_name, display_name, follower_page_link, following_status = ('' for i in range(4))
         count = ' '
   
         try:
@@ -1197,7 +1197,7 @@ def get_followings_list(driver, user_inputs, output_lists):
         if i > 0:
             update_progress( i / (len(actor_infos) - 1), f'    - Extracting data {i + 1}/{following_count}:')
 
-        user_name, display_name, followings_page_link, count, number_of_followers = ('' for i in range(5))   
+        user_name, display_name, followings_page_link, count, number_of_followers = ('' for i in range(5)) 
         avatar_href, avatar_local, user_id = '', ' ', '0'
         try:
             # get user name 
@@ -1285,7 +1285,7 @@ def convert_relative_datetime_string_to_absolute_date(relative_time_string, form
 
     elif 'a year ago' in relative_time_string or 'last year' in relative_time_string:
         abs_date = datetime_now + relativedelta(years = -1)
-    # it seems 500px does not report the correct year if it is dated back more than 1 year. i.e. any date later than 12 months or so will be recorded as last year,
+    # it seems 500px does not report the correct year if it is dated back more than 1 year. i.e. any date later than 12 months will be recorded as last year,
     # so, for now, this following case will unlikely happen:
     elif 'years ago' in relative_time_string:
         delta = relative_time_string.replace('years ago', '').strip()
@@ -1301,7 +1301,7 @@ def process_notification_element(notification_element, output_lists):
     # Note that we initialize string with a space instead of an empty string. This is because the database sqlite treats empty string as NULL, 
     # which will cause problem if we choose a NULL column as one of primary key (it will fail to identify the record duplication)
 
-    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp =  ('' for i in range(8))
+    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp = ('' for i in range(8))
     user_name, content, relative_time_string, photo_link = (' ' for i in range(4))
     user_id, photo_id=  '0', '0'
 
@@ -1380,16 +1380,16 @@ def process_notification_element(notification_element, output_lists):
                 if photo_thumbnail_local:
                     photo_id = os.path.splitext(photo_thumbnail_local)[0]
         
-        # time stamp 	
+        # time stamp       
         time_stamp_ele = check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
 	
         # we convert the relative time(e.g "4 hours ago") to absolute time (e.g. 2020-03-08. 10:30:12AM)
         # so that we can put the notifications into a database without duplication, regardless of when we extracted them
-	if time_stamp_ele: 
-            abs_timestamp = convert_relative_datetime_string_to_absolute_datetime(time_stamp_ele.text, format = "%Y %m %d")
+        if time_stamp_ele: 
+            abs_timestamp = convert_relative_datetime_string_to_absolute_date(time_stamp_ele.text, format = "%Y %m %d")
 
     except:  # log any errors during the process but do not stop 
-        printR(f'\nError on getting notification: actor: {display_name}, photo: {photo_title}\nSome info may be missing!')
+        printR(f'\nError on getting notification: actor: {display_name}, photo: {photo_title}.\nSome info may be missing!')
 
     # creating and return the notification object
     the_actor = apiless.User(avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, user_name = user_name, id = user_id)
@@ -1767,14 +1767,28 @@ def play_slideshow(driver, time_interval):
     if len(photo_links_eles) > 0:
         # show the first photo
         driver.execute_script("arguments[0].click();", photo_links_eles[0])
-        time.sleep(1)
+
+        #setup a keypress listener on the document and a variable to store the request
+        driver.execute_script('''
+            document.requestedInput = 'c';              /* default c for CONTINUE*/
+            document.addEventListener("keydown", keyDownPress, false);
+            function keyDownPress(e) { 
+                if(e.keyCode != 37 && e.keyCode != 39)  /* ignore forward/backward navigation by arrow keys*/
+                    if(e.keyCode == 80 )                /* p for PAUSE */
+                        document.requestedInput = 'p';              
+                    else if (e.keyCode == 67 )          /* c for CONTINUE*/       
+                        document.requestedInput = 'c';              
+                    else       
+                        document.requestedInput = 's';  /* s for STOP */            
+                                           
+           } ''')    
 
         # abort the action if the target objects failed to load within a given timeout    
         if not finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
-            return None, None	
-        
+            return None, None	        
+
         # suppress the sign-in popup that may appear if not login
-        hide_banners(driver)
+        hide_banners(driver)        
         
         # locate the expand icon and click it to expand the photo
         expand_icon = check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[2]') 
@@ -1782,12 +1796,26 @@ def play_slideshow(driver, time_interval):
             driver.execute_script("arguments[0].click();",expand_icon)
         time.sleep(time_interval)
         
-        # locate the next icon and click it to show the next image, after a time interval
+        #locate the right arrow icon that can be use to navigate to the next photo
         next_icon = check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[1]/div') 
+        
+        #use the next photo icon as a flag to signal the end of the gallery
         while next_icon is not None:
-            #driver.execute_script("document.documentElement.style.overflow = 'hidden'")
-            driver.execute_script("arguments[0].click();", next_icon)
+            requested_input = driver.execute_script('return document.requestedInput')
+            
+            # go to the next photo
+            if requested_input == 'c':
+                ActionChains(driver).send_keys(Keys.RIGHT).perform()            
+            while requested_input == 'p':
+                time.sleep(0.5)
+                requested_input = driver.execute_script('return document.requestedInput')
+            
+            if requested_input == 's':
+                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
             time.sleep(time_interval)
+                
             next_icon = check_and_get_ele_by_xpath(driver,  '//*[@id="copyrightTooltipContainer"]/div/div[2]/div/div[2]')  
 
 #---------------------------------------------------------------                           
@@ -2135,7 +2163,7 @@ def login(driver, user_inputs):
        check_and_get_ele_by_class_name(driver, 'not_found') is not None or \
        check_and_get_ele_by_class_name(driver, 'missing') is not None:   
        printR(f'Error on loggin. Please retry with valid credentials')
-       user_inputs.user_name, user_inputs.password,  user_inputs.db_path = '', '',  ''
+       user_inputs.user_name, user_inputs.password,  user_inputs.db_path = ('' for i in range(3))
        return False
     return True
 
@@ -2785,6 +2813,8 @@ def show_menu(user_inputs, special_message=''):
     printC('')
     printY('      Data Analysis:')
     printC('  14  Categorize users based on following statuses')
+    printC('  15  Create a local database from the latest csv files on disk')
+
     printC('')
  
     printC('   r  Restart with different user')
@@ -2800,7 +2830,7 @@ def show_menu(user_inputs, special_message=''):
         return 
 
     sel = int(sel)
-    # play slideshow, no credentials needed
+    # No credentials needed for playing slideshow
     if sel == 13:
         user_inputs.choice = str(sel)
         return 
@@ -2811,8 +2841,8 @@ def show_menu(user_inputs, special_message=''):
         user_inputs.db_path =  config.OUTPUT_DIR +  r'\500px_' + user_inputs.user_name + '.db'
     printG(f'Current user: {user_inputs.user_name}')
 
-    # analysis for users' relationship 
-    if sel == 14:
+    # analysis for users' relationship and creating local database options need nothing else
+    if sel == 14 or sel == 15:
         user_inputs.choice = str(sel)
         return 
 
@@ -3039,17 +3069,27 @@ def get_additional_user_inputs(user_inputs):
 
     # 13.  Play slideshow on a given gallery 
     elif choice == 13:
-        # allow a login for showing NSFW contents
-        if user_inputs.user_name == '':
-            printY('If you want to show NSFW contents, you need to login.\n Type your user name now or just press ENTER to ignore')
-            user_inputs.user_name = input('>')
-            if user_inputs.user_name == 'q' or user_inputs.user_name == 'r':
-                user_inputs.choice = user_inputs.user_name
-                return False               
-        if user_inputs.user_name != '' and user_inputs.password == '':                   
-            user_inputs.password, abort = validate_non_empty_input('Type your password> ', user_inputs)
-            if abort:
-                return False        
+        # allow a login for showing NSFW (not suitable for work) contents
+        if user_inputs.password == '':
+            printY('If you want to show NSFW contents, please login.')
+            if user_inputs.user_name == '':            
+                printY(' Type in your user name or just press ENTER to ignore')
+                expecting_user_name = input('User name >')
+                if expecting_user_name  == 'q' or expecting_user_name  == 'r':
+                    user_inputs.choice = expecting_user_name
+                    return False               
+                if len(expecting_user_name) > 0:
+                    user_inputs.user_name = expecting_user_name
+
+            # user name has been entered
+            if user_inputs.user_name != '':  
+                printY('Type in your password or just press ENTER to ignore')
+                expecting_password = win_getpass(prompt='Password >')
+                if expecting_password == 'q' or expecting_password == 'r':
+                    user_inputs.choice = expecting_password
+                    return True 
+                if len(expecting_password) > 0:
+                    user_inputs.password = expecting_password
 
         user_inputs.gallery_href, user_inputs.gallery_name, abort = show_galllery_selection_menu(user_inputs)
         if abort:
@@ -3061,8 +3101,11 @@ def get_additional_user_inputs(user_inputs):
         else:
             user_inputs.time_interval = int(input_val)
 
-            printY(f'Slideshow {user_inputs.gallery_name} will play in fullscreen, covering this control window.\n To stop the slideshow before it ends, and return to this window, press ESC three times.\n Now press ENTER to start >')
-
+            printY('To pause, press p')
+            printY('To continue, press c')
+            printY('To stop, press any other keys.')
+            printY('You can use Left/Right arrow keys to manually navigate backward/forward.')
+            printY(f'Now press ENTER to start the slideshow {user_inputs.gallery_name}.')
             wait_for_enter_key = input() 
  
     # Options not yet available from the menu:
@@ -3674,7 +3717,7 @@ def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No',
     time_duration = (datetime.datetime.now().replace(microsecond=0) - time_start)
     print(f' The process took {time_duration} seconds') 
 #---------------------------------------------------------------
-def handle_option_97(driver, user_inputs, output_lists):
+def handle_option_15(driver, user_inputs, output_lists):
     """Create local database based on the latest csv files on disk
        - create a database for current user if it does not exist.
        - search the output directory for the latest relevant csv files: photos, followers, followings, notifications list
@@ -3754,7 +3797,7 @@ def handle_option_14(driver, user_inputs, output_lists):
     if followings_file != '':
         use_followings_file_on_disk = input("Using this file? (y/n) > ")
     
-    # Extract list from 500px server    
+    # Extract followers list from 500px server in case the user does not want to use the existing files
     if use_followers_file_on_disk == 'n':
         print(f"    Getting {user_inputs.user_name}'s Followers list ...")
         output_lists.followers_list = get_followers_list(driver, user_inputs, output_lists)
@@ -3772,7 +3815,7 @@ def handle_option_14(driver, user_inputs, output_lists):
     # close the popup windows, if they are opened from previous task
     close_popup_windows(driver, close_ele_class_names = ['close', 'ant-modal-close-x'])
 
-    # Extract list from 500px server    
+    # Extract followings list from 500px server in case the user does not want to use the existing files
     if use_followings_file_on_disk == 'n':
         print(f"    Getting {user_inputs.user_name}'s Followings list ...")
         output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
@@ -3798,8 +3841,8 @@ def handle_option_14(driver, user_inputs, output_lists):
                       on=['Avatar Href', 'Avatar Local', 'Display Name', 'ID', 'Followers Count', 'Status', 'User Name'] )   
 
     # removed the combined values in the overlap columns after merging
-    # I'm using pandas 1.0.1 and yet to find out how to avoid this: different values of the same column name are combined with a dot in between, eg 23.5, 
-    # even they are already separate by two extra columns. If you khow how please let me know
+    # I'm using pandas 1.0.1 and yet to figure out how to avoid this: different values of the same column name are combined with a dot in between, eg 23.5, 
+    # even they are already separate by two extra columns. If someone khows how to do that please shout
     df_all_['No_follower_order']   = df_all_['No_follower_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
     df_all_['No_following_order'] = df_all_['No_following_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
 
@@ -3814,7 +3857,7 @@ def handle_option_14(driver, user_inputs, output_lists):
 
     # users who you follow but they do not follow you
     df_right_only =  df_all[df_all['Relationship'] == 'right_only']                                              # getting the names
-    df_not_follower = pd.merge(df_followings, df_right_only[['User Name']], how='inner', on='User Name')         # from names, getting the detail info  
+    df_not_follower = pd.merge(df_followings, df_right_only[['User Name']], how='inner', on='User Name')         # from names, getting the detail info (a whole row on other table) 
     df_not_follower = df_not_follower.rename(columns={'No': 'Following Order', 'Followers': 'Followers Count'})  # renaming some columns
     df_not_follower['Follower Order'] = ''                                                                       # add missing column with empty values
     df_not_follower['Relationship'] = 'right_only'                                                               # finally assigning the merged indicator info 
@@ -3914,7 +3957,7 @@ def save_photo_thumbnail(url, path):
 
 #---------------------------------------------------------------
 def get_latest_cvs_file(file_path, user_name, csv_file_type):
-    """ Find the latest csv file for the given csv_file_type, from the given user, at the given folder"""
+    """ Find the latest csv file for the given csv_file_type, from the given user, at the given folder location"""
     files = [f for f in glob.glob(file_path + f"**/{user_name}*_{csv_file_type.name}_*.csv")]
     if len(files) > 0:
         if csv_file_type == apiless.CSV_type.notifications:
@@ -3922,8 +3965,9 @@ def get_latest_cvs_file(file_path, user_name, csv_file_type):
 
         files.sort(key=lambda x: os.path.getmtime(x))
         csv_file = files[-1]
-        print(f"Found the latest {user_name}'s {csv_file_type.name} file on disk:")
-        printG(f"{os.path.abspath(csv_file)}")
+        dated = os.path.splitext(csv_file)[0].split('_')[-1]
+        printG(f"The latest {user_name}'s {csv_file_type.name} csv file is on {dated}:")
+        print(csv_file)
         return csv_file
     else:
         return ""
@@ -3942,6 +3986,7 @@ def main():
     #if not has_server_connection(driver, r'https://500px.com'):
     #    return   
 
+
     #declare a dictionary so that functions can be referred to from a string of digit(s)
     Functions_dictionary = {   
             "1" : handle_option_1, 
@@ -3958,10 +4003,10 @@ def main():
             "12": handle_option_12, 
             "13": handle_option_13,  
             "14": handle_option_14,
+            "15": handle_option_15,
             # options not yet available from the menu
             "99": handle_option_99,
             "98": handle_option_98,
-            "97": handle_option_97
             }
 
     output_lists = apiless.OutputData()

@@ -10,7 +10,9 @@ def create_if_not_exists_photos_table(connection_cursor):
        no  author_name  id  title  href  thumbnail_href  thumbnail_local  views_count  votes_count  comments_count  galleries  highest_pulse  rating  upload_date  category, tag
        """
     if connection_cursor is not None: 
-        connection_cursor.execute("""CREATE TABLE IF NOT EXISTS photos(no integer, author_name text,
+        connection_cursor.execute("""CREATE TABLE IF NOT EXISTS photos(
+                                    no integer, 
+                                    author_name text,
                                     id integer PRIMARY KEY,
                                     title text, 
                                     href text, 
@@ -36,9 +38,15 @@ def create_if_not_exists_followers_and_followings_tables(connection_cursor):
     table_names = ['followers', 'followings']
     if connection_cursor is not None: 
         for name in table_names:
-            connection_cursor.execute(f"""CREATE TABLE IF NOT EXISTS {name}(no integer, avatar_href text, avatar_local text, display_name text,
+            connection_cursor.execute(f"""CREATE TABLE IF NOT EXISTS {name}(
+                                        no integer, 
+                                        avatar_href text, 
+                                        avatar_local text, 
+                                        display_name text,
                                         user_name text PRIMARY KEY,
-                                        id integer, followers text, status integer )""")
+                                        id integer, 
+                                        followers text, 
+                                        status integer )""")
 
 #---------------------------------------------------------------
 def create_if_not_exists_notifications_tables(connection_cursor):
@@ -68,7 +76,22 @@ def create_if_not_exists_notifications_tables(connection_cursor):
 def insert_photo_to_photo_table(conn, photo_info):
     """
     """
-    sql = f'''INSERT OR IGNORE INTO photos(no, author_name, id, title, href, thumbnail_href, thumbnail_local, views_count, votes_count,  comments_count, galleries, highest_pulse, rating, upload_date, category, tag)
+    sql = f'''INSERT OR IGNORE INTO photos(
+                                            no, 
+                                            author_name, 
+                                            id, 
+                                            title, 
+                                            href, 
+                                            thumbnail_href, 
+                                            thumbnail_local, 
+                                            views_count, 
+                                            votes_count,  
+                                            comments_count, 
+                                            galleries, 
+                                            highest_pulse, 
+                                            rating, 
+                                            upload_date, 
+                                            category, tag)
               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '''
     cur = conn.cursor()
     cur.execute(sql, photo_info)
@@ -79,7 +102,15 @@ def insert_photo_to_photo_table(conn, photo_info):
 def insert_user_to_table(conn, user_info, table_name):
     """
     """
-    sql = f'''INSERT OR IGNORE INTO {table_name}(no, avatar_href, avatar_local, display_name, user_name, id, followers, status)
+    sql = f'''INSERT OR IGNORE INTO {table_name}(
+                                            no, 
+                                            avatar_href, 
+                                            avatar_local, 
+                                            display_name, 
+                                            user_name, 
+                                            id, 
+                                            followers, 
+                                            status)
               VALUES(?, ?, ?, ?, ?, ?, ?, ?) '''
     cur = conn.cursor()
     cur.execute(sql, user_info)
@@ -88,7 +119,20 @@ def insert_user_to_table(conn, user_info, table_name):
 def insert_notification_to_table(conn, notification_info):
     """
     """
-    sql = '''INSERT OR IGNORE INTO notifications(no, avatar_href, avatar_local, display_name, user_name, id, content, photo_thumbnail_href, photo_thumbnail_local, title, time_stamp, status, photo_link)
+    sql = '''INSERT OR IGNORE INTO notifications(
+                                            no, 
+                                            avatar_href, 
+                                            avatar_local, 
+                                            display_name, 
+                                            user_name, 
+                                            id, 
+                                            content, 
+                                            photo_thumbnail_href, 
+                                            photo_thumbnail_local, 
+                                            title, 
+                                            time_stamp, 
+                                            status, 
+                                            photo_link)
               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '''
     cur = conn.cursor()
     cur.execute(sql, notification_info)

@@ -152,7 +152,7 @@ class OutputData():
     """ Represent all the output lists and data"""
 
     def __init__(self, output_dir = '', avatars_dir = '', thumbnails_dir = '', 
-                 json_data = None, photos = None,notifications = None, unique_notificators = None, followers_list = None, followings_list = None, like_actioners_list= None, avatars_list=None, thumbnails_list=None):
+                 json_data = None, photos = None,notifications = None, unique_notificators = None, followers_list = None, followings_list = None, like_actioners_list= None,  thumbnails_list=None):
         self.json_data = [] if json_data is None else json_data      
         self.photos = [] if photos is None else photos      
         self.notifications = [] if notifications is None else notifications      
@@ -171,7 +171,7 @@ class OutputData():
         avatars_dir =  os.path.join(output_dir, 'avatars')
         os.makedirs(avatars_dir, exist_ok = True)
         self.avatars_dir = avatars_dir
-        self.avatars_list = [f for f in os.listdir(avatars_dir) if isfile(join(avatars_dir, f))]
+        #self.avatars_list = [f for f in os.listdir(avatars_dir) if isfile(join(avatars_dir, f))]
  
         thumbnails_dir =  os.path.join(output_dir, 'thumbnails')
         os.makedirs(thumbnails_dir, exist_ok = True)
@@ -204,3 +204,4 @@ class CSV_type(Enum):
     reciprocal               = 8         # users who follow you and you follow them 
     not_following            = 9         # users who follow you but you do not follow them 
     not_follower             = 10        # users who you follow but they do not follow you
+    interactor               = 11        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other

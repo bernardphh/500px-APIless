@@ -1,4 +1,17 @@
 ---------------------------
+Mar 20 2020:
+- New options during playing a slideshow:
+	- Pause
+	- Continue 
+	- Stop   (user no longer needs to press ESC key three times to stop the slideshow) 
+
+- Include in Main Menu the option to create a local database from the latest csv files on disk
+ 	
+- Fixed bugs:
+	- On getting the followers list: typo error that caused syntax error
+	- On processing a notification element: indentation and function name errors
+	  (convert_relative_datetime_string_to_absolute_date() )
+---------------------------
 Feb 21 2020:
 
 1. Add one data analysis option: categorize users based on following statuses.
