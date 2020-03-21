@@ -167,7 +167,7 @@ abusing or over-usage may result in your 500px account being banned.
 
 **Use this at your own risk**.
 
-No web servers like being scrapped. They are trying their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. Rotating IP and user agents, among others, are some options that you may consider.  
+No web servers like being scraped. They are trying their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. Rotating IP and user agents, among others, are some options that you may consider.  
 For obvious reason, such measures are not included in the code.
 
 **Stay clean, be reasonable and respectful. Don't get caught and Happy scraping !** )* 
