@@ -1,4 +1,20 @@
 ---------------------------
+Apr 5 2020:
+- Moved helper functions into two separated py files: utils.py and webtools.py
+- Reorganized supported py files under a new folder named ./common 
+- Log activities to file on disk
+  Log file name and location is configurable in the config.py. 
+
+Bugs fixed :
+- Made sure the configurable Output folder is setup related to the script location, not to the running folder: eg.
+- On getting the list of users who liked a given photo (option 5), if you did not log in, the following status will be Unknown, instead of Not Follow.  
+- More exception handlings
+
+ Performance improved: 
+- on getting the list of users who liked a photo, extract only the user name and display name if the task is to autolike their photos 
+
+
+---------------------------
 Mar 20 2020:
 - New options during playing a slideshow:
 	- Pause
