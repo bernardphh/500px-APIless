@@ -82,10 +82,13 @@ Selenium, Pandas and ChromeDriver
 
 ## USAGE FOR WINDOW OS: ##
 
-Extract the py scripts to the same location on disk. 
+Extract all to a location on disk, say "Download folder". You should have this folders structure: 
+<br/>
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Folders Structure.PNG" width ="25%">
+<br/>
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
-If not, make sure the locations of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python scripts and type: <br/>
+If it failed, make sure the locations of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python scripts and type: <br/>
  python.exe 500px-APIless.py
  
 Also make sure the folder Output and ist sub-folders are extracted to the same location where the py scripts are. We need the css and javascript files from this folder for proper viewing of the result html files.
