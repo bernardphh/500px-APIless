@@ -60,7 +60,7 @@ Followers and followings users are categorized into 3 groups: <br/>
 -	users that you  are following but they do not follow you. <br/>
 <br/>
 <br/>
-Notifications are collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
+Notifications collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
 -	All unique users  that had interactions with your photos <br/>
 -	For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
 -	The following status between you and each user <br/>
@@ -111,50 +111,52 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 <br/>
 
 ## SOME SAMPLE OUTPUTS: ##
-
+<kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
+</kbd><br/>
 <br/>
-
-<br/>
+<kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/15.4.All_users_with_following_statuses.png" width ="80%">
-<br/>
+</kbd><br/>
 
 ![](Snapshots/2.photos.png)
-The goal for this photo list is that we want to be able to search or filter our photos based on mulitple categories, such as tag, title, type ... (in future versions)
 <br/><br/>
 
-### Option 16.1: All notifications from local database  ###
+<kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
-<br/></br>
+</kbd><br/></br>
 
-### Option 16.2: Unique users in all recorded notifications  ###
+<kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
-<br/>
+</kbd><br/><br/>
 
 ### Check if a user is following you: ###
+<kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/6.CheckFollowingStatus.png" width="80%">
-<br/><br/>
+</kbd><br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
-<br/><br/>
+<kbd><img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+</kbd><br/><br/>
 
 ### Like n photos from a gallery: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
-<br/><br/>
+<kbd>
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
+</kbd><br/><br/>
 
-### Playing a slideshow: ###
+<kbd>### Playing a slideshow: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/13.slideshow.png" width="90%">
-<br/><br/>
+</kbd><br/><br/><br/>
 
-## LIMITATIONS, ISSUES, TO DO LIST: ## 
+## LIMITATIONS, ISSUES, TO DO LIST: ##br/><
+<br/><
 
-- Not all exceptions are handled, especially with Selenium’s find_element… methods
+-Not all exceptions are handled, especially with Selenium’s find_element… methods
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
-- In the slideshow, the vertical scrollbar is not always hidden 
+b/r/><the slieshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - [x] Handling more exceptions
-   - [x] Using WebDriverWait whenever possible, instead of time.sleep()
+<  - [x] Using WebDriverWait whenever possible, instead of time.sleep()
    - [x] Putting images thumbnails in the result files
    - [ ] Adding ChromeCast support to slideshow
    - [x] Supporting command-line arguments
