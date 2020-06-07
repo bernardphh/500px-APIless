@@ -144,9 +144,9 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 <br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
-<p align="center"><kbd>
+<p align="center">
    <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
-</kbd></p>
+</p>
 <br/><br/>
 
 ### Like n photos from a gallery: ###
