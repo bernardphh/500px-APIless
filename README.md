@@ -123,9 +123,8 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 </kbd></p>
 <br/><br/><br/>
 
-<p align="center">
 ![](Snapshots/2.photos.png)
-</p>
+
 <br/><br/>
 
 <p align="center"><kbd>
