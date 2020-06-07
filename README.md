@@ -123,18 +123,21 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 </kbd></p>
 <br/><br/><br/>
 
-![](Snapshots/2.photos.png)
 
-<br/><br/>
+<p align="center"><kbd>
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/2.photos.png" width ="100%">
+</kbd></p>
+<br/><br/><br/>
+
 
 <p align="center"><kbd>
    <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
 </kbd></p>
 <br/><br/>
 
-<p align="center">
+<p align="center"><kbd>
    <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
-</p>
+</kbd></p>
 <br/><br/>
 
 ### Check if a user is following you: ###
