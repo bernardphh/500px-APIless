@@ -3,6 +3,7 @@ import common.config as config
 import common.utils as utils
 import common.webtools as webtools
 import common.database as db
+import common.htmltools as htmltools
 from common.config import LOG as logger
 from common.utils import print_and_log, printB, printC, printG, printR, printY
 
@@ -13,6 +14,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException   
 from selenium.common.exceptions import ElementNotInteractableException
@@ -30,6 +32,9 @@ import multiprocessing as mp
 from threading import Thread
 import queue
 
+# a global variable for keeping track of loggin status between the tasks
+logged_in = False
+
 # print colors text on console with option to log the same text to file on disk
 def printG(text, write_log=True):  print(f"\033[92m {text}\033[00m"); logger.info(text) if write_log else None 
 def printY(text, write_log=True):  print(f"\033[93m {text}\033[00m"); logger.info(text) if write_log else None
@@ -39,27 +44,8 @@ def printB(text, write_log=False): print(f"\033[94m {text}\033[00m"); logger.inf
 def print_and_log(text): print(text); logger.info(text)
         
 #---------------------------------------------------------------
-def logged_in(driver):
-    """ Check if any user is currently logged in the current session"""
-
-    logged = True
-    print('    - Checking login status ...')
-    # need to be on 500px domain first
-    if not '500px.com' in driver.current_url:
-        driver.get('https://500px.com')
-        time.sleep(2)
-    login_elements = driver.find_elements_by_xpath("//*[contains(text(), 'Log in')]")
-    if len(login_elements) == 0:
-        return logged
-    else:
-        for ele in login_elements: 
-           if ele.tag_name != 'script':
-               return not logged
-        return logged
-
-#---------------------------------------------------------------
-def get_stats(driver, user_inputs, output_lists):
-    """Get statistics of a given user: number of likes, views, followers, following, photos, last upload date...
+def get_user_summary(driver, user_inputs, output_lists):
+    """Get summary of a given user: number of likes, views, followers, following, photos, last upload date...
        If success, return statistics object and a blank message. If not return None and the error message
 
        Process:
@@ -68,6 +54,7 @@ def get_stats(driver, user_inputs, output_lists):
        - Use lxml to extract interested data
        - Use regular expression to extract the json part in the body, and obtain more data from it.
     """
+    print("    - Open user home page ...")
 
     success, message = webtools.open_user_home_page(driver, user_inputs.user_name)
     if not success:
@@ -76,13 +63,17 @@ def get_stats(driver, user_inputs, output_lists):
         return None, message
         
     hide_banners(driver)
-  
-    # abort the action if the target objects failed to load within a given timeout
-    success, innerHtml = webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')
-    if not success:
-        return None, f"Error loading user {user_inputs.user_name}'s photo page"
+    time_out = 30
+    try:
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'finished')))
+    except TimeoutException :
+        return None, f"Error loading user {user_inputs.user_name:}'s photo page"
+
+    innerHTML = driver.execute_script("return document.body.innerHTML")  
+    
+    print("    - Getting user summary ...")
     # using lxml for html handling
-    page = html.document_fromstring(innerHtml)
+    page = html.document_fromstring(innerHTML)
 
     # Affection note
     affection_note = webtools.get_element_attribute_by_ele_xpath(page, "//li[@class='affection']", 'title' )
@@ -97,34 +88,45 @@ def get_stats(driver, user_inputs, output_lists):
 
     # Location
     location = webtools.get_element_text_by_xpath(page,'//*[@id="content"]/div[1]/div[4]/ul/li[5]')
-    loc_test = webtools.check_and_get_all_elements_by_class_name(driver, 'location')
+    if location == '':
+        location = '<i>not specified'
 
     #using regex to extract from the javascript-rendered html the json part that holds user data 
     # Jul 26 2019: modification due to page structure changes: photos list is no longer included in userdata
     #   userdata = re.findall('"userdata":(.*),"viewer":', innerHtml)
-    i = innerHtml.find('"userdata":') 
-    j = innerHtml.find('</script>', i)
-    userdata = innerHtml[i + 11 : j - 2]
+    i = innerHTML.find('"userdata":') 
+    j = innerHTML.find('</script>', i)
+    userdata = innerHTML[i + 11 : j - 2]
     if len(userdata) == 0:
        return None, 'Error getting the user data'
     
     last_upload_date = ''
     json_data = json.loads(userdata)
     print("    - Getting the last upload date ...")
-    last_photo_href = webtools.get_element_attribute_by_ele_xpath(page, './/*[@id="content"]/div[3]/div/div/div[1]/a', 'href')
-    if last_photo_href:
-        driver.get(r'https:/500px.com' + last_photo_href)
-        time_out = 30
-        try:  
-            info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
-            upload_date_ele = webtools.check_and_get_ele_by_xpath(info_box,  '//div[1]/div[2]/p/span')        
-            if upload_date_ele is None:
-                upload_date_ele = webtools.check_and_get_ele_by_xpath(info_box, '//div[3]/div[1]/div/p/span') 
-            if upload_date_ele is not None:
-                last_upload_date = upload_date_ele.text
-        except  TimeoutException:
-            printR(f'   - Time out ({time_out}s)! Last upload date will not be available')
- 
+
+    # wait for the last (top)photo to load and click it to open that photo page 
+    try:  
+        last_photo = WebDriverWait(driver, time_out).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="content"]/div[3]/div/div/div[1]/a')))
+        last_photo.click()
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) loading latest photo')
+
+    # wait for the uploade date item to be loaded to get the date
+    time_out = 20
+    try:  
+        info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="modal_content"]/div/div/div[2]/div/div/div[1]/div')) )
+        info = list(info_box.text.split('\n'))
+        last_upload_date    = [s for s in info if 'Uploaded:' in s][0].replace('Uploaded: ', '')
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) getting the uploade date ')
+        last_upload_date = '<i> failed to load'
+
+    regis_date = json_data['registration_date'][:10]
+    try:
+        registration_date = datetime.datetime.strptime(regis_date, "%Y-%m-%d").date().strftime("%b %d %Y")
+    except:
+        registration_date = regis_date
+
     active_int = json_data['active'] 
     if   active_int == 0 : user_status = 'Not Active'
     elif active_int == 1 : user_status = 'Active'
@@ -139,12 +141,15 @@ def get_stats(driver, user_inputs, output_lists):
 
     stats = apiless.UserStats(json_data['fullname'], user_inputs.user_name, json_data['id'], location, 
                        affection_note, following_note, json_data['affection'], views_count, json_data['followers_count'], json_data['friends_count'], 
-                       json_data['photos_count'], json_data['galleries_count'], json_data['registration_date'][:10], last_upload_date, user_status)
+                       json_data['photos_count'], json_data['galleries_count'], registration_date, last_upload_date, user_status)
     return stats, ''
-      
+
 #---------------------------------------------------------------
+#@utils.profile
 def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele, user_name, user_password, thumbnails_list, thumbnails_dir):
     """Extract photo info from web element, return a photo object"""
+
+    global logged_in
 
     utils.update_progress(index / (items_count -1), f'    - Extracting  {index + 1}/{items_count} photos:')
     # reset variables
@@ -159,7 +164,7 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
 
     # title and thumbnail 
     if img_ele is not None:
-        title = img_ele.attrib["alt"]
+        #title = img_ele.attrib["alt"]
 
         photo_thumbnail_href = img_ele.attrib["src"]
         # save the photo thumbnail to disk
@@ -170,98 +175,112 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
                 photo_thumbnail_local = utils.save_photo_thumbnail(photo_thumbnail_href, thumbnails_dir )
 
     # open each photo page to get photo statistics
-    time_out = 30
     id = ''
-    galleries_list = []
-    order = index + 1        
+    #galleries_list = []
+    order = index + 1      
+
+    driver.get(photo_href)   
+    time_out = 30
     try:  
-        driver.get(photo_href)
-        #time.sleep(random.randint(1, 5) / 10)
-        info_box = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
+        info_box = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, '//*[@id="root"]/div[4]/div/div')) )
     except  TimeoutException:
         # log error, add the current photo with what are extracted so far, then go on with the next photo
-        printR(f'   - Time out ({time_out}s). Photo #{index + 1}, {title} will have incomplete info')
-        return apiless.Photo(author_name = user_name, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, 
+        printR(f'   - Time out ({time_out}s) loading photo page.\n     Photo#{index + 1}, {title} will have incomplete info')
+        return apiless.Photo(author_name = user_name, order = order, id = photo_id, title = title, thumbnail_href = photo_thumbnail_href, 
                              thumbnail_local = photo_thumbnail_local, stats = photo_stats ) 
 
-    #category  
-    category_ele = driver.find_element_by_xpath("//span[contains(.,'Category')]")
-    if category_ele:
-        photo_stats.category  = webtools.get_web_ele_text_by_xpath(category_ele, '../following-sibling::a' ) 
+    info = list(info_box.text.split('\n'))
+    title          = info[0]
+    upload_date    = [s for s in info if 'Uploaded:' in s][0].replace('Uploaded: ', '')
+    photo_stats.upload_date = utils.convert_relative_datetime_string_to_absolute_date(upload_date, format = "%Y %m %d")
 
-    #upload date    //*[@id="modal_content"]/div/div/div[2]/div/div[2]/div[3]/div[1]/div[2]/p/span
-    upload_date = webtools.get_web_ele_text_by_xpath(info_box, '//div[3]/div[1]/div/p/span' )
-        
-    if upload_date and ('ago' not in upload_date):
-        try:
-            dt = datetime.datetime.strptime(upload_date, "%b %d, %Y")
-            photo_stats.upload_date = dt.strftime("%Y %m %d")
-        except:
-            printR(f'   - Error converting date-time string: {upload_date}, on photo: {title}')
+    # comments_count
+    comments_count = [s for s in info if 'Comments' in s]
+    if len(comments_count) > 0:
+        comments_count = comments_count[0].replace('Comments', '')
+        if comments_count.strip().isnumeric():
+            photo_stats.comments_count = int(comments_count)
+   
+    # highest_pulse  
+    highest_pulse  = info[info.index('Pulse') + 1] if 'Pulse' in info else '0.0'
+    photo_stats.highest_pulse = float(highest_pulse)
 
-    #views count
-    views_count =  webtools.get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[2]/h3/span')
-    try:
-        photo_stats.views_count  =  int(re.sub('[.,.]', '', views_count))
-    except:
-        printR(f'   - Error getting views count on {title}')
-                                          
-    # highest pulse
-    photo_stats.highest_pulse =  webtools.get_web_ele_text_by_xpath(info_box, '//div/div[2]/div[3]/div[3]/div[1]/h3') 
-        
-    # Get votes (likes) count
-    try:
-        photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
-    except  TimeoutException:               
-        printR(f'   - Time out ({time_out}s) getting votes count. Photo #{index + 1}, {title}.')
+    # views_count
+    views_count = info[info.index('Impressions') + 1] if 'Impressions' in info else '0'
+    photo_stats.views_count = utils.convert_string_num_to_int(views_count)
 
-    # votes count
-    photo_stats.votes_count = photo_likes_count_ele.text.replace(',','').replace('.','')
+    # votes_count
+    votes_count  = [s for s in info if 'people liked this photo' in s]
+    if len(votes_count) > 0:
+        votes_count = votes_count[0].replace('people liked this photo', '')
+        photo_stats.votes_count = utils.convert_string_num_to_int(votes_count)
 
-    # comments count
-    photo_stats.comments_count =  webtools.get_web_ele_text_by_xpath(info_box, '//div/div[4]/div[2]/div/h4').split(' ')[0].replace(',','').replace('.','')
+    index_category = info.index('Category:') if 'Category:' in info else -1
+    index_featured = info.index('Featured in these Galleries') if 'Featured in these Galleries' in info else -1
+    if index_category != -1 and index_featured != -1:
+        # category
+        photo_stats.category = info[index_category + 1] 
 
-    #tags   
-    tags = []
-    container = webtools.check_and_get_ele_by_xpath(category_ele, '../../following-sibling::div')
-    if container is not None:
-        a_eles = webtools.check_and_get_all_elements_by_tag_name(container, 'a')
-        if a_eles is not None:
-            for item in a_eles:
-                tag = item.text                  
-                if tag != '': tags.append(tag)
-            tags.sort()
-            photo_stats.tags =  ",".join(tags)
+        # string of tags
+        tags = info[index_category + 2: index_featured]
+        if 'View more' in tags:
+            tags.pop(tags.index('View more'))
+        tags.sort()
+        photo_stats.tags = ",".join(tags)
 
-    # get galleries list, if user logged in
-    if user_password:
-        view_all_ele = driver.find_elements_by_xpath("//*[contains(text(), 'View all')]")
-        if len(view_all_ele) == 0 or (len(view_all_ele) == 1 and view_all_ele[0].tag_name == 'script'):
-            photo_stats.collections_count = 0
+    # featured galleries, count and string of galleries names
+    galleries_count = 0
+    galleries_string = ''    
+
+    if logged_in and  'This photo has not been added to any Galleries' not in info:
+        # find the View all text and click on that to load all featured galleries
+        hrefs = []
+        view_all_ele = info_box.find_elements_by_xpath("//*[contains(text(), 'View all')]")
+
+        # featured galleries: case 1: there are galleries but not all of them are showing ( There exists a text 'View all')
+        # find the text 'View all' and click on that to open the modal window that hosts the galleries, then get the container elemment
+        if len(view_all_ele) > 0:
+            view_all_ele[0].click()
+            time_out = 30
+            try:
+                container_ele = WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'infinite-scroll-component')) )
+            except  TimeoutException:
+                printR(f'   Time out ({time_out}s! Error loading galleries.')
+            else:
+                # we use the tag img just to identify loading galleries and scroll into view the last item in order to load more
+                img_eles = webtools.check_and_get_all_elements_by_tag_name(container_ele, 'img')
+                # for now, we just scroll down 3 times to accept roughly 45 galleries
+                # this is because 500px eventually gives bogus galleries, as we go toward the end of the phlist
+                max_scrolldown = 3
+                for _ in range(max_scrolldown):
+                    img_eles[-1].location_once_scrolled_into_view
+    
+        # featured galleries: case 2: there are galleries and all are already in view. 
+        # get the container element
         else:
-            view_all_ele[0].location_once_scrolled_into_view
-            view_all_ele[0].click()         
-            time.sleep(1)
-            eles = driver.find_elements_by_class_name('ant-modal-body')       
-            galleries_count = 0
+            container_eles = webtools.check_and_get_all_elements_by_class_name(driver, 'slick-track') #slick-slide   parent: slick_list
+            if len(container_eles) > 0:
+                container_ele = container_eles[0]
 
-            if len(eles)> 0:
-                containers = webtools.check_and_get_all_elements_by_xpath(eles[0],'./div/div')
-                if containers is not None and len(containers)> 0:
-                    childs =  webtools.check_and_get_all_elements_by_xpath(containers[0], './div') 
-                    if childs is not None:
-                        galleries_count = len(childs)
-                        for child in childs:
-                            a_ele = webtools.check_and_get_ele_by_tag_name(child, 'a')
-                            if a_ele is  not None:
-                                galleries_list.append(a_ele.get_attribute('href'))
+        # now that we have the container for both cases 1 and 2, we grap all the 'a' tags 
+        if container_ele :
+            href_eles = webtools.check_and_get_all_elements_by_tag_name(container_ele, 'a')
+        # then their href attributes
+        for ele in href_eles:
+            href = ele.get_attribute('href')
+            if href:
+                hrefs.append(href)
+        # then remove the duplicates, and filter out unwanted hrefs, ie. not containing the text 'galleries'
+        galleries = [] 
+        [galleries.append(x) for x in hrefs if 'galleries' in x and x not in galleries]
+        photo_stats.collections_count = len(galleries)
+        galleries_string =  ",".join(galleries)
 
-    #print(photo_stats.__dict__)
     return apiless.Photo(author_name = user_name, order = order, id = photo_id, title = title, href = photo_href, 
-                        thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries = ",".join(galleries_list), stats = photo_stats )  
+                        thumbnail_href = photo_thumbnail_href, thumbnail_local = photo_thumbnail_local, galleries = galleries_string, stats = photo_stats )  
 
 #---------------------------------------------------------------
-#utils.@profile
+#@utils.profile
 def get_photos_list(driver, user_inputs, output_lists):
     """Return the list of photos from a given user.
 
@@ -279,12 +298,13 @@ def get_photos_list(driver, user_inputs, output_lists):
         return [], message
 
     hide_banners(driver)
-
+    time.sleep(2)
     # We intend to scroll down an indeterminate number of times until the end is reached
     # In order to have a realistic progress bar, we need to give an estimate of the number of scrolls needed
     estimate_scrolls_needed = 3  #default value, just in case
     photos_count  = 1
-    photos_count_ele = webtools.check_and_get_ele_by_css_selector(driver, '#content > div.profile_nav_wrapper > div > ul > li.photos.active > a > span')
+    photos_count_ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[2]/div/ul/li[1]/a/span')  
+    
     if photos_count_ele is not None:
         try:
             photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
@@ -294,12 +314,15 @@ def get_photos_list(driver, user_inputs, output_lists):
 
     webtools.scroll_to_end_by_class_name(driver, 'photo_link', photos_count)
     
-    # abort the action if the target objects failed to load within a given timeout
-    success, innerHtml = webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')
-    if not success:
+    time_out = 30
+    try:
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'finished')))
+        innerHTML = driver.execute_script("return document.body.innerHTML")  
+        time.sleep(1)
+    except TimeoutException :
         return [], f"Error loading user {user_inputs.user_name}'s photo page"
 
-    page = html.document_fromstring(innerHtml)
+    page = html.document_fromstring(innerHTML)
 
     #extract photo title and href (alt tag) using lxml and regex
     photo_link_eles = page.xpath("//a[@class='photo_link ']")  
@@ -320,7 +343,7 @@ def get_photos_list(driver, user_inputs, output_lists):
 #---------------------------------------------------------------
 def get_followers_list(driver, user_inputs, output_lists):
     """Get the list of users who follow me. Info for each item in the list are: 
-       No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
+       No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Relationship
        If logged in, we can extract my following status to each of my followers  ( whether or not I'm alse following my follower)  
     Process:
     - Open the user home page, locate the text "followers" and click on it to open the modal windonw that hosts the followers list
@@ -332,6 +355,7 @@ def get_followers_list(driver, user_inputs, output_lists):
 
     followers_list = []
     followers_count = 0
+    number_of_followers = ''
     if driver.current_url != 'https://500px.com/' + user_inputs.user_name:
         success, message = webtools.open_user_home_page(driver, user_inputs.user_name)
         if not success:
@@ -341,52 +365,41 @@ def get_followers_list(driver, user_inputs, output_lists):
             return followers_list
 
     hide_banners(driver)
-    # click on the Followers text to open the modal window
-    ele = webtools.check_and_get_ele_by_class_name(driver, "followers")    
-    if ele is None:
-        printR('   - Error on getting the followers list')
-        return followers_list
-    else:
-        ele.click()
-
-    # abort the action if the target objects failed to load within a given timeout
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='actors')[0]:
-        return followers_list
+    # wait for the Follower text icon to be available and click it to open that the modal window that host the followers list 
+    time_out = 30
+    try:  
+        followers_text_ele = WebDriverWait(driver, time_out).until(EC.element_to_be_clickable((By.CLASS_NAME, "followers")))
+        followers_text_ele.click()
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) loading followers list')   
+        return []
 
     # extract number of followers                 
-    followers_ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span')
-    if followers_ele is None:
-        printF('Error while getting the number off followers')
-        return followers_list
+    try:  
+        followers_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="modal_content"]/div/div/div/div/div[1]/span')) )
+    except  TimeoutException:
+        printR(f'   - Error while getting the number off followers')
+        return []
 
     # remove thousand-separator character, if existed
     try:
-        followers_count = int(followers_ele.text.replace(",", "").replace(".", ""))
+        followers_count = int(followers_text_ele.text.replace(",", "").replace(".", "").replace('Followers', '').strip())
     except:
         printR(f'   Error converting followers count to int: {followers_count}')
     else:
-        printG(f'   {user_inputs.user_name.capitalize()} has {str(followers_count)} follower(s)' )
+        printG(f'   {user_inputs.user_name} has {str(followers_count)} follower(s)' )
 
-    # keep scrolling the modal window (config.LOADED_ITEM_PER_PAGE items are loaded at a time), until the end, where the followers count is reached 
-    iteration_num = math.floor(followers_count / config.LOADED_ITEM_PER_PAGE) + 1 
-           
-    for i in range(1, iteration_num + 1):
-        utils.update_progress(i / (iteration_num), f'    - Scrolling down to load more user')
-        index_of_last_item_on_page = i * config.LOADED_ITEM_PER_PAGE -1
-        try:
-            last_ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(index_of_last_item_on_page) + ']')            
-            if last_ele is not None:
-                last_ele.location_once_scrolled_into_view
-                time.sleep(random.randint(10, 20) / 10)  
-        except NoSuchElementException:
-            printR('Error while scrolling down to load more item')
+    webtools.scroll_to_end_by_class_name(driver, 'actor', followers_count)
 
     # now that we have all followers loaded, start extracting the info
     utils.update_progress(0, f'    - Extracting data 0/{followers_count}:')
 
-    # abort the action if the target objects failed to load within a given timeout
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
-        return followers_list
+    time_out = 30
+    try:    
+        WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'finished')) )
+    except  TimeoutException:
+        printR(f'Timed out {time_out}s while followers list')
+        return  followers_list
 
     actor_infos = driver.find_elements_by_class_name('actor_info')
     actors_following =  driver.find_elements_by_css_selector('.actor.following')
@@ -409,28 +422,16 @@ def get_followers_list(driver, user_inputs, output_lists):
                 user_name = follower_page_link.replace('https://500px.com/', '')
             
             # get user avatar, user id and save the user avatar image to disk
-            avatar_href, avatar_local, user_id = '', ' ', '0'
+            avatar_href, avatar_local, user_id = '', '', '0' 
             actor_parent_ele = webtools.check_and_get_ele_by_xpath(actor_info, '..')   
             if actor_parent_ele is not None:
                 avatar_ele = webtools.check_and_get_ele_by_class_name(actor_parent_ele, 'avatar')
                 if avatar_ele is not None:
                     style = avatar_ele.get_attribute('style')
                     avatar_href =  style[style.find('https'): style.find('\")')]
-                    # if user has default avatar
-                    if 'userpic.png' in avatar_href:
-                        if config.USE_LOCAL_THUMBNAIL:
-                            avatar_local = 'userpic.png'
-                    else:
-                        user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
-                        avatar_local = user_id + '.jpg'
-                        
-                    avatar_full_file_name = os.path.join(config.OUTPUT_PATH, 'avatars', avatar_local)
-                    # save avatar to disk if requested, and if it does not already exist
-                    if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
-                        utils.save_avatar(avatar_href, avatar_full_file_name)
+                    user_id, avatar_local = utils.handle_local_avatar(avatar_href, save_to_disk = config.USE_LOCAL_THUMBNAIL, dir = config.OUTPUT_PATH)
 
             # get followers count
-            number_of_followers = ''
             texts = actor_info.text.split('\n')
             if len(texts) > 1: 
                 display_name = texts[0] 
@@ -465,7 +466,14 @@ def does_this_user_follow_me(driver, user_inputs):
             return False, message
   
     hide_banners(driver)     
-    ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')   
+
+    # click on the Following text to open the modal window
+    time_out = 30
+    try:  
+        ele = WebDriverWait(driver, time_out).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')))
+        ele.click()
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) loading Following list')
     
     # extract number of following
     following_count = 0                       
@@ -480,13 +488,9 @@ def does_this_user_follow_me(driver, user_inputs):
         else:
             printG(f'   - User {user_inputs.target_user_name} is following {str(following_count)} user(s)')
   
-    # click on the Following text to open the modal window
-    if ele is not None:
-
-       driver.execute_script("arguments[0].click();", ele)
-
-    # abort the action if the target objects failed to load within a given timeout
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='actors')[0]:
+    try:
+        WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'actors')) )
+    except  TimeoutException:
         return  False, "Status unknown. Timed out on loading more users"
 
     # start the progress bar
@@ -510,14 +514,19 @@ def does_this_user_follow_me(driver, user_inputs):
                 last_loaded_item = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')                                                                   
                 if last_loaded_item is not None:
                     last_loaded_item.location_once_scrolled_into_view
-                    time.sleep(1)
+                    time.sleep(1.5)
             except NoSuchElementException:
                 pass
 
             # abort the action if the target objects failed to load within a given timeout 
-            if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
-               return  False, "Status unknown. Timed out loading more user"
+            #if not webtools.wait_for_presence_of_element(driver, time_out=60, class_name_to_check='finished')[0]:
+            #   return  False, "Status unknown. Timed out loading more user"
+            try:
+                WebDriverWait(driver, timeout=60).until( EC.presence_of_element_located((By.CLASS_NAME, 'finished')) )
+            except  TimeoutException:
+                return  False, "Status unknown. Timed out while loading more user"
             time.sleep(1)
+
 
             # update list with more users
             actor_infos = driver.find_elements_by_class_name('actor_info')
@@ -527,7 +536,8 @@ def does_this_user_follow_me(driver, user_inputs):
             # stop when all photos are loaded
             if loaded_users_count == prev_loaded_users:
                 if loaded_users_count < following_count:
-                    return False, f'Status unknown. Timed out {loaded_users_count}/{following_count}'
+                    #return False, f'Status unknown. Timed out {loaded_users_count}/{following_count}'
+                    return False, f'\n      Only {loaded_users_count}/{following_count} users are available. The status is "Not Following"'
                 break;
 
         following_user_name = ''
@@ -565,8 +575,8 @@ def get_following_statuses(driver, user_inputs, output_lists, csv_file):
 
     # do main task
     df = pd.read_csv(csv_file, encoding='utf-16') #, usecols=["User Name"])     
-    # a trick to force column Status content as string instead of the default float      
-    df.Status = df.Status.fillna(value="")             
+    # a trick to force column Relationship content as string instead of the default float      
+    df.Relationship = df.Relationship.fillna(value="")             
     # make sure the user's inputs stay in range with the size of the following list
     user_inputs.index_of_start_user = min(user_inputs.index_of_start_user, df.shape[0] -1)
     print('    Updating the following statuses on')
@@ -597,28 +607,25 @@ def get_following_statuses(driver, user_inputs, output_lists, csv_file):
         if result == True:
             printG('   - ' + message)
             # update the status column in the dataframe with following status
-            df.at[index, 'Status'] = message 
+            df.at[index, 'Relationship'] = message 
         else:
             printR('   - ' + message) if 'User name not found' in message else printY('   - ' + message)
             continue
     try:
         # write back dataframe to csv file
         df.to_csv(csv_file, encoding='utf-16', index = False)
-        #return csv_file
-    except: # pd.Errors.csv_file:
+    except: 
         printR(f'   Error writing file {os.path.abspath(csv_file)}.\nMake sure the file is not in use. Then type r for retry >')
         retry = input()
         if retry == 'r': 
             df.to_csv(csv_file, encoding='utf-16', index = False)
-            #return csv_file
         else:
             printR('   Error writing file' + os.path.abspath(csv_file))
-            #return ''
 
 #---------------------------------------------------------------
 def get_followings_list(driver, user_inputs, output_lists):
     """Get the list of users who I'm  following. Info for each item in the list are: 
-       No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
+       No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Relationship
 
     PROCESS:
     - Open the user home page, locate the text "followings" and click on it to open the modal windonw that hosts followers list
@@ -640,48 +647,32 @@ def get_followings_list(driver, user_inputs, output_lists):
 
     hide_banners(driver)                  
                                           
-    # click on the Following text to open the modal window
-    ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')     
-    try:
-        if ele is None:
-            printR('   Error on getting the followings list')
-            return followings_list
-        else:
-            ele.click()
-    except:
-        # you may get an exception here because of the tooltip on the element
-        #printR("   Error on opening the Following list. Please try again.")
-        pass
+    # wait for the Following text icon to be available and click pn it to open that the modal window that host the followings list 
+    time_out = 30
+    try:  
+        following_text_ele = WebDriverWait(driver, time_out).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="content"]/div[1]/div[4]/ul/li[4]')))
+        following_text_ele.click()
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) loading Following list')   
+        return []
 
-    # abort the action if the target objects failed to load within a given timeout    
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check='actors')[0]:
-        return followings_list
-            
-    # extract number of following                      
-    following_ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="modal_content"]/div/div/div/div/div[1]/span') 
-    if following_ele is None:
-        return followings_list
+    # extract number of followers                 
+    try:  
+        following_text_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="modal_content"]/div/div/div/div/div[1]/span')) )
+    except  TimeoutException:
+        printR(f'   - Error while getting the number of following')
+        return []
+    time.sleep(1)
 
-    # remove thousand separator character, if existed
     try:
-        following_count = int(following_ele.text.replace(",", "").replace(".", ""))
+        following_count = int(following_text_ele.text.replace(",", "").replace(".", ""))
     except:
-        printR(f'   Error converting followers count to int: {following_count}')
+        printR(f'   Error converting followers count to int: {following_text_ele.text}')
     else:
-        printG(f'   {user_inputs.user_name.capitalize()} is following { str(following_count)} user(s)')
+        printG(f'   {user_inputs.user_name} has {str(following_count)} follower(s)' )
 
-    # keep scrolling the modal window, 50 followers at a time, until the end, where the followings count is reached 
-    iteration_num = math.floor(following_count / config.LOADED_ITEM_PER_PAGE) + 1 
-    for i in range(1, iteration_num):
-        utils.update_progress(i / (iteration_num -1 ), f'    - Scrolling down to load more users:')
-        last_item_on_page = i * config.LOADED_ITEM_PER_PAGE - 1
-        try:
-            the_last_in_list = driver.find_elements_by_xpath('//*[@id="modal_content"]/div/div/div/div/div[2]/ul/li[' + str(last_item_on_page) + ']')[-1]                                                             
-            the_last_in_list.location_once_scrolled_into_view
-            time.sleep(1)
-        except:
-            printR('    Error while scrolling down to load more item. We may not get all requested items.')
- 
+    webtools.scroll_to_end_by_class_name(driver, 'actor', following_count)
+
     # now that we have all followers loaded, start extracting info
     utils.update_progress(0,f'    - Extracting data 0/{following_count}:')
     actor_infos = driver.find_elements_by_class_name('actor_info')
@@ -708,18 +699,7 @@ def get_followings_list(driver, user_inputs, output_lists):
                 if avatar_ele is not None:
                     style = avatar_ele.get_attribute('style')
                     avatar_href =  style[style.find('https'): style.find('\")')]                   
-                    # if user has default avatar
-                    if 'userpic.png' in avatar_href:
-                        if config.USE_LOCAL_THUMBNAIL:
-                            avatar_local = 'userpic.png'
-                    else:
-                        user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
-                        avatar_local = user_id + '.jpg'
-                    
-                    avatar_full_file_name = os.path.join(config.OUTPUT_PATH, 'avatars', avatar_local)
-                    # save avatar to disk if requested, and if it does not already exist
-                    if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
-                        utils.save_avatar(avatar_href, avatar_full_file_name)
+                    user_id, avatar_local = utils.handle_local_avatar(avatar_href, save_to_disk = config.USE_LOCAL_THUMBNAIL, dir = config.OUTPUT_PATH)
 
             # get followers count
             texts = actor_info.text.split('\n')
@@ -738,15 +718,33 @@ def get_followings_list(driver, user_inputs, output_lists):
 #---------------------------------------------------------------
 def process_notification_element(notification_element, output_lists):
     """Process one notification item. Return a notification object of the following detail:
-    No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content, Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Status, Photo Link
-
+    No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content, Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Relationship, Photo Link
     """
-    # Note that we initialize string with a space instead of an empty string. This is because the database sqlite treats empty string as NULL, 
-    # which will cause problem if we choose a NULL column as one of primary key (it will fail to identify the record duplication)
+    #if not notification_element or not output_lists:
+    #    return
 
-    display_name, photo_title, status, avatar_href, avatar_local, photo_thumbnail_href, photo_thumbnail_local, abs_timestamp = ('' for i in range(8))
-    user_name, content, relative_time_string, photo_link = (' ' for i in range(4))
+    (user_name, content, photo_link, display_name, photo_title, status, avatar_href, avatar_local, 
+    photo_thumbnail_href, photo_thumbnail_local, abs_timestamp ) = ('' for i in range(11))
     user_id, photo_id=  '0', '0'
+
+    notif_text = notification_element.text
+    notif_text_list = notif_text.split('\n')
+    
+    # notification type, following status
+    if   'Quest'     in notif_text: return None
+    elif 'liked'     in notif_text: content = 'liked'
+    elif 'added'     in notif_text: content = 'added to gallery'
+    elif 'commented' in notif_text: content = 'commented'
+    elif 'followed'  in notif_text: 
+        content = 'followed'
+        status  = 'Following' if 'Following' in notif_text else 'Not Follow'
+        photo_link = ' '
+    else: return None  #ignore the notification if the content cannot be identified
+
+    # we convert the relative time(e.g "4 hours ago") to absolute time (e.g. 2020-03-08. 10:30:12AM)
+    # so that we can put the notifications into a database without duplication, regardless of when we extracted them
+    if len(notif_text_list) >=2: 
+        abs_timestamp = utils.convert_relative_datetime_string_to_absolute_date(notif_text_list[1], format = "%Y %m %d")
 
     try:
         # get user_name, display_name
@@ -754,12 +752,7 @@ def process_notification_element(notification_element, output_lists):
         if actor is None:
             return None
         display_name = actor.text
-
         user_name = actor.get_attribute('href').replace('https://500px.com/', '')
-
-        # ignore Quest notification
-        if 'quests/' in user_name:
-            return None
 
         # get user avatar, user id   
         avatar_ele = webtools.check_and_get_ele_by_class_name(notification_element, 'notification_item__avatar_img')             
@@ -768,43 +761,11 @@ def process_notification_element(notification_element, output_lists):
         if avatar_ele is None:
             return None
         avatar_href = avatar_ele.get_attribute('src')
-        # if user has default avatar
-        if 'userpic.png' in avatar_href:
-            if config.USE_LOCAL_THUMBNAIL:
-                avatar_local = 'userpic.png'
-        else:
-            user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
-            avatar_local = user_id + '.jpg'
-            avatar_full_file_name = os.path.join(config.OUTPUT_PATH, 'avatars', avatar_local)
-            # save avatar to disk if requested, and if it does not already exist
-            if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
-                utils.save_avatar(avatar_href, avatar_full_file_name)
-
-        # the type of notificication
-        item_text = webtools.check_and_get_ele_by_class_name(notification_element, 'notification_item__text')  
-        if item_text is not  None:
-            if item_text.text.find('liked') != -1: 
-                content = 'liked'
-            elif item_text.text.find('followed') != -1: 
-                content = 'followed'
-            elif item_text.text.find('added') != -1: 
-                content = 'added to gallery'
-            elif item_text.text.find('commented') != -1: 
-                content = 'commented'
-            else: 
-                content = item_text.text
+        user_id, avatar_local = utils.handle_local_avatar(avatar_href, save_to_disk = config.USE_LOCAL_THUMBNAIL, dir = config.OUTPUT_PATH)
 
         # photo title, photo link
-        photo_ele = webtools.check_and_get_ele_by_class_name(item_text, 'notification_item__photo_link')
- 
-        # in case of a new follow, instead of a photo element, there will be 2 overlapping boxes, Follow and Following. We will determine if whether or not this actor has been followered  
-        if photo_ele is None:  
-            following_box = webtools.check_and_get_ele_by_class_name(notification_element, 'following')
-            if following_box is not None and following_box.is_displayed():        
-                status = 'Following'
-            else:  
-                status = 'Not Follow'  
-        else: 
+        photo_ele = webtools.check_and_get_ele_by_class_name(notification_element, 'notification_item__photo_link')
+        if photo_ele:  
             photo_title = photo_ele.text
             photo_link = photo_ele.get_attribute('href') 
 
@@ -818,14 +779,6 @@ def process_notification_element(notification_element, output_lists):
                 photo_thumbnail_local = utils.save_photo_thumbnail(photo_thumbnail_href, output_lists.thumbnails_dir )
                 if photo_thumbnail_local:
                     photo_id = os.path.splitext(photo_thumbnail_local)[0]
-        
-        # time stamp       
-        time_stamp_ele = webtools.check_and_get_ele_by_class_name(notification_element, 'notification_item__timestamp')  
-	
-        # we convert the relative time(e.g "4 hours ago") to absolute time (e.g. 2020-03-08. 10:30:12AM)
-        # so that we can put the notifications into a database without duplication, regardless of when we extracted them
-        if time_stamp_ele: 
-            abs_timestamp = utils.convert_relative_datetime_string_to_absolute_date(time_stamp_ele.text, format = "%Y %m %d")
 
     except:  # log any errors during the process but do not stop 
         printR(f'   Error on getting notification: actor: {display_name}, photo: {photo_title}.\nSome info may be missing!')
@@ -837,156 +790,151 @@ def process_notification_element(notification_element, output_lists):
     return apiless.Notification(order = 0, actor = the_actor, the_photo = the_photo, content = content, timestamp = abs_timestamp,  status = status)
 
 #---------------------------------------------------------------
-def process_notifications(request_number, start_index, items, output_lists):
-    """Given a list of notification web elements and a number of requested notifications, extract info and return a list of notification objects """
-
-    notifications =[]
-    for i, item in enumerate(items):
-        count_sofar = len(notifications)    
-        if count_sofar >= request_number:
-            break
-        
-        new_notification = process_notification_element(item, output_lists)
-        if new_notification is not None:
-            count_sofar += 1
-            new_notification.order = count_sofar + start_index
-            notifications.append(new_notification)
-            # advance the progress bar
-            utils.update_progress(count_sofar/request_number, f'    - Extracted data {count_sofar}/{request_number}') 
-    return notifications
-
-#---------------------------------------------------------------
 #@utils.profile
-def get_notification_list(driver, user_inputs, output_lists, get_full_detail = True ):
-    """Get n last notification items. Return 2 lists, notifications list and a list of unique users from it, along with the count of appearances of each user
+def get_notification_list(driver, user_inputs, output_lists, get_user_names_only = False):
+    """Get n last notification items (excluding Photo Quests). Return 2 lists, notifications list and a list of unique users from it
     
-    A detailed notification item contains full_name, user name, the content of the notification, title of the photo in question, the time stamp and a status
-    A short notification item contains just full name and user name
-    A unique notification list is a short notification list where all the duplication are removed.
-    If the given GET_FULL_DETAIL is true, return the detailed list, if false, return the unique list
+    A notification item contains full_name, user name, the content of the notification, title of the photo in question, the time stamp and the following status
+    A unique user is comma separated string containing display name and user name
+    If GET_USER_NAMES_ONLY=False (default) return notifications list and [] else,  return [] and the unique list
     PROCESS:
     - expecting the user was logged in, and the notification page is the active page
     - scroll down until all the required number of notifications are loaded
-    - extract info.
-    - Return two lists, the notifications list, and a simplified list, containing the unique users on the first list. 
+    - extract and return info according to the given argument GET_USER_NAMES_ONLY
     """
 
     unique_notificators, notifications_list, simplified_list = [], [], []
 
     # Feb 19 2020: we now can get the notifications from a certain index
     start_index = user_inputs.index_of_start_notification
-    length_required = user_inputs.number_of_notifications
-    length_needed = start_index + length_required
+    request_number = user_inputs.number_of_notifications
+    length_needed = start_index + request_number
 
-    webtools.scroll_down_active_page(driver, None, 'notification_item__photo_link', '', length_needed, '    - Scrolling down for more notifications:' ) 
+    #scroll down until all the required number of notifications are loaded, excluding Photo Quest notification
+    webtools.scroll_down_active_page(driver, None, 'notification_item__photo_link', '', length_needed, '    - Scrolling down for more notifications:' )    
 
     # get the info now that all we got all the available notifications
     items = driver.find_elements_by_class_name('notification_item')  
-    notifications_list = process_notifications(user_inputs.number_of_notifications, user_inputs.index_of_start_notification, items, output_lists)
-    if len(notifications_list) == 0 and len(unique_notificators) == 0: 
+    
+    notifications_list =[]
+    unique_names = []
+    names_pair = ''
+
+    for i, item in enumerate(items[start_index:]):
+        count_sofar = len(unique_names) if get_user_names_only else len(notifications_list)    
+        if count_sofar >= request_number:
+            break
+
+        if get_user_names_only:
+            actor = webtools.check_and_get_ele_by_class_name(item, 'notification_item__actor') 
+            if actor:
+                display_name = actor.text
+                user_name = actor.get_attribute('href').replace('https://500px.com/', '')
+                names_pair = f'{display_name},{user_name}'
+                                  
+                if not 'quests/' in user_name and not names_pair in unique_names:
+                    unique_names.append(names_pair)
+            continue
+
+        else:
+            new_notification = process_notification_element(item, output_lists)        
+            if new_notification is not None:
+                count_sofar += 1
+                new_notification.order = len(notifications_list) + 1 + start_index
+                notifications_list.append(new_notification)
+                # advance the progress bar
+                utils.update_progress(count_sofar/request_number, f'    - Extracted data {count_sofar}/{request_number}') 
+             
+    if len(notifications_list) == 0  and ( get_user_names_only and len(unique_names) == 0): 
         printG(f'   User {user_inputs.user_name} has no notification')
         return [], []
 
-    # create the simplified list from the notifications list for easy manipulation
-    # each item in the list is a comma-separated string of avatar link, display name and user name
-    simplified_list = [f'{item.actor.avatar_href},{item.actor.avatar_local},{item.actor.display_name.replace(",", " ")},{item.actor.user_name},{item.actor.id} ' for item in notifications_list]
-    
-    # extract the unique users and the number of times they appear in the notifications list  
-    unique_notificators = utils.count_And_Remove_Duplications(simplified_list)
-
-    # add order number at the beginning of each row
-    for j in range(len(unique_notificators)):
-        unique_notificators[j] = f'{str(j+1)},{unique_notificators[j]}'
-
-    return notifications_list, unique_notificators
-
+    if get_user_names_only:
+        return [], unique_names
+    else:
+        return notifications_list, []
 #---------------------------------------------------------------
 def get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = True):
     """Get the list of users who liked a given photo. If get_name_only=True, only extract user_name and display name, else get all other info.
-       Return the list and  a suggested file name that includes owner name, photo title and the like count
+       Return the list and a dictionary containing suggested file name, photo title and the like count
 
     PROCESS:
     - Expecting the active page in the browser is the given photo page
     - Run the document js to render the page body
     - Extract photo title and photographer name
     - Locate the like count number then click on it to open the modal window hosting the list of actioner user
-    - Scroll down to the end and extract relevant info, put all to the list and return it
+    - Scroll down to the end and extract relevant info, put all to a list and return it
     """
-    time_out = 20
+    global logged_in
     actioners_list = []
     date_string = datetime.datetime.now().replace(microsecond=0).strftime(config.DATE_FORMAT)
-
+    description_dict = {}
+    time_out = 30
     try:  
-        info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div[3]/div/div[2]')) )
+        info_box = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//*[@id="root"]/div[4]/div/div')) )
     except  TimeoutException:
         printR(f'   Time out ({time_out}s)! Please try again')
-        return [], ''
+        return [], {}
   
-    print('     - Getting photo details ...')
-    # get photographer name
-    photographer_ele = webtools.check_and_get_ele_by_xpath(info_box, '//div[2]/div[1]/p[1]/span/a')
-    if photographer_ele is None: 
-        photographer_name = ''
-        printR('   Error getting photographer name')
-    else:
-        photographer_name = photographer_ele.text
-        printG(f'   Photogapher: {photographer_name}')
+    info = list(info_box.text.split('\n'))
+    photo_title          = info[0]
+    printG(f'     Photo title: {photo_title}')
 
-    # get photo title
-    photo_title = ''
-    title_ele = webtools.check_and_get_ele_by_xpath(info_box, '//div[2]/div[1]/h3')
-    if title_ele is None: 
-        printR('   Error getting photo title')
-    else:
-        photo_title = title_ele.text
-        printG(f'   Photo title: {photo_title}')
+    photographer_name  = info[info.index('by') + 1] if 'by' in info else ''
+    printG(f'     Photogapher: {photographer_name}')
 
-    # Get the like-count-button and click on it to open the modal window that host the actioners list
-    try:
-        photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '//a[@data-id="photo-likes-count"]')) )
+    likes_count  = [s for s in info if 'people liked this photo' in s]
+    if len(likes_count) > 0:
+        likes_count = likes_count[0].replace('people liked this photo', '')
+        likes_count = utils.convert_string_num_to_int(likes_count)
+        printG(f"     This photo has {likes_count} likes")
+
+   # wait for the like-count-button to be available and click on it to open that the modal window that host the followings list 
+    try:  
+        photo_likes_count_ele = WebDriverWait(driver, time_out).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="root"]/div[4]/div/div/div[1]/div/div[3]/div[4]/span')))
+        photo_likes_count_ele.click()
+        time.sleep(2)
     except  TimeoutException:
-        printR(f'   Time out ({time_out}s! Please try again')
-        return [], ''
+        printR(f'   Time out ({time_out}s!) Please try again')
+        return [], {}
 
-    likes_count_string = photo_likes_count_ele.text
+    #get a container element containing all actors
     try:
-        likes_count = int(likes_count_string.replace('.','').replace(',',''))
-    except:
-        likes_count = 0
-        printR(f'Error getting likes count on {photo_title}')
-    else:
-        printG(f"   This photo has {likes_count} likes")
-
-    photo_likes_count_ele.click()
-    
-    try:
-        WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'ant-modal-body')) )
+        container =  WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'ant-modal-body')) )
     except  TimeoutException:
         printR(f'   Time out ({time_out}s! Not all elements are loaded. You may try again later.')
  
     # make a meaningful output file name
     like_actioners_file_name = os.path.join(output_lists.output_dir, \
-        f"{photographer_name.replace(' ', '-')}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
+        f"{user_inputs.user_name}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
 
-    #get a container element containing all actors
-    container= webtools.check_and_get_ele_by_class_name(driver,'ant-modal-body')
-    time.sleep(1)
     if container is None:
-        return [], ''
+        return [], {}
+
     #scrolling down until all the actors are loaded
     img_eles = webtools.scroll_to_end_by_tag_name_within_element(driver, container, 'img', likes_count)
-   
+      
+    if not user_inputs.password:
+        print_and_log(f'      User {user_inputs.user_name} is not logged in, the following status will be "Unknown"')
+  
     # create actors list
     actors_count = len(img_eles )
+    info_list = container.text.split('\n')
+    display_names = info_list[0::3]
+    followers_counts = info_list[1::3]
+    following_statuses = info_list[2::3]
+    if False: #DEBUG:
+        assert len(display_names) == actors_count and len(followers_counts) == actors_count and len(following_statuses) == actors_count
+
+    following_statuses = [s.replace('Follow', 'Not Follow') if s == 'Follow' else s for s in following_statuses]
+    followers_counts = [s.replace('Followers', '').strip() for s in followers_counts]
 
     for i, img in enumerate(img_eles):
         utils.update_progress(i / (actors_count - 1), f'    - Extracting data {i+1}/{actors_count}:')
-
         display_name, user_name, followers_count, following_status = ('' for i in range(4))
         avatar_href, avatar_local, user_id = '', ' ', '0'
-
         try: 
-            display_name = img.get_attribute('alt')
+            display_name = display_names[i]
             img_ele_parent =  webtools.check_and_get_ele_by_xpath(img, '..')
             if img_ele_parent is None:
                 continue
@@ -997,51 +945,20 @@ def get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = T
             
             # get more details on each user
             avatar_href= img.get_attribute('src')      
-            # if user has default avatar
-            if 'userpic.png' in avatar_href:
-                if config.USE_LOCAL_THUMBNAIL:
-                    avatar_local = 'userpic.png'
-            else:
-                user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
-                avatar_local = user_id + '.jpg'
-                # save avatar to disk if requested, and only if it does not exist
-                # this means that if the users changed theirs avatars we won't see the change. 
-                # To get the latest version of an avatar, we have to identify the file on the list and delete it before running the script
-            
-            avatar_full_file_name = os.path.join(config.OUTPUT_PATH, 'avatars', avatar_local)
-            # save avatar to disk if requested, and if it does not already exist
-            if config.USE_LOCAL_THUMBNAIL and not os.path.isfile(avatar_full_file_name):  
-                utils.save_avatar(avatar_href, avatar_full_file_name)
-
-            #img_ele_parent =  webtools.check_and_get_ele_by_xpath(img, '..')
-            #if img_ele_parent is None:
-            #    continue
-            #user_name = img_ele_parent.get_attribute('href').replace('https://500px.com/','')
-
-            follower_count_text_ele =  webtools.check_and_get_ele_by_xpath(img_ele_parent, '..') 
-            if follower_count_text_ele is None: 
-                continue
-            texts = follower_count_text_ele.text.split('\n')
-            if len(texts) > 1:
-                followers_count  = re.sub('[^\d]+', '', texts[1]) 
+            user_id, avatar_local = utils.handle_local_avatar(avatar_href, save_to_disk = config.USE_LOCAL_THUMBNAIL, dir = config.OUTPUT_PATH)
+ 
+            followers_count = followers_counts[i]
             
             # get following status
-            if not user_inputs.password:
-                following_status = 'Unknown'
-            else:    
-                following_status = 'Not follow'
-                following_status_ele = webtools.check_and_get_ele_by_xpath(img, '../../../../div[2]/a/span')
-                if following_status_ele is None:
-                    continue
-                if 'Unfollow' in following_status_ele.get_attribute("innerHTML"):
-                    following_status = 'Following'
+            following_status =  'Unknown' if not logged_in else following_statuses[i]
 
         except:  # log any errors during the process but do not stop 
             printR(f'\n   Error on getting user # {i + 1}: name: {display_name}, user name: {user_name}.Some info may be missing!')
 
         actioners_list.append(apiless.User(order = str(i+1), avatar_href = avatar_href, avatar_local = avatar_local, display_name = display_name, 
-                                    user_name = user_name, id = user_id, number_of_followers = str(followers_count), following_status = following_status) )        
-    return actioners_list, like_actioners_file_name
+                                    user_name = user_name, id = user_id, number_of_followers = str(followers_count), following_status = following_status) )  
+        description_dict = {'Data file': like_actioners_file_name, 'Title': f'{actors_count} users liked photo {photo_title}'}
+    return actioners_list, description_dict
 
 #---------------------------------------------------------------
 def like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_liked, include_already_liked_photo_in_count = True, close_browser_on_error = True):
@@ -1063,16 +980,21 @@ def like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
 
     success, message = webtools.open_user_home_page(driver, target_user_name)
     if not success:
-        return False
-    
-    # abort the action if the target objects failed to load within a given timeout    
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=60, class_name_to_check='finished')[0]:
-        return False, 
+        if message.find('Error reading') != -1:
+            user_inputs.target_user_name = ''
+        return False, message
+    time.sleep(2)
 
+    time_out = 30
+    try:  
+        WebDriverWait(driver,time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'finished')) )
+    except  TimeoutException:
+        printR(f"   - Time out ({time_out}s) loading {target_user_name}'s home page")
+        return
     hide_banners(driver)        
     
     new_fav_icons =  webtools.check_and_get_all_elements_by_css_selector(driver, '.button.new_fav.only_icon') 
-    time.sleep(random.randint(5, 10) / 10)   
+    time.sleep(random.randint(10, 15) / 10)   
     if len(new_fav_icons) == 0:
         printY('   User has no photos')
     done_count = 0
@@ -1099,8 +1021,8 @@ def like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
             driver.execute_script("arguments[0].click();", icon) 
             done_count = done_count + 1
             printG(f"    - Liked #{str(done_count):3}: '{title:.50}'")
-            # pause a randomized time between 0.5 to 2 seconds between actions 
-            #time.sleep(random.randint(5, 20) / 10)
+            # pause a randomized time between 0.5 to 1 seconds between actions 
+            time.sleep(random.randint(5, 10) / 10)
 
         except Exception as e:
             printR(f'   Error after {str(done_count)}, at index {str(i)}, title {title}:\nException: {e}')
@@ -1128,6 +1050,7 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
         
         # instead of a fixed waiting time, we wait until the desired photo to be loaded  
         while loaded_photos_count < index_of_start_photo:
+            time.sleep(1)
             new_fav_icons = webtools.check_and_get_all_elements_by_css_selector(driver, '.button.new_fav.only_icon')
             loaded_photos_count = len(new_fav_icons)
           
@@ -1138,7 +1061,7 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             
             # instead of a fixed waiting time, we wait until the desired photo to be loaded, within a given timeout  
-            time_out = 15
+            time_out = 30
             while loaded_photos_count <= current_index and time_out > 0:
                 time_out -= 1
                 new_fav_icons =  webtools.check_and_get_all_elements_by_css_selector(driver, '.button.new_fav.only_icon')  
@@ -1154,21 +1077,30 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
             icon = new_fav_icons[i]
 
             # stop when limit reaches
-            if photos_done >= number_of_photos_to_be_liked: break     
+            if photos_done >= number_of_photos_to_be_liked: 
+                break     
             # skip un-interested items  
-            if i < index_of_start_photo - 1 : continue                   
+            if i < index_of_start_photo - 1 : 
+                continue                   
             # skip already liked photo: 'liked' class is a subclass of 'new_fav_only_icon', so these elements are also included in the list
-            if 'heart' in icon.get_attribute('class'): continue
+            if 'heart' in icon.get_attribute('class'): 
+                continue
             
             webtools.hover_by_element(driver, icon) # not needed, but good to have a visual demonstration
+ 
+            #intentional slowing down a bit to make it look more like human
+            time.sleep(random.randint(10, 15)/10)  
             try:
-                #intentional slowing down a bit to make it look more like human
-                time.sleep(random.randint(5,10)/10)  
-
                 photo_link = icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link')
+            except Exception as e:
+                logger.info(f'Exception: {e}')
+                printY('   The page structure of this photo gallery has changed. The process will stop.')
+                # we set this to end the outer loop, while:
+                photos_done = number_of_photos_to_be_liked
+                break
+            else:               
                 title =  photo_link.find_element_by_tag_name('img').get_attribute('alt')
                 photographer_ele = webtools.check_and_get_ele_by_class_name(photo_link, 'photographer')
-
                 if photographer_ele is not None:
                     photographer_ele.location_once_scrolled_into_view
                     webtools.hover_by_element(driver, photographer_ele)
@@ -1185,16 +1117,9 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
                         photographer =  re.sub('%\w\w', '*', subStrings[1].replace('-',' '))
 
                 driver.execute_script("arguments[0].click();", icon) 
-                photos_done = photos_done + 1
-
                 printG(f'   - Liked {str(photos_done):>3}/{number_of_photos_to_be_liked:<3}, {photographer:<28.24}, Photo {str(i+1):<4} title {title:<35.35}')
-            except Exception as e:
-                printR(f'   Error after {str(photos_done)}, at index {str(i+1)}, title {title}:\nException: {e}')
-                printY('   The page structure of this photo gallery is not recognizable. The process will stop.')
-                # we set this to end the outer loop, while:
-                photos_done = number_of_photos_to_be_liked
-                break
-
+                photos_done = photos_done + 1
+  
 #---------------------------------------------------------------
 def play_slideshow(driver, time_interval):
     """Play slideshow of photos on the active photo page in browser.
@@ -1208,14 +1133,19 @@ def play_slideshow(driver, time_interval):
     """
     photo_links_eles = webtools.check_and_get_all_elements_by_class_name(driver, 'photo_link')
     loaded_photos_count = len(photo_links_eles)
- 
+     
     if len(photo_links_eles) > 0:
         # show the first photo
         driver.execute_script("arguments[0].click();", photo_links_eles[0])
 
-        # abort the action if the target objects failed to load within a given timeout    
-        if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, id_to_check = 'copyrightTooltipContainer')[0 ]:
-            return None, None	        
+        time_out = 60
+        try:    
+            WebDriverWait(driver, time_out).until( EC.presence_of_element_located((By.ID, 'copyrightTooltipContainer')) )
+        except  TimeoutException:
+            printR(f'Timed out {time_out}s while loading photo')
+            return  
+        
+
         #setup a keypress listener on the document and a variable to store the request
         driver.execute_script('''
             document.requestedInput = 'c';              /* default c for CONTINUE*/
@@ -1230,24 +1160,21 @@ def play_slideshow(driver, time_interval):
                         document.requestedInput = 's';  /* any other keys will be considered as 's', for STOP */                                                       
            } ''')    
 
-        # abort the action if the target objects failed to load within a given timeout    
-        if not webtools.finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
-            return None, None	        
-
         # suppress the sign-in popup that may appear if not login
         hide_banners(driver)        
         
         # locate the expand icon and click it to expand the photo
-        expand_icon = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[2]') 
+        expand_icon = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div[1]/div/div[2]')
+
         if expand_icon is not None:
-            driver.execute_script("arguments[0].click();",expand_icon)
-        time.sleep(time_interval)
+            expand_icon.click()
         
         #locate the right arrow icon that can be use to navigate to the next photo
-        next_icon = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="copyrightTooltipContainer"]/div/div[1]/div') 
+        next_icon = webtools.check_and_get_ele_by_xpath(driver,'//*[@id="copyrightTooltipContainer"]/div[1]/div/div[3]/div') 
+        time.sleep(time_interval)
         
         #use the next photo icon as a flag to signal the end of the gallery
-        while next_icon is not None:
+        while True: #next_icon is not None:
             requested_input = driver.execute_script('return document.requestedInput')
             
             # go to the next photo
@@ -1263,8 +1190,10 @@ def play_slideshow(driver, time_interval):
                 ActionChains(driver).send_keys(Keys.ESCAPE).perform()
                 return
             time.sleep(time_interval)                
-            next_icon = webtools.check_and_get_ele_by_xpath(driver,  '//*[@id="copyrightTooltipContainer"]/div/div[2]/div/div[2]')  
-
+            next_icon = webtools.check_and_get_ele_by_xpath(driver,  '//*[@id="copyrightTooltipContainer"]/div[1]/div/div[3]/div')
+                                                            #'//*[@id="copyrightTooltipContainer"]/div/div[2]/div/div[2]')  
+    else:
+        print('no photo found')
 #---------------------------------------------------------------                           
 def like_n_photos_on_homefeed_page(driver, user_inputs):
     """Like n photos from the user's home feed page, excluding recommended photos and skipping consecutive apiless.photo(s) of the same user
@@ -1280,6 +1209,7 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
                        # ... we use this index to keep track where we are after a list update 
     prev_photographer_name = ''
     print(f"    - Getting the loaded photos from {user_inputs.user_name}'s home feed page ...")
+    time.sleep(2)
     img_eles = webtools.get_IMG_element_from_homefeed_page(driver)
     if not img_eles or (img_eles and len(img_eles)) == 0:
         print(f"    - No photos found on {user_inputs.user_name}'s home feed page")
@@ -1294,7 +1224,7 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")                
             time.sleep(2)
 
-            img_eles = webtools.get_IMG_element_from_homefeed_page(driver)
+            img_eles = webtools.get_IMG_element_from_homefeed_page(driver)  #   //*[@id="root"]/div[3]/div[2]/div[1]/div/a/div/img
             if not img_eles or (img_eles and len(img_eles)) == 0:
                 print(f"    - No photos found on {user_inputs.user_name}'s home feed page")
                 return
@@ -1311,11 +1241,11 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
             current_index += 1
             photographer_name = ' '
             title = ' '
-            parent2 = webtools.check_and_get_ele_by_xpath(img_eles[i], '../..')   
+            parent2 = webtools.check_and_get_ele_by_xpath(img_eles[i], '../..')                     
             if parent2 is None: 
                 continue
                 
-            parent2_sib1 =  webtools.check_and_get_ele_by_xpath(parent2, './following-sibling::div') 
+            parent2_sib1 =  webtools.check_and_get_ele_by_xpath(parent2, './following-sibling::div')
             if parent2_sib1 is None: 
                 continue
 
@@ -1323,46 +1253,46 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
             if parent2_sib2 is  None: 
                 continue    
             # for logging message, get photo title, photogragpher display name and  user name
-            title_ele = webtools.check_and_get_ele_by_tag_name(parent2_sib2, 'h3') #title  = parent2_sib2.find_element_by_tag_name('h3').text            
+            title_ele = webtools.check_and_get_ele_by_tag_name(parent2_sib2, 'h3')      
             title = title_ele.text if title_ele is not None else 'not determined'
            
-            a_ele = webtools.check_and_get_ele_by_tag_name(parent2_sib2, 'a')  #a = parent2_sib2.find_element_by_tag_name('a')
+            a_ele = webtools.check_and_get_ele_by_tag_name(parent2_sib2, 'a') 
             photographer_display_name  = a_ele.text if a_ele is not None else "not determined"
             photographer_name = a_ele.get_attribute('href').replace('https://500px.com/', '') if a_ele is not None else "not determined"
 
             child_div_eles = webtools.check_and_get_all_elements_by_tag_name(parent2_sib1, 'div')
             if len(child_div_eles) > 2:
-                heart_icon = child_div_eles[2]
-                #get like status
-                photo_already_liked = False
-                svg_ele = webtools.check_and_get_ele_by_tag_name(heart_icon, 'svg')
-                if svg_ele is not None:
-                    title_ele = webtools.check_and_get_ele_by_tag_name(svg_ele, 'title')
-                    if title_ele is not None:     
-                        like_status = title_ele.get_attribute('innerHTML')
-                        # skip if the photo is one of yours
-                        if like_status.find('disabled') != -1:
-                            printB(f'   Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
-                            continue                           
-                        elif like_status.find('Filled') != -1:  # already liked: 'Filled', not-yet like: 'Outline', your own photo: 'disabled'
-                            photo_already_liked = True
-                        if  not photo_already_liked:      
-                            # skip consecutive photos of the same photographer
-                            if photographer_name == prev_photographer_name:
-                                printY(f'   Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
-                                continue
-                            if heart_icon is not None:
-                                webtools.hover_by_element(driver, heart_icon)
-                                driver.execute_script("arguments[0].click();", heart_icon) 
-                                photos_done += 1
-                                prev_photographer_name = photographer_name
-                                printG(f'   - Like {photos_done:>3}/{user_inputs.number_of_photos_to_be_liked:<3}: photo {str(i + 1):<3}, from {photographer_display_name:<32.30}, {title:<40.40}')
-                                time.sleep(random.randint(10, 20)/10)  # slow down a bit to make it look more like a human
+                heart_icon = child_div_eles[1]                    
+                webtools.hover_by_element(driver, heart_icon)
+                like_status = heart_icon.get_attribute('aria-label')
+               
+                if like_status =='Like photo': 
+                    photo_already_liked = True
+                    continue  
+                elif like_status == 'Unlike photo':
+                    # skip consecutive photos of the same photographer
+                    if photographer_name == prev_photographer_name:
+                        printY(f'    Skipped:      photo {str(i + 1):3}, from {photographer_display_name:<32.30}, {title:<35.35}')
+                        continue
+                    # like the photo
+                    try:
+                        webtools.hover_by_element(driver, heart_icon)
+                        heart_icon.click()
+                    except Exception as e:
+                        logger.info(f'Exception: {e}')
+                        printY('Bypass')
+                    else:
+                        photos_done += 1
+                        prev_photographer_name = photographer_name
+                        printG(f'   - Like {photos_done:>3}/{user_inputs.number_of_photos_to_be_liked:<3}: photo {str(i + 1):<3}, from {photographer_display_name:<32.30}, {title:<40.40}')
+                        time.sleep(random.randint(10, 20)/10)  # slow down a bit to make it look more like a human
+                        prev_photographer_name = photographer_name
 
 #---------------------------------------------------------------
 def login(driver, user_inputs):
     """Submit given credentials to the 500px login page. Display error message if error occured. Return True/False loggin status """
 
+    global logged_in
     if len(user_inputs.password) == 0 or len(user_inputs.user_name) == 0 or driver == None: 
         return False
     print(f'    - Logging in user {user_inputs.user_name} ...')
@@ -1385,22 +1315,23 @@ def login(driver, user_inputs):
        
     except  NoSuchElementException:
         printR("   Error accessing the login page. Please retry")
-        return False
+        logged_in = False
     except TimeoutException :
-        printR(f'   Time out while loading {user_inputs.user_name} home page. Please retry.')
-        return False
+        printR(f'   Time out while loading {user_inputs.user_name} home page. Please retry')
+        logged_in = False
     except:
         printR(f'   Error loading {user_inputs.user_name} home page. Please retry.')
-        return False  
-    
-    # username/password errors
-    if webtools.check_and_get_ele_by_class_name(driver, 'error') is not None or \
-       webtools.check_and_get_ele_by_class_name(driver, 'not_found') is not None or \
-       webtools.check_and_get_ele_by_class_name(driver, 'missing') is not None:   
-       printR(f'Error on loggin. Please retry with valid credentials')
-       user_inputs.user_name, user_inputs.password,  user_inputs.db_path = ('' for i in range(3))
-       return False
-    return True
+        logged_in = False
+    else:
+        # username/password errors
+        if webtools.check_and_get_ele_by_class_name(driver, 'error') is not None or \
+           webtools.check_and_get_ele_by_class_name(driver, 'not_found') is not None or \
+           webtools.check_and_get_ele_by_class_name(driver, 'missing') is not None:   
+           printR(f'Error on loggin. Please retry with valid credentials')
+           user_inputs.user_name, user_inputs.password,  user_inputs.db_path = ('' for i in range(3))
+           logged_in = False
+        logged_in = True
+        printG('     OK')
 
 #---------------------------------------------------------------
 def hide_banners(driver):
@@ -1447,29 +1378,30 @@ def show_menu(user_inputs, special_message=''):
     printC('')
     printC('--------- Chose one of these options: ---------')
     printY('      The following options require a user name:', write_log=False)
-    printC('   1  Get user statistics')
+    printC('   1  Get user summary')
     printC('   2  Get user photos list (login is optional)')
     printC('   3  Get followers list')
     printC('   4  Get followings list')
-    printC('   5  Get a list of users who liked a given photo (login is optional)')
+    printC('   5  Get users who liked a given photo (login is optional)')
+    printC('   6  Check if a user is following you')
 
     printC('')
     printY('      The following options require user login:', write_log=False)
-    printC('   6  Get n last notifications (max 5000) and the unique users on it')
-    printC('   7  Check if a user is following you')
+    printC('   7  Get n last notifications (max 5000) and the unique users on it')
     printC('')
     printC('   8  Like n photos from a given user')
     printC('   9  Like n photos, starting at a given index, on various photo pages') 
     printC('  10  Like n photos of each user who likes a given photo or yours')
     printC('  11  Like n photos from your home-feed page, excluding recommended photos ')
-    printC('  12  Like n photos of each users in your last m notifications')
+    printC('  12  Like n photos from the last m users in the notifications')
     printC('')
     printY('      The following option does not need credentials:', write_log=False)
     printC('  13  Play slideshow on a given gallery (login is optional)')
     printC('')
     printY('      Data Analysis:', write_log=False)
-    printC('  14  Categorize users based on following statuses')
-    printC('  15  Create a local database from the latest csv files on disk')
+    printC('  14  Update local database from the latest csv files on disk')
+    printC('  15  Categorize users based on following statuses')
+    printC('  16  Notification analysis')
 
     printC('')
  
@@ -1498,28 +1430,32 @@ def show_menu(user_inputs, special_message=''):
     printG(f'Current user: {user_inputs.user_name}', write_log=False)
 
     # analysis for users' relationship and creating local database options need nothing else
-    if sel == 14 or sel == 15:
+    if 14 <= sel <= 16:
         user_inputs.choice = str(sel)
         return 
 
     # password is optional:
-    #  - 2  Get user photos list: if logged in, we can get the list of galleries that each of your photo is featured in
-    #  - 5  Get a list of users who liked a given photo: if logged in, we can get your following status to each user in the list
+    #  - 2  Get user photos list: if logged in, we can get the list of galleries that featured your photos
+    #  - 5  Get a list of users who liked a given photo: if logged in, we can get the following status to each user in the list
     if (sel == 2  or sel == 5) and user_inputs.password == '':
-        prompt_message = 'Optional: if loggin, you can get the galleries that featured your photos,\npress ENTER to ignore this option, or type in the password now >'
-        expecting_password = utils.win_getpass(prompt=prompt_message)
-        if expecting_password != 'q' and expecting_password != 'r':
-            user_inputs.password = expecting_password
+        if sel == 2:
+            ans = input('Optional: logged-in user can see the galleries featuring their photos.\nProceed (y/n)?')
         else:
-            user_inputs.choice = expecting_password
+            ans = input('Optional: logged-in user can get the following status of each user.\nProceed (y/n)?')
+        if ans == 'n':
+            user_inputs.choice = str(sel)
             return 
+        else:
+            user_inputs.password, abort =  utils.validate_non_empty_input('Enter password >', user_inputs)
+            if abort:
+                return
             
-    if sel < 6 or sel == 7:
+    if sel <= 6:
         user_inputs.choice = str(sel)
         return
     
     # password is mandatory ( quit or restart are also possible at this step )
-    if sel >= 6 :
+    if sel >= 7 :
         if user_inputs.user_name == '':
             user_inputs.user_name, abort = utils.validate_non_empty_input('Enter 500px user name >', user_inputs)
             if abort:
@@ -1564,8 +1500,8 @@ def show_galllery_selection_menu(user_inputs):
     elif sel == '4': return 'https://500px.com/fresh'                         , 'Fresh', False
     elif sel == '5': return 'https://500px.com/editors'                       , "Editor's Choice", False
     elif sel == '6': 
-        input_val, abort = utils.validate_non_empty_input('Enter the link to your desired photo gallery.\n\
-                             It could be a public gallery with filters, or a private gallery >', user_inputs)
+        input_val, abort = utils.validate_non_empty_input(('Enter the link to your desired photo gallery.\n'
+                             'It could be a public gallery with filters, or a private gallery >'), user_inputs)
         if abort:
             return '', '', True
         else:
@@ -1574,7 +1510,8 @@ def show_galllery_selection_menu(user_inputs):
     elif sel == '7': return f'https://500px.com/{user_inputs.user_name}'                  , 'My photos', False
 
     else:
-        show_galllery_selection_menu(user_inputs)
+        printR('Invalid input, please select again.')
+        return show_galllery_selection_menu(user_inputs)
 
 #---------------------------------------------------------------
 def define_and_read_command_line_arguments(): 
@@ -1630,8 +1567,15 @@ def get_additional_user_inputs(user_inputs):
         if abort:
             return False
 
-    # 6. Get n last notifications (max 5000) and the unique users on it: number_of_notifications 
-    if choice == 6 : 
+    # 6. Check if a user is following you : target user name
+    if choice == 6:
+        user_inputs.target_user_name , abort =  utils.validate_non_empty_input('Enter target user name >', user_inputs)
+        if abort:
+            return False  
+
+
+    # 7. Get n last notifications (max 5000) and the unique users on it: number_of_notifications 
+    if choice == 7 : 
         input_val, abort =  utils.validate_input(f'Enter the number of notifications you want to retrieve(1-{config.MAX_NOTIFICATION_REQUEST}) >', user_inputs)
         if abort: 
             return False
@@ -1639,7 +1583,7 @@ def get_additional_user_inputs(user_inputs):
             num1 = int(input_val)
             user_inputs.number_of_notifications = num1 if num1 < config.MAX_NOTIFICATION_REQUEST else config.MAX_NOTIFICATION_REQUEST
 
-        input_val, abort =  utils.validate_input(f'Enter the desired start index (1-{config.MAX_NOTIFICATION_REQUEST - num1}) >', user_inputs)
+        input_val, abort =  utils.validate_input('Enter the desired start index >', user_inputs)
         if abort: 
             return False
         else:
@@ -1649,12 +1593,6 @@ def get_additional_user_inputs(user_inputs):
             user_inputs.index_of_start_notification = num2 if num2 < config.MAX_NOTIFICATION_REQUEST -  user_inputs.number_of_notifications else \
                                                       config.MAX_NOTIFICATION_REQUEST - user_inputs.number_of_notifications
   
-    # 7. Check if a user is following you : target user name
-    elif choice == 7:
-        user_inputs.target_user_name , abort =  utils.validate_non_empty_input('Enter target user name >', user_inputs)
-        if abort:
-            return False  
-
     # common input for 8 to 11: number of photo to be auto-liked
     elif choice >= 8 and choice <= 11:
         input_val, abort =  utils.validate_input(f'Enter the number of photos you want to auto-like (1-{config.MAX_AUTO_LIKE_REQUEST})>', user_inputs)
@@ -1689,28 +1627,10 @@ def get_additional_user_inputs(user_inputs):
             user_inputs.photo_href, abort =  utils.validate_non_empty_input('Enter your photo href >', user_inputs)
             if abort: 
                 return False    
-            # these additional options are for next version
-            ## index_of_start_user
-            #input_val, abort =  utils.Validate_input('Enter the start index of the user (default 1)>' , user_inputs)
-            #if abort:
-            #    return False  
-            #else: 
-            #    int_val = int(input_val)
-            #    # the end user will use 1-based index, so we will convert the input to 0-based
-            #    if int_val > 0: int_val -= 1
-            #    user_inputs.index_of_start_user = int_val   
-            
-            ## number of users    
-            #input_val, abort =  utils.Validate_input('Enter the number of users you want to process>' , user_inputs)
-            #if abort:
-            #    return False  
-            #else: 
-            #    int_val = int(input_val)
-            #    user_inputs.number_of_users = int_val        
     
-    # 12. Like n photos of each users in your last m notifications         
+    # 12. Like n photos from the last m users in the notifications       
     elif choice == 12: 
-        input_val, abort = utils.validate_input(f'Enter the number of notifications you want to process(max {config.MAX_NOTIFICATION_REQUEST}) >', user_inputs)
+        input_val, abort = utils.validate_input(f'Enter the number of users you want to process(max {config.MAX_NOTIFICATION_REQUEST}) >', user_inputs)
         if abort: 
             return False
         else: 
@@ -1810,49 +1730,59 @@ def handle_option_1(driver, user_inputs, output_lists):
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
-    printG(f"1. Getting {user_inputs.user_name}'s statistics:")
+
+    html_file_name =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
+    printG(f"1. Getting {user_inputs.user_name}'s summary:")
 
     # do task   
-    stats, error_message = get_stats(driver, user_inputs, output_lists) 
+    stats, error_message = get_user_summary(driver, user_inputs, output_lists) 
     if error_message:
         printR('   - ' + error_message)
         if user_inputs.use_command_line_args == False:
             show_menu(user_inputs, error_message)
             return
-    
+    user_stats_dict = {'Option 1 '      : '<b>Get user summary', 
+                       'Date processed' : time_start.strftime("%b %d %Y"),
+                       'Data file'      : os.path.basename(html_file_name),
+                       'Title'          : 'User summary'}
+    detail_dict = stats.to_dict()
+    user_stats_dict.update(detail_dict)
+
+    html_string = htmltools.dict_to_html(user_stats_dict, table_id='description')
+
     # write result to html file, show it on browser
-    html_file =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
-    utils.write_string_to_text_file(utils.create_user_statistics_html(stats), html_file, 'utf-16')
-    utils.show_html_result_file(html_file)
+    utils.write_string_to_text_file(html_string, html_file_name, 'utf-16')
+    utils.show_html_file(html_file_name)
 
     # print summary report
-    printG(f"   File saved at: {os.path.basename(html_file)}")
+    printG(f"   File saved at: {os.path.basename(html_file_name)}")
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
     
 #---------------------------------------------------------------
 def handle_option_2(driver, user_inputs, output_lists):
     """ Get user photos """
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
-
     printG(f"2. Getting {user_inputs.user_name.capitalize()}'s photos list:")
     # avoid to do the same thing twice: if list (in memory) has items AND output file (on disk) exists
     if output_lists.photos is not None and len(output_lists.photos) > 0:
         html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.html')
         if  os.path.isfile(html_file):
             printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-            utils.show_html_result_file(html_file)
+            utils.show_html_file(html_file)
             ans = input('This file will be overidden if you want to redo. Proceed ? (y/n)')
             if ans == 'n' : 
                 return
 
-    # do the action
     # if user provided password then login (logged-in users can see the galleries that feature theirs photos
-    if user_inputs.password != '' and not logged_in(driver):
-        if login(driver, user_inputs) == False :
-            return
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
+            printR('     Error logging in. Featured galleries will not be extracted.')
 
+    # do the main task
     hide_banners(driver)
     output_lists.photos, error_message = get_photos_list(driver, user_inputs, output_lists)
     if error_message:
@@ -1862,19 +1792,73 @@ def handle_option_2(driver, user_inputs, output_lists):
 
     # write result to csv, convert it to html, show html in browser
     if output_lists.photos is not None and len(output_lists.photos) > 0:
-        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')           
-        if utils.write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file) == True:
-            html_file = utils.CSV_photos_list_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                                                ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'])
-            utils.show_html_result_file(html_file)  
-            printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
-        else:
+        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')    
+        # write photos list to csv
+        if not utils.write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file):
             printR(f'   Error writing the output file\n:{csv_file}')
+            return
+
+        # create a photo summary
+        desc_dict = {'Option 2'     : '<b>Get photos list', 
+                     'Date processed':  time_start.strftime("%b %d %Y"),
+                     'User'          : user_inputs.user_name, 
+                     'Data file'     : os.path.basename(csv_file), 
+                     'Title'         : f'Photos list ({len(output_lists.photos)})'}
+        
+        # create a top-photos list
+        # create dataframe from list of photo objects
+        df = pd.DataFrame.from_records([item.to_dict() for item in output_lists.photos])           
+        # ref: No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments, Galleries, Highest Pulse,Rating, Date, Category, Featured In Galleries, Tags      
+        # get some statistics:
+        total_views = df['Views'].sum()
+        total_likes = df['Likes'].sum()
+        total_comments = df['Comments'].sum()
+        last_upload_date   = df['Date'].iloc[[0]].values[0]
+        first_upload_date = df['Date'].iloc[[-1]].values[0]                
+        try:
+            last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
+            first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
+            days = (last_date_obj -first_date_obj).days
+            last_date  = last_date_obj.strftime("%b %d %Y")
+            first_date = first_date_obj.strftime("%b %d %Y")
+        except:
+            printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
+            last_date = last_upload_date
+            first_date = first_upload_date
+            days = ''
+
+        stats_dict = {'Last Upload Date': last_date, 'First Upload Date': first_date, 'Duration': f'{days} days', 
+                      'Total Views' : total_views, 'Total Likes': total_likes, 'Total Comments': total_comments}
+
+        # Create a html table for the top photos
+        # get indexes of top photos 
+        maxPulse_index      = df['Highest Pulse'].astype(float).argmax()
+        maxViews_index      = df['Views'].astype(int).argmax()
+        maxLikes_index      = df['Likes'].astype(int).argmax()
+        maxComments_index   = df['Comments'].astype(int).argmax()
+        max_galleries_index = df['Galleries'].astype(int).argmax()
+        # create the top-photos dataframe, merge duplicate photos 
+        df2 = df.iloc[[maxPulse_index, maxViews_index, maxLikes_index, maxComments_index, max_galleries_index ],:]
+        df3 = utils.merge_duplicate_top_photos(df2)
+        # write top photos dataframe to csv file
+        top_photos_csv_file =  os.path.join(config.OUTPUT_PATH, f'{user_inputs.user_name}_top_photos.csv')
+        df3.to_csv(top_photos_csv_file, encoding='utf-16', index = False)        
+        # Convert the top-photos csv to a html table
+        top_photos_html_table = htmltools.CSV_top_photos_list_to_HTML_table(top_photos_csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                        ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating', 'Date', 'Category', 'Tags'])
+
+        # write result html: title, summary, statistic table, top-photos table, and all photos table
+        html_file = htmltools.CSV_photos_list_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                            ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'], 
+                            desc_dict = desc_dict, stats_dict = stats_dict,  top_photos_html_table = top_photos_html_table)
+        utils.show_html_file(html_file)  
+        printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
 def handle_option_3(driver, user_inputs, output_lists):
     """ Get followers"""
     
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
     printG(f"3. Getting the list of users who follow {user_inputs.user_name}:")
@@ -1884,26 +1868,27 @@ def handle_option_3(driver, user_inputs, output_lists):
         html_file = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.html'
         if os.path.isfile(html_file):
             printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-            utils.show_html_result_file(html_file) 
+            utils.show_html_file(html_file) 
             return
    
-    # do task
-    # if user provided password then login
-    if user_inputs.password != '' and not logged_in(driver):
-        if login(driver, user_inputs) == False :
-            return
-
+    # do task    
     hide_banners(driver)
     output_lists.followers_list = get_followers_list(driver, user_inputs, output_lists)
-
+    
     # write result to csv, convert it to html, show html in browser
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
-        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')           
+        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')  
+        description_dict = {'Option 3'       : f"<b>Get followers list",
+                            'Date processed' : time_start.strftime("%b %d %Y"),
+                            'User'           : user_inputs.user_name,
+                            'Data file'      : os.path.basename(csv_file), 
+                            'Title'          : f'List of {len(output_lists.followers_list)} followers' }
+
         if utils.write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
             # show output and print summary report
-            html_file = utils.CSV_to_HTML(csv_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
-            utils.show_html_result_file(html_file) 
+            html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
+            utils.show_html_file(html_file) 
             printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
         else:
             printR(f'   Error writing the output file\n:{csv_file}')
@@ -1914,7 +1899,7 @@ def handle_option_4(driver, user_inputs, output_lists):
     
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
-    printG(f"4. Getting the list of users that you are following:")
+    printG(f"4. Getting the list of users that {user_inputs.user_name} is following:") 
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followings_list is not None and len(output_lists.followings_list) > 0:
@@ -1923,7 +1908,7 @@ def handle_option_4(driver, user_inputs, output_lists):
         files.sort(key=lambda x: os.path.getmtime(x))
         html_file = files[-1]
         printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-        utils.show_html_result_file(html_file)
+        utils.show_html_file(html_file)
         ans = input('This file will be overidden if you want to redo. Proceed ? (y/n)')
         if ans == 'n' : 
             return
@@ -1934,11 +1919,16 @@ def handle_option_4(driver, user_inputs, output_lists):
     # write result to csv, convert it to html, show html in browser
     if len(output_lists.followings_list) > 0:
         csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
+        description_dict = {'Option 4'       : f"<b>Get followings list", 
+                            'Date processed' : time_start.strftime("%b %d %Y"),
+                            'User'           : user_inputs.user_name, 
+                            'Data file'      : os.path.basename(csv_file), 
+                            'Title'          : f'List of {len(output_lists.followings_list)} followings' }
         if utils.write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
             # show output and print summary report
-            html_file = utils.CSV_to_HTML(csv_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
-            utils.show_html_result_file(html_file) 
+            html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
+            utils.show_html_file(html_file) 
             printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
         else:
             printR(f'   Error writing the output file\n:{csv_file}')
@@ -1947,13 +1937,16 @@ def handle_option_4(driver, user_inputs, output_lists):
 def handle_option_5(driver, user_inputs, output_lists):
     """ Get a list of users who liked a given photo."""
     
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0) 
+    date_string = time_start.strftime(config.DATETIME_FORMAT)   
     printG(f"5. Getting the list of unique users who liked the given photo:")
 
     # if user provided password then login
-    if user_inputs.password != '' and not logged_in(driver):
-        if login(driver, user_inputs) == False :
-            return
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
+            printR('     Error logging in. The following statuses of users will not be known')
     try:
         driver.get(user_inputs.photo_href)
     except:
@@ -1964,104 +1957,189 @@ def handle_option_5(driver, user_inputs, output_lists):
     # do task
     time.sleep(1)
     hide_banners(driver)
-    output_lists.like_actioners_list, csv_file = get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = False)
+    description_dict = {'Option 5'       : f"<b>Get users who liked a given photo", 
+                        'Date processed' : time_start.strftime("%b %d %Y"),
+                        'User'           : user_inputs.user_name}
+    output_lists.like_actioners_list, details_dict = get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = False)
+    if len(output_lists.like_actioners_list) == 0:
+        return
 
+    csv_file = details_dict['Data file']
+    html_file = os.path.splitext(csv_file)[0] + '.html'
+    details_dict['Data file'] = os.path.basename(csv_file)
+    description_dict.update(details_dict)
+       
     # write result to csv, convert it to html, show html in browser
     if output_lists.like_actioners_list is not None and  len(output_lists.like_actioners_list) > 0 and \
                                             utils.write_users_list_to_csv(output_lists.like_actioners_list, csv_file) == True:
-        html_file = utils.CSV_to_HTML(csv_file, apiless.CSV_type.like_actors, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
-        utils.show_html_result_file(html_file) 
+        # get stats
+        # No,Avatar Href,Avatar Local,Display Name,User Name,ID,Followers Count,Relationship
+        df = utils.CSV_file_to_dataframe(csv_file)
+        followings_count  = df.loc[df.Relationship == 'Following', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
+        not_follows_count  = df.loc[df.Relationship == 'Not Follow', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
+        unknowns_count     = df.loc[df.Relationship == 'Unknown', "Relationship"].shape[0]
+        description_dict.update({'Following': str(followings_count), 'Not Follow': str(not_follows_count), 'Unknown': str(unknowns_count) } )
+
+        htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.like_actors, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                          ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict)
+        utils.show_html_file(html_file) 
 
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
 def handle_option_6(driver, user_inputs, output_lists):
-    """ Get n last notifications details (max 5000). Show the detail list and the list of the unique users on it"""
-
-    time_start = datetime.datetime.now().replace(microsecond=0)
-    date_string = time_start.strftime(config.DATETIME_FORMAT)
-    if user_inputs.number_of_notifications == -1:
-        printG(f"6. Getting up to {config.MAX_NOTIFICATION_REQUEST} notifications and the unique users on that list ...")
-    elif user_inputs.index_of_start_notification > 0:
-        printG(f"6. Getting {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification}, and the unique users on that list:")
-    else: 
-        printG(f"6. Getting the last {user_inputs.number_of_notifications} notifications and the unique users on that list ...")
-    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
-
-    # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
-    if output_lists.notifications is not None and len(output_lists.notifications) > 0 and os.path.isfile(html_file):
-        printY(f'   Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)        
-        utils.show_html_result_file(html_file)
-        return
-    
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
-            return
-
-    driver.get('https://500px.com/notifications')
-    time.sleep(1)
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-    # abort the action if the target objects failed to load within a given timeout        
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
-        return	
-
-    hide_banners(driver)
-
-    # do task   
-    output_lists.notifications, output_lists.unique_notificators = get_notification_list(driver, user_inputs, output_lists, True)
-    
-    if len(output_lists.notifications) == 0 and len(output_lists.unique_notificators) == 0:
-        show_menu(user_inputs)
-        return
-    
-    csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.notifications)}_notifications_{date_string}.csv')
-    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
-
-    # write unique users list to csv. Convert it to html, show it in browser
-    csv_file_unique_users  = os.path.join(output_lists.output_dir, \
-        f"{user_inputs.user_name}_{len(output_lists.unique_notificators)}_unique-users-in-{len(output_lists.notifications)}_notifications_{date_string}.csv")
-    if len(output_lists.unique_notificators) > 0 and  utils.write_unique_notificators_list_to_csv(output_lists.unique_notificators, csv_file_unique_users) == True:
-        html_file = utils.CSV_to_HTML(csv_file_unique_users, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'])
-        utils.show_html_result_file(html_file)     
-    
-    # Write the notification list to csv. Convert it to html, show it in browser        
-    if len(output_lists.notifications) > 0 and  utils.write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        html_file = utils.CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'])
-        utils.show_html_result_file(html_file) 
-
-    printG(f"   {user_inputs.number_of_notifications} notifications, starting at indes {user_inputs.index_of_start_notification}. Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
-    
-#---------------------------------------------------------------
-def handle_option_7(driver, user_inputs, output_lists):
     """Check if a user is following you."""
 
     time_start = datetime.datetime.now().replace(microsecond=0)
-    printG(f"7. Check if user {user_inputs.target_user_name} follows {user_inputs.user_name}:")
+    printG(f"6. Check if user {user_inputs.target_user_name} follows {user_inputs.user_name}:")
 
-    # do task
+    # check the status from recorded data first
+    # find the latest all_users csv file on disk
+    all_users_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.all_users, print_info = False)  
+    if all_users_file != '':
+        print(f'    - According to the local database:')
+        df = utils.CSV_file_to_dataframe(all_users_file)
+        df_match = df[df['User Name'] == user_inputs.target_user_name ]
+        if df_match.shape[0] == 0:
+            print(f'     No relationship with {user_inputs.target_user_name}') 
+        else:
+            relationship = df_match.Relationship.values[0]
+            if relationship == 'Reciprocal':
+                printG(f'     You and {user_inputs.target_user_name} follow each other')
+            elif relationship == 'Not Follow':
+                printY(f'     {user_inputs.target_user_name} follows you. You do not follow back')
+            elif relationship == 'Following':
+                printR('     You follow {user_inputs.target_user_name} without being followed back')
+        
+        ans = input('Do you want to verify the latest status online (y/n)? >')
+        if ans == 'n':
+            return
+    # check following status online
     result, message = does_this_user_follow_me(driver, user_inputs)
 
     if result == True:
         printG('   - ' + message)
     else:
-        printR('   - ' + message) if 'User name not found' in message else printR('   - ' + message)
+        printR( message)
     
     printG(f'   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s') 
 
 #---------------------------------------------------------------
+def handle_option_7(driver, user_inputs, output_lists):
+    """ Get n last notifications details (max 5000). Show the detail list and the list of the unique users on it"""
+
+    global logged_in
+    time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.strftime(config.DATETIME_FORMAT)
+    if user_inputs.number_of_notifications == -1:
+        option = f"Getting up to {config.MAX_NOTIFICATION_REQUEST} notifications"
+    elif user_inputs.index_of_start_notification > 0:
+        option = f"Getting {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification + 1}"
+    else: 
+        option = f"Getting the last {user_inputs.number_of_notifications} notifications"
+    printG(f'7. {option}:')
+    html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{user_inputs.number_of_notifications}_notifications_{date_string}.html')
+
+    # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
+    if output_lists.notifications is not None and len(output_lists.notifications) > 0 and os.path.isfile(html_file):
+        printY(f'   Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)        
+        utils.show_html_file(html_file)
+        return 
+    
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
+            return 
+
+    # after a login, user's homefeed page will automatically loaded. We don't this page, nor to waste time waiting for it to complete, 
+    # so we force a hard stop asap
+    time_out = 40
+    try:
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, '/html/body')))
+        driver.execute_script("window.stop();") 
+    except TimeoutException:
+        pass # silently forget about it
+
+    #then we load the desired page
+    driver.get('https://500px.com/notifications')
+    #time.sleep(1)
+    print('    - Getting notification list ...')
+    try:
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'notification_item')))
+    except TimeoutException:
+        printR(f'Timed out {time_out}s while loading notifications list. Please try again later')
+        return
+        
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    hide_banners(driver)
+
+    # do task 1 of 2: get notifications
+    description_dict = {'Option 7 (1 of 2)' : f'<b>Get {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification + 1}', 
+                        'Date processed'    : time_start.strftime("%b %d %Y"),
+                        'User'              : user_inputs.user_name }
+    
+    output_lists.notifications = get_notification_list(driver, user_inputs, output_lists)[0]
+    if len(output_lists.notifications) == 0 and len(output_lists.unique_notificators) == 0:
+        show_menu(user_inputs)
+        return 
+    # read notifications objects into a dataframe
+    df_notif = pd.DataFrame.from_records([item.to_dict() for item in output_lists.notifications])   #or utils.CSV_file_to_dataframe(csv_file)        
+    stats_dict = utils.get_notifications_statistics(df_notif)
+
+    # Write the notification list to csv and html, show html in browser     
+    file_name =  f'{user_inputs.user_name}_{len(output_lists.notifications)}_notifications_{date_string}' 
+    csv_file  = os.path.join(output_lists.output_dir, f'{file_name}.csv')
+
+    description_dict.update({'Title': f'{len(output_lists.notifications)} notifications', 'Data file': os.path.basename(csv_file)})
+    if len(output_lists.notifications) > 0 and  utils.write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
+        html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                          ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'],
+                          desc_dict=description_dict, statistics_info = stats_dict)
+        utils.show_html_file(html_file) 
+
+    # do task 2 of 2:Process Unique users list with detailed analysis, write to csv, html and show html 
+    df_unique, stats_list = process_unique_users(df_notif, user_inputs.user_name, output_lists.output_dir)
+
+    csv_file  = os.path.join(config.OUTPUT_PATH,  
+                f"{user_inputs.user_name}_{str(df_unique.shape[0])}_unique-users_in_all_{len(output_lists.notifications)}_notifications_{date_string}.csv")
+ 
+    # write the result to csv file
+    df_unique.to_csv(csv_file, encoding='utf-16', index = False)
+
+    description_dict = {'Option 7 (2 of 2)' : f"<b>Extract unique users in {user_inputs.number_of_notifications} notifications", 
+                        'Date processed'    : time_start.strftime("%b %d %Y"),
+                        'User'              : user_inputs.user_name,
+                        'Title'             : f'{str(df_unique.shape[0])} unique users in {len(output_lists.notifications)} notifications',
+                        'Data file'         : os.path.basename(csv_file)}
+
+    # write to csv, html, and show result
+    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict, statistics_info= stats_list)
+    utils.show_html_file(html_file)     
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
+    
+#---------------------------------------------------------------
 def handle_option_8(driver, user_inputs, output_lists):
     """ Like n photos from a given user."""
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     printG(f"8. Starting auto-like {user_inputs.number_of_photos_to_be_liked} photo(s) of user {user_inputs.target_user_name}:")
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
+
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
             return
    
+    # we dont want to load the homefeed page, nor to wait for it to complete, so we force a stop as soon as possible
+    try:
+        WebDriverWait(driver, timeout =  40).until(EC.presence_of_element_located((By.XPATH, '/html/body')))
+        driver.execute_script("window.stop();") 
+    except TimeoutException:
+        pass #silently forget about it
+
     # do task   
     like_n_photos_from_user(driver, user_inputs.target_user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error = False) 
 
@@ -2071,22 +2149,25 @@ def handle_option_8(driver, user_inputs, output_lists):
 def handle_option_9(driver, user_inputs, output_lists):
     """Like n photos, starting at a given index, on various photo pages ."""
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     printG(f"9. Like {user_inputs.number_of_photos_to_be_liked} photo(s) from {user_inputs.gallery_name} gallery, start at index {user_inputs.index_of_start_photo}:")
     
-    if not logged_in(driver): 
-        if login(driver, user_inputs) == False :
-            return
-    
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
+            return    
     driver.get(user_inputs.gallery_href)
     time.sleep(2)
 
-    # abort the action if the target objects failed to load within a given timeout    
-    #if not webtools.Finish_Javascript_rendered_body_content(driver, time_out=15, class_name_to_check = 'entry-visible')[0]:
-    #    return None, None	
-    innerHtml = driver.execute_script("return document.body.innerHTML")  
-    time.sleep(2)
-
+    # wait for the uploade date item to be loaded to get the date
+    time_out = 30
+    try:  
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'entry-visible')) )
+    except  TimeoutException:
+        printR(f'   - Time out ({time_out}s) loading the gallery {user_inputs.gallery_name} page')
+        return
     hide_banners(driver)
 
     # do task
@@ -2098,11 +2179,14 @@ def handle_option_9(driver, user_inputs, output_lists):
 def handle_option_10(driver, user_inputs, output_lists):
     """Like n photos of each user who likes a given photo or yours."""
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     printG(f"10. Like {user_inputs.number_of_photos_to_be_liked} photos of each user who liked the photo:")
     print(f'    Getting the list of users who liked the photo ...')
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
             return
     try:
         driver.get(user_inputs.photo_href)
@@ -2115,7 +2199,7 @@ def handle_option_10(driver, user_inputs, output_lists):
     hide_banners(driver)        
 
     # do preliminary task: get the list of users who liked your given photo
-    output_lists.like_actioners_list, dummy_file_name = get_like_actioners_list(driver, user_inputs, output_lists)
+    output_lists.like_actioners_list, _ = get_like_actioners_list(driver, user_inputs, output_lists)
     if len(output_lists.like_actioners_list) == 0: 
         printG(f'   - The photo {photo_tilte} has no affection')
         show_menu(user_inputs)
@@ -2125,12 +2209,6 @@ def handle_option_10(driver, user_inputs, output_lists):
                                                     # if this is set to False, then you will find 3 available photos and Like them 
 
     # do main task
-    # we may have option to process only part of the users list. 
-    # Since the list may be quite large and we don't want to stress the server by sending too many requests. 
-    #start_index = max(0, user_inputs.index_of_start_user)
-    #end_index   = min(start_index + user_inputs.number_of_users, len(output_lists.like_actioners_list) - 1)
-    #for i, actor in enumerate(output_lists.like_actioners_list[start_index : end_index]):  
-
     for i, actor in enumerate(output_lists.like_actioners_list):  
         print_and_log(f'    User {str(i+1)}/{actioners_count}: {actor.display_name}, {actor.user_name}')
         like_n_photos_from_user(driver, actor.user_name, user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count, close_browser_on_error=False)
@@ -2141,26 +2219,27 @@ def handle_option_10(driver, user_inputs, output_lists):
 def handle_option_11(driver, user_inputs, output_lists):
     """Like n friend's photos in homefeed page."""
     
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     printG(f"11. Like {user_inputs.number_of_photos_to_be_liked} photos from the {user_inputs.user_name}'s home feed page:")
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
+     # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
             return
-    else:
-        # make sure the current page is user's homefeed page 
-        driver.get('https://500px.com')
-        time.sleep(1)        
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    # make sure the current page is user's homefeed page 
+    driver.get('https://500px.com')
+    time.sleep(2)        
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
-    # abort the action if the target objects failed to load within a given timeout    
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=60, tag_name_to_check='img')[0]:
-      return
+    # wait for the uploade date item to be loaded to get the date
+    time_out = 30
+    try:  
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.TAG_NAME, 'img')) )
+    except  TimeoutException:
+        printR(f"   - Time out ({time_out}s) loading {user_inputs.user_name}'s home feed page")
+        return
 
-    # after a success login, the user's the homefeed page will automatically open     
-    # we may consider this: abort the action if the photos fail to load within a given timeout    
-    #if not webtools.Finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
-    #  return None, None	    
-  
     hide_banners(driver) 
  
     # do task
@@ -2170,40 +2249,48 @@ def handle_option_11(driver, user_inputs, output_lists):
 
 #---------------------------------------------------------------
 def handle_option_12(driver, user_inputs, output_lists):
-    """Like n photos of each user in the last m notifications.  """
+    """Like n photos from each of m users in the last notifications.  """
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
-    printG(f"12. Like n photos of each user in the last m notifications:")
+    printG(f"12. Like n photos from each of m users in the last notifications:")
     print(f'    - Getting the list of unique users in the last {user_inputs.number_of_notifications} notifications ...')
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
             return
+
+    # we dont want to load the homefeed page, nor to wait for it to complete, so we force it to stop asap
+    try:
+        WebDriverWait(driver, timeout =  40).until(EC.presence_of_element_located((By.XPATH, '/html/body')))
+        driver.execute_script("window.stop();") 
+    except TimeoutException:
+        pass # silently forget about this
+
     driver.get('https://500px.com/notifications')
-    time.sleep(1)        
+    print('    - Getting notification list ...')
+    time_out = 40
+    try:
+        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'notification_item')))
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    except TimeoutException:
+        printR(f'Timed out {time_out}s loading the notifications list')
 
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    
-    # abort the action if the target objects failed to load within a given timeout    
-    if not webtools.finish_Javascript_rendered_body_content(driver, time_out=30, class_name_to_check='finished')[0]:
-      return None, None	
+    hide_banners(driver)
 
-    hide_banners(driver)  
-       
-    # do preliminary task
-    output_lists.unique_notificators = get_notification_list(driver, user_inputs, output_lists, True)[1]
+    # get the pair of display name, user names of unique users in n notifications
+    unique_names = get_notification_list(driver, user_inputs, output_lists, get_user_names_only=True)[1]
 
     # do main task
-    users_count = len(output_lists.unique_notificators)
+    users_count = len(unique_names)
     print(f"    Starting auto-like {user_inputs.number_of_photos_to_be_liked} photos of each of {users_count} users on the list ...")
     
-    for i, notification_element in enumerate(output_lists.unique_notificators):
-        notif_items = notification_element.split(',')
-        # unique notificator element:
-        # 0   1            2             3             4          5   6         
-        # No, Avatar Href, Avatar Local, Display Name, User Name, ID, Count       
-        if len(notif_items) > 4: 
-            print(f'    User {notif_items[0]}/{users_count}: {notif_items[3]}, {notif_items[4]}')
-            like_n_photos_from_user(driver, notif_items[4], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False)
+    for i, item in enumerate(unique_names):
+        name_pair = item.split(',')   # display name, user name
+        if len(name_pair)==2:
+            print(f'    User {str(i+1)}/{str(users_count)}: {name_pair[0]}')
+            like_n_photos_from_user(driver, name_pair[1], user_inputs.number_of_photos_to_be_liked, include_already_liked_photo_in_count=True, close_browser_on_error=False)
 
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
@@ -2211,8 +2298,8 @@ def handle_option_12(driver, user_inputs, output_lists):
 def handle_option_13(driver, user_inputs, output_lists):
     """ Play slideshow on a given gallery. """
 
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
- 
     printG("13. Playing the slideshow ...")
     print_and_log(f'    - Gallery: {user_inputs.gallery_name}, time interval: {user_inputs.time_interval}')
     # open a new Chrome Driver with specific options for playing the slideshow (we are not using the passed driver, which  may be in headless mode)
@@ -2227,11 +2314,36 @@ def handle_option_13(driver, user_inputs, output_lists):
     
     driver_with_GUI = webdriver.Chrome(options=chrome_options)
     # login if credentials are provided
-    if user_inputs.user_name != '' and user_inputs.password != '':
-        if login(driver_with_GUI, user_inputs) == False :
+    if user_inputs.user_name and user_inputs.password and not logged_in:
+        login(driver_with_GUI, user_inputs)
+        if not logged_in:
             printR('   Error logging in. Slideshow will be played without a user login.')  
-        
+
+        # after a login, user's homefeed page will automatically loaded. We don't this page, nor to waste time waiting for it to complete, 
+        # so we force a hard stop asap
+        try:
+            WebDriverWait(driver_with_GUI, timeout =  40).until(EC.presence_of_element_located((By.XPATH, '/html/body')))
+            driver.execute_script("window.stop();") 
+        except TimeoutException:
+            pass # silently forget about this
+
+    # then we load the desised gallery    
     driver_with_GUI.get(user_inputs.gallery_href)
+    time.sleep(2)
+
+    # one ugly way to wait for the gallery to load, while all other 'legit 'ways do not seem to work
+    scroll_height = driver_with_GUI.execute_script("return document.documentElement.scrollHeight")
+    while scroll_height and scroll_height < 1800:
+        time.sleep(1)
+        scroll_height = driver_with_GUI.execute_script("return document.documentElement.scrollHeight")
+
+    time_out = 120
+    try:
+        WebDriverWait(driver_with_GUI, time_out).until( EC.presence_of_element_located((By.CLASS_NAME, 'finished')) )
+    except  TimeoutException:
+         printR(f'   Time out ({time_out}s! Error loading galleries.')
+         return
+
     hide_banners(driver_with_GUI)
 
     # do task
@@ -2241,7 +2353,7 @@ def handle_option_13(driver, user_inputs, output_lists):
     webtools.close_chrome_browser(driver_with_GUI)
 
 #---------------------------------------------------------------
-# EXTRA OPTIONS, not yet available from the menu. Starting backward from 99
+# EXTRA OPTIONS, not yet available from the menu, in progress, experimental...
 def handle_option_99(driver, user_inputs, output_lists):
     """Check/Update following statused of people you are following.
     
@@ -2282,12 +2394,13 @@ def handle_option_99(driver, user_inputs, output_lists):
                 return ''
     # do task
     get_following_statuses(driver, user_inputs, output_lists, csv_file )
-    html_file = utils.CSV_to_HTML(csv_file, apiless.CSV_type.followings , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followings , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
                             ignore_columns = ['Avatar Href', 'Avatar Local','User Name', 'ID'])
-    utils.show_html_result_file(html_file) 
+    utils.show_html_file(html_file) 
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
+# EXTRA OPTIONS, not yet available from the menu, in progress, experimental...
 def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No', ascending=True):
     """Like n photos of m users from a given csv files. 
 
@@ -2296,6 +2409,7 @@ def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No',
     - There is an option to process part of the list, by specifying the start index and the number of users   
     - There is also option to sort a selectable column in the csv file before processing 
     """
+    global logged_in
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.replace(microsecond=0).strftime(config.DATE_FORMAT)
     printG("98. Like n photos of m users from a given csv files:")
@@ -2320,8 +2434,10 @@ def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No',
         sort_ascending = False
     df = dframe.sort_values(sort_header, ascending = sort_ascending )   
     
-    if not logged_in(driver):
-        if login(driver, user_inputs) == False :
+    # if user provided password then login
+    if user_inputs.password != '' and not logged_in:
+        login(driver, user_inputs)
+        if not logged_in:
             return
     count = 0
 
@@ -2349,78 +2465,53 @@ def handle_option_98(driver, user_inputs, output_lists, sort_column_header='No',
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
-def handle_option_15(driver, user_inputs, output_lists):
-    """Create local database based on the latest csv files on disk
-       - create a database for current user if it does not exist.
-       - search the output directory for the latest relevant csv files: photos, followers, followings, notifications list
-       - create the relevant tables and insert the contents, ignoring duplicated records
+def handle_option_14(driver, user_inputs, output_lists):
+    """Create and/or update local database based on the latest csv files on disk
+       - if database does not exist, create it.
+       - search the output directory for the latest csv files: photos, followers, followings, notifications list
+       - create/update the tables, ignoring duplicated records
     """
+    time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.replace(microsecond=0).strftime(config.DATE_FORMAT)
     
-    printG(f"15. Create local database based on the latest csv files on disk")
-    conn = sqlite3.connect(user_inputs.db_path)  #(':memory:') #
-    cc = conn.cursor()
-    db.create_if_not_exists_photos_table(cc)
-    db.create_if_not_exists_followers_and_followings_tables(cc)
-    db.create_if_not_exists_notifications_tables(cc)
-
-    rows_changed_count = 0
-    # insert photos
-    # find the latest photo csv file on disk
-    csv_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.photos)
-    if csv_file != '':
-        df = utils.CSV_file_to_dataframe(csv_file)
-        photos_list = df.values.tolist()
-        for item in photos_list:
-            db.insert_photo_to_photo_table(conn, tuple(item))
-        conn.commit()
-        rows_changed_count = conn.total_changes
-        printG(f'   Record(s) changed: {rows_changed_count}')
-
-    # insert followers
-    # find the latest followers csv file on disk
-    csv_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers)
-    if csv_file != '':
-        df = utils.CSV_file_to_dataframe(csv_file)
-        followers_list = df.values.tolist()
-        for item in followers_list:
-            db.insert_user_to_table(conn, tuple(item), table_name='followers')
-        conn.commit()
-        printG(f'   Record(s) changed: {conn.total_changes - rows_changed_count}')
-        rows_changed_count = conn.total_changes
-
-    # insert followings
-    # find the latest followings csv file on disk
-    csv_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
-    if csv_file != '':
-        df = utils.CSV_file_to_dataframe(csv_file)
-        followings_list = df.values.tolist()
-        for item in followings_list:
-            db.insert_user_to_table(conn, tuple(item), table_name='followings')
-        conn.commit()
-        printG(f'   Record(s) changed: {conn.total_changes - rows_changed_count}')
-        rows_changed_count = conn.total_changes
-   
-    # insert notifications
-    # find the latest notifications csv file on disk
-    csv_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.notifications)
-    if csv_file != '':
-        df = utils.CSV_file_to_dataframe(csv_file)
-        notifications_list = df.values.tolist()
-        for item in notifications_list:
-            db.insert_notification_to_table(conn, tuple(item))
-        conn.commit()
-        printG(f'   Record(s) changed: {conn.total_changes - rows_changed_count}')
-
-    conn.close()
+    # connect to database (create it if it does not exist)
+    if not os.path.isfile(user_inputs.db_path):
+        option = "Create local database based on the latest csv files on disk"
+    else:
+        option = "Update local database based on the latest csv files on disk"
+    printG(f'14. {option}:')
+ 
+    db_connection = sqlite3.connect(user_inputs.db_path)
+    db.create_if_not_exists_photos_table(db_connection)
+    db.create_if_not_exists_followers_and_followings_tables(db_connection)
+    db.create_if_not_exists_notifications_tables(db_connection)
+    
+    types_to_process = [apiless.CSV_type.photos, apiless.CSV_type.notifications, apiless.CSV_type.followers, apiless.CSV_type.followings]
+    records_changed_sofar = 0
+    for csv_type in types_to_process:
+        records_changed_sofar, recent_changes, csv_file =  db.insert_latest_csv_data_to_database(db_connection, 
+                                                                                                 config.OUTPUT_PATH, 
+                                                                                                 records_changed_sofar, 
+                                                                                                 user_inputs.user_name, 
+                                                                                                 csv_type)
+    db_connection.close()
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #--------------------------------------------------------------
-def handle_option_14(driver, user_inputs, output_lists):
-    """ Data analysis: caterorize users based on following statuses"""
+def handle_option_15(driver, user_inputs, output_lists):
+    """ Data analysis: catergorize users according to the following statuses, based on two latest csv files on disk: the followers and followings lists.
+        If these files do not exist, or if they exist but the user wants to re-extract the lists, then there is option to do so. 
+        The results are 4 pairs of csv and html files: 
+            - List of reciprocal following users
+            - List of users who followed you
+            - List of users you followed
+            - List of all users combined """
 
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
-    printG("14. We need to get the followers and followings lists ...")
-
+    option = "15. Categorizing users based on the followers and followings lists:"
+    printG(option)
+    use_followers_file_on_disk, use_followings_file_on_disk = 'n', 'n'
     # Provide option whether to use the last followers csv file on disk or to start from scratch
     followers_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers)
     if followers_file != '':
@@ -2435,16 +2526,26 @@ def handle_option_14(driver, user_inputs, output_lists):
     if use_followers_file_on_disk == 'n':
         print(f"    Getting {user_inputs.user_name}'s Followers list ...")
         output_lists.followers_list = get_followers_list(driver, user_inputs, output_lists)
+        if len(output_lists.followers_list) == 0:
+            printR(f'   - Error getting the followers list.')
+
         # write result to csv
         if len(output_lists.followers_list) == 0:
             printR(f'    User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
             return ''
-        followers_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')
+        file_name = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv'
+        followers_file = os.path.join(output_lists.output_dir, file_name)
         if utils.write_users_list_to_csv(output_lists.followers_list, followers_file) == False:
             printR(f'    Error writing the output file\n:{followers_file}')
             return ''
-        utils.CSV_to_HTML(followers_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
+        description_dict = {'Option 15'     : '<b>Categorize users based on theirs following statuses', 
+                            'Date processed': time_start.strftime("%b %d %Y"),
+                            'User'          : user_inputs.user_name, 
+                            'Title'         : f'List of {str(len(output_lists.followers_list ))} followers' ,
+                            'Data file'     : file_name}
+        # write result to html
+        htmltools.CSV_to_HTML(followers_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
 
     # close the popup windows, if they are opened from previous task
     webtools.close_popup_windows(driver, close_ele_class_names = ['close', 'ant-modal-close-x'])
@@ -2453,6 +2554,9 @@ def handle_option_14(driver, user_inputs, output_lists):
     if use_followings_file_on_disk == 'n':
         print(f"    Getting {user_inputs.user_name}'s Followings list ...")
         output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
+        if len(output_lists.followings_list) == 0:
+            printR(f'   - Error getting the followings list.')
+            return
         # write result to csv
         if len(output_lists.followings_list) == 0:
             printR(f'    User {user_inputs.user_name} does not follow anyone or error on getting the followings list')
@@ -2461,8 +2565,14 @@ def handle_option_14(driver, user_inputs, output_lists):
         if utils.write_users_list_to_csv(output_lists.followings_list, followings_file) == False:
             printR(f'    Error writing the output file\n:{followings_file}')
             return ''
-        utils.CSV_to_HTML(followings_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status'])
+        description_dict = {'Option 15'     : '<b>Categorize users based on theirs following statuses', 
+                            'Date processed': date_string, 
+                            'User'          : user_inputs.user_name,
+                            'Title'         : f'List of {str(len(output_lists.followings_list ))} followings',
+                            'Data file'     : os.path.basename(followings_file)}
+        # write result to html
+        htmltools.CSV_to_HTML(followings_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
     
     # create followers dataframe
     df_followers= utils.CSV_file_to_dataframe(followers_file)
@@ -2471,61 +2581,207 @@ def handle_option_14(driver, user_inputs, output_lists):
     df_followings = utils.CSV_file_to_dataframe(followings_file)
 
     # merge followers and followings dataframes, preserving all data 
-    df_all_ = pd.merge(df_followers, df_followings, how='outer', indicator = True,  suffixes=('_follower_order', '_following_order'), 
-                      on=['Avatar Href', 'Avatar Local', 'Display Name', 'ID', 'Followers Count', 'Status', 'User Name'] )   
-
+    df_m = pd.merge(df_followers, df_followings, how='outer', indicator = True,  suffixes=('_follower_order', '_following_order'), 
+                      on=['Avatar Href', 'Avatar Local', 'Display Name', 'ID', 'Followers Count', 'Relationship', 'User Name'] ) 
+    
+    # drop the column 'Relationship'. We will use the merged column instead
+    df_m.drop(['Relationship'], axis=1, inplace=True)
+    
     # removed the combined values in the overlap columns after merging
     # I'm using pandas 1.0.1 and yet to figure out how to avoid this: different values of the same column name are combined with a dot in between, eg 23.5, 
-    # even they are already separate by two extra columns. If someone khows how to do that please shout
-    df_all_['No_follower_order']   = df_all_['No_follower_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
-    df_all_['No_following_order'] = df_all_['No_following_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
+    # even they are already separate by two extra columns _x and _y. So, for now, we manually remove the extra part
+    df_m['No_follower_order']   = df_m['No_follower_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
+    df_m['No_following_order'] = df_m['No_following_order'].apply(lambda x: '' if math.isnan(x) else str(x).split('.')[0])
+    
+    # change the merged values to meaningful text. (Note: unseen column '_merge' needs to have new values added to its category, before we can change the values) 
+    df_m._merge = df_m._merge.cat.add_categories(['Reciprocal', 'Not Follow', 'Following'])    
+    df_m.loc[df_m._merge == 'both','_merge']      = 'Reciprocal'
+    df_m.loc[df_m._merge == 'left_only','_merge'] = 'Not Follow'
+    df_m.loc[df_m._merge == 'right_only','_merge']= 'Following'
 
     # renamed some columns
-    df_all = df_all_.rename(columns={'No_follower_order': 'Follower Order', 'No_following_order': 'Following Order', '_merge': 'Relationship'})
-    
-    # users who follow you and you follow them 
-    df_reciprocal = df_all[df_all['Relationship'] == 'both']
+    df_all = df_m.rename(columns={'No_follower_order': 'Follower Order', 'No_following_order': 'Following Order', '_merge': 'Relationship'})
 
-    # users who follow you but you do not follow them
-    df_not_follow =  df_all[df_all['Relationship'] == 'left_only']
+    # Reciprocal following: users who follow you and you follow them 
+    df_reciprocal = df_all[df_all['Relationship'] == 'Reciprocal']
 
-    # users who you follow but they do not follow you
-    df_right_only =  df_all[df_all['Relationship'] == 'right_only']                                              # getting the names
+    # Not Follow: users who follow you but you do not follow them
+    df_not_follow =  df_all[df_all['Relationship'] == 'Not Follow']
+
+    # Following: users who you are following but they do not follow you
+    df_right_only =  df_all[df_all['Relationship'] == 'Following']                                               # getting the names
     df_not_follower = pd.merge(df_followings, df_right_only[['User Name']], how='inner', on='User Name')         # from names, getting the detail info (a whole row on other table) 
     df_not_follower = df_not_follower.rename(columns={'No': 'Following Order', 'Followers': 'Followers Count'})  # renaming some columns
     df_not_follower['Follower Order'] = ''                                                                       # add missing column with empty values
-    df_not_follower['Relationship'] = 'right_only'                                                               # finally assigning the merged indicator info 
+    df_not_follower['Relationship'] = 'Following'                                                                # put in the value 
 
     # write dataframe to csv, html. Show html
     df_to_process = [df_reciprocal, df_not_follow, df_not_follower, df_all]
-    csv_type_to_process= [apiless.CSV_type.reciprocal, apiless.CSV_type.not_following, apiless.CSV_type.not_follower, apiless.CSV_type.all]
+    csv_type_to_process= [apiless.CSV_type.reciprocal, apiless.CSV_type.not_follow, apiless.CSV_type.following, apiless.CSV_type.all_users]
     print_and_log(f'   - Analyzing users relationships')
+    #pd.options.mode.chained_assignment = None # this bypass the pandas' SettingWithCopyWarning, which we don't care because we are going to throw way the  copies
+    stats_dict = {}
+ 
     for df, csv_type in zip(df_to_process, csv_type_to_process):
+        file_title = ''
         # add an index column, started at 1
-        pd.options.mode.chained_assignment = None # this bypass the pandas' SettingWithCopyWarning, which we don't care because we are going to throw way 
-                                                  # the copied and modified dataframe df after each loop iteration
         df['No'] = range(1, len(df) + 1)
 
-        # Reorder columns to make it easier to generate html file . Original order:
-        # Follower Order, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers Count, Status, Following Order, Relationship, No
-        new_columns_order = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status', 'Follower Order', 'Following Order', 'Relationship', ]
+        # Reorder columns to make it easier to generate html file . This is original order:
+        # Follower Order, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers Count, Relationship, Following Order, Relationship, No
+        new_columns_order = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Follower Order', 'Following Order', 'Relationship', ]
         df = df[new_columns_order]
 
-        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Status']
-        if csv_type == apiless.CSV_type.not_following:
+        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID']
+        table_width = '900px'
+        # create a statistics list to show on the result html page 
+        if csv_type == apiless.CSV_type.not_follow:
             ignore_columns.extend(['Following Order'])
-        elif csv_type == apiless.CSV_type.not_follower:
+            option_key = 'Option 15 (2 of 4)'
+            option = "Categorizing users based on the followers and followings lists"
+            file_title = f'List of {str(df.shape[0])} followers that you do not follow'
+            stats_list = [['not_follow', 'Not Follow', str(df_not_follow.shape[0]), 'You do not follow your follower']]
+        elif csv_type == apiless.CSV_type.following:
+            option_key = 'Option 15 (3 of 4)'
+            option = "Categorizing users based on the followers and followings lists"
             ignore_columns.extend(['Follower Order'])
+            file_title = f'List of {str(df.shape[0])} users that you follow'
+            stats_list = [['following', 'Following', str(df_not_follower.shape[0]), 'You are following this user without being followed back']]
+        elif csv_type == apiless.CSV_type.reciprocal:
+            option_key = 'Option 15 (1 of 4)'
+            option = "Categorizing users based on the followers and followings lists"
+            file_title = f'List of {str(df.shape[0])} reciprocal users'
+            stats_list = [['reciprocal', 'Reciprocal Following', str(df_reciprocal.shape[0]), 'You and this user follow each other']]
+                          
+        elif csv_type == apiless.CSV_type.all_users:
+            option_key = 'Option 15 (4 of 4)'
+            option = "Categorizing users based on the followers and followings lists"
+            file_title = f'List of {str(df.shape[0])} users with their following statuses'
+            stats_list = [['reciprocal',      'Reciprocal Following',  str(df_reciprocal.shape[0]),      'You and this user follow each other'],
+                          ['not_follow',      'Not Follow',            str(df_not_follow.shape[0]),        'You do not follow your follower'],
+                          ['following',       'Following',             str(df_not_follower.shape[0]),       'You are following this user without being followed back']]
+        
+        stats_list.append(['Follower Order',  'The reverse chronological order at which a user followed you']) 
+        stats_list.append(['Following Order', 'The reverse chronological order at which you followed a user'])
 
-        csv_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(df)}_{csv_type.name}_{date_string}.csv')  
-        printG(f'   - {csv_type.name.upper()}: ./Output/{os.path.basename(csv_file_name)}')
+        file_name = f'{user_inputs.user_name}_{len(df)}_{csv_type.name}_{date_string}.csv'
+        csv_file_name = os.path.join(output_lists.output_dir, file_name)  
+        printG(f'   - {csv_type.name.upper()}: ./Output/{file_name}')
         df.to_csv(csv_file_name, encoding='utf-16', index = False)
-        html_file = utils.CSV_to_HTML(csv_file_name, csv_type, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  ignore_columns = ignore_columns)
-        utils.show_html_result_file(html_file) 
+        description_dict = {f'{option_key}'   : f'<b>{option}', 
+                             'Date processed' : time_start.strftime("%b %d %Y"),
+                             'User'           : user_inputs.user_name, 
+                             'Title'          : file_title ,
+                             'Data file'      : file_name}
+  
+        html_file = htmltools.CSV_to_HTML(csv_file_name, csv_type, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                                      ignore_columns = ignore_columns, desc_dict = description_dict, statistics_info = stats_list)
+        utils.show_html_file(html_file) 
 
     printG(f'   Duration {datetime.datetime.now().replace(microsecond=0) - time_start}s') 
 
+
+#-------------------------------------------------------------
+def handle_option_16(driver, user_inputs, output_lists):
+    """ - Read all notifications from local database
+        - Count the number of occurences of each user on the list
+        - Compile a list of unique users with occurences counts, last action date, numbers of liked, followed, commennted and added to gallery 
+        - Save the list to csv file. Create the html file and show.
+    """
+
+    time_start = datetime.datetime.now().replace(microsecond=0)
+    date_string = time_start.replace(microsecond=0).strftime(config.DATE_FORMAT)
+    printG("16. Notifications analysis ...")
+    # update database
+    db.insert_all_notification_csv_files_to_database(user_inputs.db_path, config.OUTPUT_PATH, user_inputs.user_name)
+
+    # 1 of 2: All notifications: read from database, write to csv, html and show html
+    conn = sqlite3.connect(user_inputs.db_path)  
+    df_notif = pd.read_sql_query("SELECT * FROM notifications", conn)   
+    df_notif.sort_values(by=['Time Stamp'], ascending=False, inplace=True)
+    file_name = f'{user_inputs.user_name}_all_{str(df_notif.shape[0])}_notifications_{date_string}'
+    csv_file =  os.path.join(output_lists.output_dir, f'{file_name}.csv')
+    html_file = os.path.join(output_lists.output_dir, f'{file_name}.html')
+
+    ## gather statistics 
+    stats_dict = utils.get_notifications_statistics(df_notif)
+
+    description_dict = {'Option 16 (1of2)'  : f'<b>Notification analysis: All recorded notifications from database', 
+                        'Date processed'    : time_start.strftime("%b %d %Y"),
+                        'User'              : user_inputs.user_name,  'Data file': f'{file_name}.csv',
+                        'Title'             : 'All recorded notifications from local database',  #f'{str(df_notif.shape[0])} notifications from {first_date} to {last_date}',
+                        'Following'         : '<i>You are following your new follower',
+                        'Not Follow'        : '<i>You do not follow your new follower'}
+
+    df_notif.to_csv(csv_file, encoding='utf-16', index = False)   
+    htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'], 
+                column_to_sort='Time Stamp', desc_dict = description_dict, statistics_info = stats_dict )
+    utils.show_html_file(html_file) 
+    conn.close()
+
+    # 2 of 2: Process unique users list with detailed analysis, write to csv, html and show html 
+    df_unique, stats_list = process_unique_users(df_notif, user_inputs.user_name, output_lists.output_dir)
+
+    csv_file  = os.path.join(config.OUTPUT_PATH,  
+                f"{user_inputs.user_name}_{str(df_unique.shape[0])}_unique-users_in_all_{df_notif.shape[0]}_notifications_{date_string}.csv")
+ 
+    # write the result to csv file
+    df_unique.to_csv(csv_file, encoding='utf-16', index = False)
+
+    description_dict = {'Option 16 (2of2)' : '<b>Notification analysis: extract unique users and theirs statistics',  
+                        'Date processed'    : time_start.strftime("%b %d %Y"),
+                        'User'              : user_inputs.user_name,
+                        'Title'             : f'{str(df_unique.shape[0])} unique users in {df_notif.shape[0]} notifications',
+                        'Data file'         : os.path.basename(csv_file)}
+
+    # write to csv, html, and show result
+    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict, statistics_info= stats_list)
+    utils.show_html_file(html_file)     
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
+        
+#--------------------------------------------------------------
+def process_unique_users(df_notif, user_name, output_dir):
+    """ Given a notifications dataframe, extract the unique users and theirs statistics info from it. 
+        Return a uniques users dataframe with the theirs analysis data, and a 2D list of strings that will be used for a summary html table
+        
+        Statistics data for each user are: 
+        Last Action Date, Actions count, Liked count, Followed count, Commented count , Added-To-Gallery count, and Relationship
+        Relationship is one in for types: Reciprocal Following, Followed You, You Follow, and No relationship 
+        We use the csv file, if existed, created in option 15: "Categorize users based on following statuses" to get the relationship status. """
+
+    if df_notif.shape[0] == 0:
+        print_and_log('    - No notifications provided')
+        return ''
+
+    pd.options.mode.chained_assignment = None
+
+    df_unique = utils.analyze_notifications(df_notif)  
+ 
+    # find the latest all_users csv file on disk
+    all_users_file = utils.get_latest_cvs_file(output_dir, user_name, apiless.CSV_type.all_users)
+
+    # no users analysis file (i.e step 15: Categorize users based on following statuses was not done
+    stats_list = []
+    if all_users_file == '':   
+        # sort table by the Actions Counts
+        print_and_log('    - No analysis data for a complete report. Consider doing option 15 prior to this. Now processing the basic analysis.  ')
+        df_unique.sort_values(by=['Actions Count'], ascending=False, inplace=True)
+        return df_unique, stats_list        
+
+    # we have the list of users relationships, we will use it to update the relationships in the unique users list 
+    else:   
+        print_and_log(f'    - Use data analysis from file: {all_users_file}')
+        df_all_users = utils.CSV_file_to_dataframe(all_users_file)
+        df_merge, stats_list = utils.merge_relationships(df_unique, df_all_users)
+        return df_merge, stats_list        
+
+#--------------------------------------------------------------
 def main():
+ 
+    global logged_in
+
     os.system('color')
     driver = None
     logger.info('Started: =====================================')
@@ -2533,10 +2789,16 @@ def main():
     print_and_log(f'Output path: {config.OUTPUT_PATH}')
     print_and_log(f'Log file:    {config.LOG_FILE}')
 
+    desired_capab = DesiredCapabilities.CHROME
+    desired_capab["pageLoadStrategy"] = "none"
+
     # chrome driver takes a few seconds to load, so we let a thread to handle it while we go on with the menu and user inputs. 
     my_queue = queue.Queue()
-    th = Thread(target = webtools.start_chrome_browser, args=([], config.HEADLESS_MODE, my_queue) )
+    th = Thread(target = webtools.start_chrome_browser, args=([], config.HEADLESS_MODE, desired_capab, my_queue) )
     th.start()
+
+    # bypass the pandas' SettingWithCopyWarning, which we don't care because we are going to throw way the  copies
+    pd.options.mode.chained_assignment = None 
 
     # check internet and 500px server connections, if needed  
     #if not webtools.has_server_connection(driver, r'https://500px.com'):
@@ -2559,6 +2821,8 @@ def main():
             "13": handle_option_13,  
             "14": handle_option_14,
             "15": handle_option_15,
+            "16": handle_option_16,
+
             # options not yet available from the menu
             "99": handle_option_99,
             "98": handle_option_98,
@@ -2576,10 +2840,11 @@ def main():
             user_inputs.Reset()
             output_lists.Reset()
             webtools.close_chrome_browser(driver)
+            logged_in = False
             driver = None
             
             my_queue = queue.Queue()
-            th = Thread(target = webtools.start_chrome_browser, args=([], config.HEADLESS_MODE, my_queue) )
+            th = Thread(target = webtools.start_chrome_browser, args=([], config.HEADLESS_MODE, desired_capab, my_queue) )
             th.start()
             
             user_inputs = define_and_read_command_line_arguments()
@@ -2611,6 +2876,7 @@ def main():
             continue
 
     webtools.close_chrome_browser(driver)
+    logged_in = False
 
 #---------------------------------------------------------------
 if __name__== "__main__":

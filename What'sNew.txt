@@ -1,3 +1,54 @@
+Jun 7 2020:
+
+Major updates related to the recent changes from 500px: some page structures, relative datetime (eg. 'a year ago'), roundup views count (eg. 3.2K)...
+This version has breaking changes. SQLite database (500px_[user name].db) and some previously created CSV types are not compatible. 
+Please delete the old files before runing the script.
+
+Main noticable changes:
+
+- New option 16, Notifications analysis:
+   a) Create/update the local database (sqlite) with the latest notifications csv files on disk
+   b) From the local database, analyze the data and produce two lists: all recorded notifications and unique users with analysis info. 	
+   Analysis info includes:
+  	For notifications: an overview table showing time frame between the first and the last notifications, 
+  		           total of likes, comments, adding to galleries, counts of new followers, people you followed, people you have not followed.
+  	For Unique users:  Last action date, number of actions, counts of Likes, Comments, galleries added, and following status
+
+- Option 2 (Get photos list): Includes a list of top 5 photos: highest pulse, most viewed, most liked, most commented, and most featured in galleries
+  and an overview table showing first, last update dates, totals of views, likes and commented 
+
+- Option 6 (Get notifications): Data analysis is automatically done on newly extracted info. 
+  The result will also have analysis info mentioned in option 16 (b) above.
+   
+- Moved helper functions related to html writing to a separate module named htmltools.py
+
+Feature improvements:
+- Login status is now lasts the entire session, no more logging out and loging in again between the tasks.
+- Option 12 (Like n photos of each user in the last m notifications): simplified the process on getting the unique user names from the notifications. 
+
+
+Bugs fixed:
+- Extraction of notification is now started at the desired index  instead of always 0.    
+- Option 7 (Check if a user follows you): Increase timeout to allow the slow server to load all following users
+- Option 2 (Get photos list): Getting featured galleries: scrolling down until all galleries are loaded. It was maximum of 15 before.
+  NOTE: 500px returns bogus galleries, especially on the photos near the end of the list (for instance, 115 featured galleries with the same title "favorites" was recorded. So we set a limit of 30 galleries until the problem is resolved) 
+- Backspacing when entering user password: no more displaying of new line for each backspace keystroke 
+
+Data structure changes:
+- All the classes attribute named 'Status' now changed to 'Relationship'
+- Photo object attribute "Featured in Galleries" is no longer has the galleries count prefixed to the list of galleries. The count now goes to a new attributed name 'Galleries Count'.
+- Unique users csv files has two more columns: Actions Count and Last Action Date
+
+---------------------------
+Apr 25 2020:
+- renamed column header Status --> Relationship
+- ignore a notification item if the content can not identify
+- initial photo_link in notifcation to ' ' instead of None, for composite primary keys
+- fixed error on getting notifications, starting at the given index instead of always 0
+- notification analysis: detail for each user: 
+  Relationship, Last Action Date, Actions Count, Liked, Followed, Commented, Added To Gallery
+- Local database: refactor database functions
+  
 ---------------------------
 Apr 5 2020:
 - Moved helper functions into two separated py files: utils.py and webtools.py
