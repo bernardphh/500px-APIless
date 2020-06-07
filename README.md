@@ -113,22 +113,29 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 ## SOME SAMPLE OUTPUTS: ##
 <kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
-</kbd><br/>
+</kbd>
 <br/>
+<br/>
+
 <kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/15.4.All_users_with_following_statuses.png" width ="80%">
-</kbd><br/>
+</kbd>
+<br/><br/><br/>
+
 
 ![](Snapshots/2.photos.png)
+
 <br/><br/>
 
 <kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
-</kbd><br/></br>
+</kbd>
+<br/><br/>
 
 <kbd>
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
-</kbd><br/><br/>
+</kbd>
+<br/><br/>
 
 ### Check if a user is following you: ###
 <kbd>
@@ -136,17 +143,16 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 </kbd><br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
-<kbd><img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
-</kbd><br/><br/>
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+<br/><br/>
 
 ### Like n photos from a gallery: ###
-<kbd>
- <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
-</kbd><br/><br/>
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
+<br/><br/>
 
-<kbd>### Playing a slideshow: ###
+### Playing a slideshow: ###
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/13.slideshow.png" width="90%">
-</kbd><br/><br/><br/>
+<br/><br/><br/>
 
 ## LIMITATIONS, ISSUES, TO DO LIST: ##br/><
 <br/><
