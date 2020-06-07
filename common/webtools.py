@@ -42,7 +42,7 @@ def get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
         return ''
     ele = page.xpath(xpath)
     time.sleep(1)
-    if ele is not None and len(ele) > 0:
+    if ele and len(ele) > 0:
         try:
             return ele[0].attrib[attribute_name] 
         except:
@@ -98,46 +98,12 @@ def open_user_home_page(driver, user_name):
     if count_down <=0:
         return False, f"Timed out ({time_out}s) while opening {user_name}'s home page. Please retry"
 
-    if check_and_get_ele_by_class_name(driver, 'not_found') is None and \
-       check_and_get_ele_by_class_name(driver, 'missing') is None:
+    if check_and_get_ele_by_class_name(driver, 'not_found'):
+        return False, f'User {user_name} does not exit'
+    elif check_and_get_ele_by_class_name(driver, 'missing') is None:
         return True, ''
     else:
         return False, f'Error reading {user_name}\'s page. Please make sure a valid user name is used'
-
-#---------------------------------------------------------------
-def finish_Javascript_rendered_body_content(driver, time_out=10, class_name_to_check='', css_selector_to_check='', xpath_to_check='', id_to_check='', tag_name_to_check=''):
-    """ Run the Javascript to render the body content. Log error if it happened. Return:
-        1) The fail/success status, 
-        2) The page content text 
-           
-    The completion of the js script, within a given timeout, is determined by checking the existance of one of the given elements. 
-    Element to check is one of the following: class_name, css_selector, xpath, prioritied by this order
-    """
-
-    innerHtml = driver.execute_script("return document.body.innerHTML")  
-    
-    try:
-        if class_name_to_check:
-            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, class_name_to_check)))
-        elif css_selector_to_check:
-            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CSS_SELECTOR, css_selector_to_check)))
-        elif xpath_to_check:
-            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.XPATH, xpath_to_check)))
-        elif id_to_check:
-            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.ID, id_to_check)))
-        elif tag_name_to_check:
-            element = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.TAG_NAME, tag_name_to_check)))
-        else:
-            printR('   Internal error. No identifier was given for detecting the page loading completion ')
-            return False, ''
-    except TimeoutException :
-        printR(f'   Time out {time_out}s while loading. Please retry.')
-        return False, '', 
-    except:
-        printR('   Error loading. Please retry.')
-        return False, ''   
-    
-    return True, innerHtml
 
 #---------------------------------------------------------------
 def check_and_get_ele_by_xpath(element, xpath):
@@ -203,7 +169,7 @@ def check_and_get_ele_by_tag_name(element, tag_name):
         return element.find_element_by_tag_name(tag_name) 
     except NoSuchElementException:
         return None
-
+ 
 #---------------------------------------------------------------
 def check_and_get_all_elements_by_tag_name(element, tag_name):
     """Find all the web elements of a given tag name, return empty list if tag_name not found.
@@ -257,6 +223,17 @@ def check_and_get_all_elements_by_css_selector(element, selector):
         return []
 
 #---------------------------------------------------------------
+def check_and_get_ele_by_its_text(element, text):
+    """
+    """
+    if element is None or not text:
+        return None
+    try:
+        return element.find_elements_by_xpath("//*[contains(text(), text)]")
+    except NoSuchElementException:
+        return None
+
+#---------------------------------------------------------------
 def close_popup_windows(chrome_driver, close_ele_class_names):
     """  Close the popup windows, specified by the given class names, ignoring exceptions, if any"""
 
@@ -279,7 +256,7 @@ def get_IMG_element_from_homefeed_page(driver):
     """
     # we are interested in items with the tag <img>
     img_eles = check_and_get_all_elements_by_tag_name(driver, 'img') 
-
+    time.sleep(4)
     # img_eles list contains other img elements that we don't want, such as thumbnails, recommended photos..., we will remove them from the list
     for ele in reversed(img_eles):
         parent_4 = check_and_get_ele_by_xpath(ele, '../../../..') 
@@ -297,7 +274,7 @@ def close_chrome_browser(chrome_driver):
     except WebDriverException:
         pass
 #---------------------------------------------------------------
-def start_chrome_browser(options_list, headless_mode, my_queue = None):
+def start_chrome_browser(options_list, headless_mode, desired_capab= None, my_queue = None):
     """ Start Chrome Web driver with given options.
         Suppress the default log messages. 
         Put the result chrome driver in the queue, if given, so that it can be retrieved in an multithread/multiprocessing environments"""
@@ -323,7 +300,11 @@ def start_chrome_browser(options_list, headless_mode, my_queue = None):
     else:
         printY('DO NOT INTERACT WITH THE CHROME BROWSER. IT IS CONTROLLED BY THE SCRIPT AND  WILL BE CLOSED WHEN THE TASK FINISHES')
         chrome_options.add_argument("--window-size=800,1000")
-    driver = webdriver.Chrome(options=chrome_options)
+
+    if desired_capab:
+        driver = webdriver.Chrome(options=chrome_options, desired_capabilities= desired_capab)
+    else:
+        driver = webdriver.Chrome(options=chrome_options)
 
     if my_queue:
         my_queue.put(driver)
@@ -444,8 +425,11 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
             utils.update_progress(new_count / likes_count, f'    - Scrolling to load more items {new_count}/{likes_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
-            time.sleep(random.randint(10, 15) / 10)  
-            WebDriverWait(driver, timeout = 60).until(EC.visibility_of(the_last_in_list))
+            time.sleep(random.randint(15, 20) / 10)  
+            try:
+                WebDriverWait(driver, timeout = 60).until(EC.visibility_of(the_last_in_list))
+            except TimeoutException:
+                pass 
             count = new_count
             eles = driver.find_elements_by_class_name(class_name)
             new_count = len(eles)
@@ -454,7 +438,48 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
         except NoSuchElementException:
             pass
     if new_count < likes_count:
-        utils.update_progress(1, f'    - Scrolling to load more items:{likes_count}/{likes_count}')
+        utils.update_progress(1, f'    - Scrolling to load more items:{new_count}/{likes_count}')
+
+#---------------------------------------------------------------
+def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name= '', tag_name=''):
+    """Scroll the active window to the end, where the last element of the given class name become visible.
+
+    Argument 'expected_items_count' is used for creating a realistic progress bar
+    """
+    if class_name:
+        eles = driver.find_elements_by_class_name(class_name)
+    elif tag_name:
+        eles = driver.find_elements_by_tag_name(tag_name)
+
+    count = 0
+    new_count = len(eles)
+
+    while new_count != count:
+        try:
+            utils.update_progress(new_count / expected_items_count, f'    - Scrolling to load more items {new_count}/{expected_items_count}:')
+            the_last_in_list = eles[-1]
+            the_last_in_list.location_once_scrolled_into_view 
+            time.sleep(random.randint(15, 20) / 10)  
+            try:
+                WebDriverWait(driver, timeout = 60).until(EC.visibility_of(the_last_in_list))
+            except TimeoutException:
+                pass 
+
+            count = new_count
+            if class_name:
+                eles = driver.find_elements_by_class_name(class_name)
+            elif tag_name:
+                eles = driver.find_elements_by_tag_name(tag_name)
+            new_count = len(eles)
+        except TimeoutException :
+            printR(f'   Time out while scrolling down. Please retry.')
+        except NoSuchElementException:
+            pass
+    if new_count >= expected_items_count:
+        utils.update_progress(1, f'    - Scrolling to load more items:{expected_items_count}/{expected_items_count}')
+    else:
+        print(f'     - Available items: {new_count}')
+    return eles
 
 #---------------------------------------------------------------
 def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_count):
@@ -465,7 +490,7 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
     eles = check_and_get_all_elements_by_tag_name(element, tag_name)
     count = 0
     new_count = len(eles)
-    time_out = 20
+    time_out = 60
     count_down_timer = time_out
     while new_count != count:
         try:
@@ -473,7 +498,11 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(1)
-            WebDriverWait(driver, time_out).until(EC.visibility_of(the_last_in_list))
+            try:
+                WebDriverWait(driver, time_out).until(EC.visibility_of(the_last_in_list))
+            except TimeoutException:
+                pass 
+
             count = new_count
             eles = check_and_get_all_elements_by_tag_name(element, tag_name)
             new_count = len(eles)

@@ -6,7 +6,7 @@ from enum import Enum
 import os
 from os import listdir
 from os.path import isfile, join
-
+import pandas as pd
 
 class User:
     """ Represents a user. It could be the main user(ie. me, the logged in user), or a target user whose photos we want to auto-like, or a user who had interaction with me(liked, commented, followed)
@@ -23,7 +23,10 @@ class User:
         self.id = id
         self.number_of_followers = number_of_followers
         self.following_status = following_status
-     
+
+    def __repr__(self):
+        return f'{self.order},{self.avatar_href},{self.avatar_local},{self.display_name},{self.user_name},{self.id},{self.number_of_followers},{self.following_status}'
+      
 #--------------------------------------------------
 class PhotoStats:
     """ Photo statistics info.
@@ -39,6 +42,10 @@ class PhotoStats:
         self.rating = rating
         self.category = category
         self.tags = tags
+
+    def __repr__(self):
+        return f'{self.upload_date},{self.views_count},{self.votes_count},{self.collections_count},{self.comments_count},{self.highest_pulse},{self.rating},{self.category},{self.tags}'
+  
 #--------------------------------------------------
 class Photo:
     """ Represent a photo info.
@@ -63,25 +70,78 @@ class Photo:
 
     def __iter__(self):
         yield (self.author_name, self.order, self.id, self.title, self.href, self.thumbnail_href, self.thumbnail_local, delf.category, self.galleries, self.stats )
+    def __repr__(self):
+        return f'{self.author_name},{self.order},{self.id},{self.title},{self.href},{self.thumbnail_href},{self.thumbnail_local},{self.category},{self.galleries},{self.stats}'
+    
+    def to_dict(self):
+        #No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments,Galleries,Highest Pulse,Rating,Date,Category,Featured In Galleries,Tags
+        return {
+            'No': self.order,
+            'Author Name': self.author_name,
+            'ID': self.id,
+            'Photo Title':self.title,
+            'Href':self.href,
+            'Thumbnail Href':self.thumbnail_href,
+            'Thumbnail Local': self.thumbnail_local,
+            'Views': self.stats.views_count,
+            'Likes': self.stats.votes_count,
+            'Comments': self.stats.comments_count,
+            'Galleries': self.stats.collections_count,
+            'Highest Pulse': self.stats.highest_pulse,
+            'Rating': self.stats.rating,
+            'Date': self.stats.upload_date,
+            'Category': self.category,
+            'Featured In Galleries': self.galleries,
+            'Tags': self.stats.tags
+        }   
+
+
+ 
 #--------------------------------------------------
 class Notification:
     """ Represent a notification object.
         
-        - ACTOR is an object of type user(), on which we will make use only 3 members: avatar_href, display_name, username
-        - THIS_PHOTO is object of type photo(), on which we will make use only 3 members: photo_thumb, photo_link, photo_title
-        - CONTENT is the type of notifications. It is 'liked', 'comment' or 'add to gallery'
-        - TIMESTAMP is the time when the notification happened
+        - ACTOR is an object of type user(), on which we will make use only 3 attributes: avatar_href, display_name, username
+        - THE_PHOTO is object of type photo(), on which we will make use only 3 attributes: photo_thumb, photo_link, photo_title
+        - CONTENT is the type of notification, which is one of the following text 'liked', 'followed', 'comment' or 'add to gallery'
+        - TIMESTAMP is the time when the notification happened 
         - STATUS is the following status of the main user toward the actor, ie. 'Following'  or 'Not follow'
         """
     def __init__(self, order, actor = None, the_photo = None,  content = '', timestamp = '', status = ''): 
         self.order = order      
         self.actor = User() if actor is None else actor       
         self.the_photo = Photo() if the_photo is None else the_photo 
-        self.actor = actor
         self.content = content
-        self.the_photo = the_photo        
         self.timestamp = timestamp
         self.status = status
+
+    def __repr__(self):
+        return f'{self.order},{self.actor},{self.the_photo},{self.content},{self.the_photo},{self.timestamp},{self.status}'
+
+    def to_dict(self):
+        return {
+            'No': self.order,
+            'Avatar Href': self.actor.avatar_href,
+            'Avatar Local': self.actor.avatar_local,
+            'Display Name':self.actor.display_name,
+            'User Name':self.actor.user_name,
+            'ID':self.actor.id,
+            'Content': self.content,
+            'Photo Thumbnail Href': self.the_photo.thumbnail_href,
+            'Photo Thumbnail Local': self.the_photo.thumbnail_local,
+            'Photo Title': self.the_photo.title,
+            'Time Stamp': self.timestamp,
+            'Relationship': self.status,
+            'Photo Link': self.the_photo.href
+        }
+ 
+    def to_notification_data(self):
+        ## No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content, Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Relationship, Photo Link
+        notif_array_item = [f'{self.order}', f'{self.the_photo.avatar_href}', f'{self.the_photo.avatar_local}', f'{self.actor.display_name}', f'{self.actor.user_name}', 
+                            f'{self.actor.id}', f'{self.content}', f'{self.the_photo.thumbnail_href}', f'{self.the_photo.thumbnail_local}', f'{self.the_photo.title}', 
+                            f'{self.timestamp}', f'{self.status}', f'{self.the_photo.href}']
+        return notif_array_item
+
 #--------------------------------------------------
 class UserStats:
     """ Represent basic statistics of a user."""
@@ -102,6 +162,25 @@ class UserStats:
         self.registration_date = registration_date
         self.last_upload_date = last_upload_date
         self.user_status = user_status
+
+    def to_dict(self):
+        return {
+            'Display name': self.display_name,
+            'Username': self.user_name,
+            'ID': self.id,
+            'Location':self.location,
+            'Activities':self.affection_note,
+            'Following note': self.following_note,
+            'Affecction':self.affections_count,
+            'Views': self.views_count,
+            'Followers': self.followers_count,
+            'Followings': self.followings_count,
+            'Photo count': self.photos_count,
+            'Galleries count': self.galleries_count,
+            'Registration date': self.registration_date,
+            'Last upload date': self.last_upload_date,
+            'Status': self.user_status
+        }
 #--------------------------------------------------
 class UserInputs():
     """ Represent the input entered by the user. 
@@ -190,18 +269,18 @@ class OutputData():
 
 #--------------------------------------------------
 class CSV_type(Enum):
-    """ Enum representing 5 types of output list"""
+    """ Enum representing 10 types of output list"""
     not_defined              = 0
     photos                   = 1         # your photos     
     notifications            = 2         # notification of liked, comment, added to gallery
     unique_users             = 3         # Unique users in a notifications list, with the count of their appearances in the list 
     like_actors              = 4         # users that liked one specific photos of yours
 
-    followers                = 5         # users who follow you          
-    followings               = 6         # users who you follow 
+    followers                = 5         # all your followers, regardless you are following them or not
+    followings               = 6         # all your followings, regardless they are following you back or not
 
-    all                      = 7         # combined your followers and your followings
+    all_users                = 7         # combined your followers and your followings
     reciprocal               = 8         # users who follow you and you follow them 
-    not_following            = 9         # users who follow you but you do not follow them 
-    not_follower             = 10        # users who you follow but they do not follow you
+    not_follow               = 9         # list of users that you do not follow, but they are following you
+    following                = 10        # list of users that you are following but they do not follow you
     interactor               = 11        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other

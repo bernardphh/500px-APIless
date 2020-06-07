@@ -2,6 +2,7 @@
 # utils.py: helper functions used in 500px_APIless.py
 import common.config as config 
 import common.apiless as apiless
+
 from common.config import LOG as logger
 
 import pandas as pd
@@ -39,8 +40,8 @@ def write_string_to_text_file(input_string, file_name, encode = ''):
     open_file.close()
 
 #--------------------------------------------------------------- 
-def show_html_result_file(file_name):
-    """Offer the given html file with the default system app. """
+def show_html_file(file_name):
+    """Open the given html file using the default system app. """
 
     if not os.path.isfile(file_name):
          return
@@ -107,7 +108,6 @@ def validate_non_empty_input(prompt_message, user_inputs):
 
     return val, False
 
-
 #--------------------------------------------------------------- 
 def validate_input(prompt_message, user_inputs):
     """ Prompt for input and accepts nothing but digits or letter 'r' or 'q'. 
@@ -128,448 +128,14 @@ def validate_input(prompt_message, user_inputs):
             printR("Invalid input! Please retry.", write_log=False)
             val = input(prompt_message)
 
-#--------------------------------------------------------------- 
-def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore_columns = None):
-    """Create a html file from a given photos list csv  file. Save it to disk and return the file name.
-
-    Save the html file using the same name but with extension '.html'
-    Expecting the first line to be the column headers, which are  no, page, id, title, link, src
-    Hide the columns specified in the given IGNORE_COLUMNS LIST. The data in these columns are still being used to form the web link tag <a href=...>
-    """
-    if ignore_columns is None:
-        ignore_columns = []
-
-    CUSTOMED_COLUMN_WIDTHS = """
-    <colgroup>
-		<col style="width:4%">
-		<col style="width:18%">
-		<col span= "3" style="width:5%" >
-		<col style="width:14%">	
-		<col style="width:7%" >
-		<col style="width:6%" >
-		<col style="width:8%" >				
-		<col style="width:28%" >				
-	</colgroup>
-    """
-    HEADER_STRING ="""
-<head>
-	<script charset="UTF-8" type = "text/javascript" src="javascripts/scripts.js"></script>
-	<link   charset="UTF-8" type = "text/css" rel  = "stylesheet"  href = "css/styles.css" />
-</head>""" 
-
-# file name and extension check
-    file_path, file_extension = os.path.splitext(csv_file_name)
-    if file_extension != ".csv":
-        return None
-
-    html_file = file_path + '.html'
-    avatars_folder    = os.path.basename(os.path.normpath(output_lists.avatars_dir))
-    thumbnails_folder = os.path.basename(os.path.normpath(output_lists.thumbnails_dir))
-
-    # Create the document description based on the given file name.
-    # Ref: Photo list filename:  [path]\_[user name]\_[count]\_[types of document]\_[date].html
-    # Example of filename: C:\ProgramData\500px_Apiless\Output\johndoe_16_photos_2019-06-17.html
-    file_name = file_path.split('\\')[-1]
-    splits = file_name.split('_')
-    title_string = ''
-    if len(splits) >=4:
-        title_string = f'\
-    <h2>Photo lists ({splits[1]})</h2>\n\
-    <div><span>User:</span> <span><b>{splits[0]}</b></span></div>\n\
-    <div><span>Date recorded:</span> <span><b>{splits[-1]}</b></span></div>\n\
-	<div>\
-    <span> File: {os.path.dirname(html_file)}\</span><br/>\n\
-	<span><b>{file_name}.html</b> </span>\n\
-	</div>\n'
-
-    with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
-        reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
-        headers = reader.fieldnames
-
-        row_string = '\t<tr>\n'
-        # Ref:
-        # Columns    : 0   1            2   3            4     5               6                7      8      9         10                     11             12      13    14        15
-        # Photo List : No, Author Name, ID, Photo Title, Href, Thumbnail Href, Thumbnail Local, Views, Likes, Comments, Featured In Galleries, Highest Pulse, Rating, Date, Category, Tags
-
-        # write headers and assign sort method for appropriate columns   
-        # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
-        ignore_columns_count = 0
-        for i, header in enumerate(reader.fieldnames):
-            if header == 'Comments':
-                header = 'Com-<br>ments'
-            elif header == 'Highest Pulse':
-                header = 'Highest<br>Pulse'    
-                
-            if header in ignore_columns:
-                ignore_columns_count += 1
-                continue  
-
-            sort_direction_arrows = f"""
-            <div class="hdr_arrows">
-		        <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-		        <div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>"""
-
-            left_div = f'''
-            <div class="hdr_text">{header}</div>'''
-
-            if header == "No":
-                first_left_div = f'\t\t\t<div class="hdr_text">{header}</div>'
-                # the No column is initially in ascending order, so we do not show the down arrow
-                ascending_arrow_only = f"""
-                <div class="hdr_arrows">
-				    <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>"""
-                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
-            
-            # special sort for title cell: we want to sort the displayed photo titles, not the photo link
-            elif header == "Photo Title":
-                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>\n'
-
-            else:
-                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-
-        # write each row 
-        row_string += '\t</tr>\n'
-        for row in reader:
-            row_string += '\t<tr>\n'
-            for i in range(len(headers) ):
-                col_header = headers[i]
-                if col_header in ignore_columns:
-                    continue  
-                text = row[headers[i]]     
-                # In Photo Tile column, show photo thumbnail and photo title with <a href> link
-                if  col_header == 'Photo Title': 
-                    if use_local_thumbnails:
-                        photo_thumbnail = f"{thumbnails_folder}/{row['Thumbnail Local']}"
-                    else:
-                        photo_thumbnail = row['Thumbnail Href']
-                    
-                    # if photo thumbnail is empty, write an empty div to keep the same layout 
-                    if (use_local_thumbnails and not row['Thumbnail Local']) or (not use_local_thumbnails and not row['Thumbnail Href']) :
-                        row_string += f'\t\t<td><div"><div>{text}</div></div></td> \n' 
-                    else:
-                        photo_link =  row['Href']                 
-                        row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{photo_link}" target="_blank">\n'
-                        row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
-                        row_string += f'\t\t\t\t<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>\n'
- 
-                elif  col_header == 'Category':
-                    row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
-
-                elif  col_header == 'Tags':
-                    row_string += f'\t\t<td class="alignLeft">{text}</td> \n' 
-                
-                elif  col_header == 'Featured In Galleries' and text != '':
-                    # a gallery link has this format: https://500px.com/[photographer_name]/galleries/[gallery_name]
-                    galleries = text.split(',')
-                    if len(galleries) == 0:
-                           row_string += f'\t\t<td></td>\n'
-                    else:
-                        row_string += f'\t\t<td>({len(galleries)}) \n'
-                        for j, gallery in enumerate(galleries):
-                            gallery_name = gallery[gallery.rfind('/') + 1:]    
-                            row_string += f'\t\t\t<a href="{gallery}" target="_blank">{gallery_name}</a>'
-                            if j < len(galleries) -1:
-                                row_string += ',\n'                    
-                        row_string += f'\t\t</td> \n'
-                                
-                else: 
-                    row_string += f'\t\t<td>{text}</td> \n' 
-            row_string += '\t</tr>\n'
-
-        html_string = f'<html>\n{HEADER_STRING}\n\n<body> \n{title_string}<table> {CUSTOMED_COLUMN_WIDTHS}\n{row_string} </table>\n</body> </html>'
-
-        #write html file 
-        with open(html_file, 'wb') as htmlfile:
-            htmlfile.write(html_string.encode('utf-16'))
-
-    return html_file
-
-#--------------------------------------------------------------- 
-def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails = True, ignore_columns = None):
-    """ Convert csv file of various types into html file and write it to disk . Return the saved html filename.
-    
-    Expected 5 csv files types: notifications list , unique users list, followers list, followings list, list of users who like a photo.
-    The saved html file has the same name but with extension '.html' 
-    Expecting first line is column headers, which varies depending on the csv types
-    The argument IGNORE_COLUMNS is a list of the column headers for which we want to hide the entire column
-    """
-    if csv_file_name == '':
-        return ''
-    # file extension check
-    file_path, file_extension = os.path.splitext(csv_file_name)
-    if file_extension != ".csv":
-        return ''
-    if ignore_columns is None:
-        ignore_columns = []
-
-    HEADER_STRING = '''
-<head>
-	<script charset="UTF-8" type = "text/javascript" src="javascripts/scripts.js"></script>
-	<link   charset="UTF-8" type = "text/css" rel  = "stylesheet"  href = "css/styles.css" />
-</head>''' 
-
-    LEGEND_BOX_ALL = '''
-   <div class="legend" style="width:670px; height:180px;" >
-		<p><b>Legend:</b></p>
-		<p><span class="box reciprocal">Reciprocal</span>You and this user follow each other </p>
-		<p><span class="box not_following">Follower only</span>You do not follow your follower</p>
-		<p><span class="box not_follower"> Following only</span>Your follower does not follow you</p>
-		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
-		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
-	</div>'''
-
-    LEGEND_BOX_RECIPROCAL = '''
-   <div class="legend" style="width:670px; height:130px;" >
-		<p><b>Legend:</b></p>
-		<p><span class="box reciprocal">Reciprocal</span>You and this user follow each other </p>
-		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
-		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
-	</div>'''
-    LEGEND_BOX_NOT_FOLLOWING = '''
-   <div class="legend" style="width:670px; height:130px;" >
-		<p><b>Legend:</b></p>
-		<p><span class="box not_following">Follower only</span>You do not follow your follower</p>
-		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
-		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
-	</div>'''
-    LEGEND_BOX_NOT_FOLLOWER = '''
-   <div class="legend" style="width:670px; height:130px;" >
-		<p><b>Legend:</b></p>
-		<p><span class="box not_follower"> Following only</span>Your follower does not follow you</p>
-		<p><span class="box transparent_white">Follower Order</span>The chronological order at which a user followed you (in reverse, with 1 being the latest)</p>
-		<p><span class="box transparent_white">Following Order</span>The chronological order at which you followed a user (in reverse, with 1 being the latest)</p>
-	</div>'''
-
-    html_full_file_name = file_path + '.html'
-
-    avatars_folder    = os.path.basename(os.path.normpath(output_lists.avatars_dir))
-    thumbnails_folder = os.path.basename(os.path.normpath(output_lists.thumbnails_dir))
-
-
-    # Create document title and description based on these predefined file names, under the format:
-    # 0             1               2                    3    
-    # [user name] _ [items count] _ [type of document] _ [date string].html
-    #
-    # Type of documents are:
-    #
-    # Notifications   :   notifications                       
-    # Unique users    :   unique-users-in-the-last-n-notifications
-    # Followers List  :   followers                          
-    # Followings List :   followings                         
-    # Users like photo:   likes_[photo title]_                
-    # all             :   all                                
-    # reciprocal      :   reciprocal                         
-    # not_following   :   not_following                      
-    # not_follower    :   not_follower                       
-
-
-    file_name = file_path.split('\\')[-1]
-    splits = file_name.split('_')  
-    title, title_string = '', ''
-    legend_box = ""
-    if len(splits) >=4:
-        if csv_file_type == apiless.CSV_type.unique_users:
-            parts = splits[2].split('-')
-            title = f'{splits[1]} unique users in {parts[-1]} notifications'
-            table_width =  'style="width:500"'
-        elif csv_file_type == apiless.CSV_type.notifications:
-            title = f'{splits[1]} notifications'
-            table_width =  'style="width:960"'
-        elif csv_file_type == apiless.CSV_type.followers:
-            title = f'List of {splits[1]} followers'
-            table_width =  'style="width:460"'
-        elif csv_file_type == apiless.CSV_type.followings:
-            title = f'List of {splits[1]} followings'            
-            table_width =  'style="width:460"'
-        elif csv_file_type == apiless.CSV_type.like_actors:
-            title = f'List of {splits[1]} users who liked photo {splits[-2].replace("-", " ")}'
-            table_width = 'style="width:600"'
-
-        elif csv_file_type == apiless.CSV_type.reciprocal:
-            title = f'List of {splits[1]} followers that you are following'
-            table_width =  'style="width:900"'
-            legend_box = LEGEND_BOX_RECIPROCAL
-        elif csv_file_type == apiless.CSV_type.not_following:
-            title = f'List of {splits[1]} followers that you are not following'
-            table_width =  'style="width:760"'
-            legend_box = LEGEND_BOX_NOT_FOLLOWING
-        elif csv_file_type == apiless.CSV_type.not_follower:
-            title = f'List of {splits[1]} users whom you follow but they do not follow you'
-            table_width =  'style="width:760"'
-            legend_box = LEGEND_BOX_NOT_FOLLOWER
-        elif csv_file_type == apiless.CSV_type.all:
-            title = f'List all {splits[1]} users (your followers and your followings)'
-            table_width =  'style="width:900"'
-            legend_box = LEGEND_BOX_ALL
-
-        title_string = f'\
-    <h2>{title}</h2>\n\
-    <div><span>User:</span> <span><b>{splits[0]}</b></span></div>\n\
-    <div><span>Date recorded:</span> <span><b>{splits[-1]}</b></span></div>\n\
-	<div>\
-    <span> File: {os.path.dirname(csv_file_name)}\</span><br/>\n\
-	<span><b>{file_name}.html</b> </span>\n\
-	</div>\n'
-
-    with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
-        reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
-        headers = reader.fieldnames
-        if len(headers) < 3:
-            printR(f'   File {csv_file_name} is in wrong format!')
-            return ''
-        row_string = '\n\t<tr>\n'
-  
-        # write headers and assign sort method for appropriate columns   
-        #['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status', 'Follower Order', 'Following Order', 'Relationship', ]       
-        # # each header cell has 2 parts: the left div for the header name, the right div for sort direction arrows     
-        ignore_columns_count = 0
-        for i, header in enumerate(reader.fieldnames):
-            if header in ignore_columns:
-                ignore_columns_count += 1
-                continue
-
-            sort_direction_arrows = f"""
-            <div class="hdr_arrows">
-		        <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-		        <div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>"""
-
-            left_div = f"""
-            <div class="hdr_text">{header}</div>"""
-        
-            if header == "No":
-                first_left_div = f'\t\t\t<div class="hdr_text">{header}</div>'
-                # the No column is initially in ascending order, so we do not show the down arrow
-                ascending_arrow_only = f"""
-                <div class="hdr_arrows">
-				    <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-				    <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div>
-			    </div>"""
-                row_string += f'\t\t<th class="w40" onclick="sortTable({i-ignore_columns_count})">\n{first_left_div}{ascending_arrow_only}</th>\n'
-
-            elif header == "Follower Order" or header == "Following Order":
-                row_string += f"""\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n"""
-            
-            elif header == "Display Name":
-                row_string += f"""\t\t<th class="w240" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n"""
-            
-            elif header == "Photo Title":
-                row_string += f"""\t\t<th class="w240" onclick="sortTable({i-ignore_columns_count}, 'sortByPhotoTitle')">{left_div}{sort_direction_arrows}</th>\n"""
- 
-            elif header == "Followers Count" or header == "Appearances Count":
-                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-            
-            elif header == "Content":
-                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-
-            elif header == "Relationship":
-                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-         
-            elif header == "Status":
-                row_string += f'\t\t<th class="w140" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-            
-            elif header == "Time Stamp":
-                row_string += f'\t\t<th class="w120" onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-            
-            else:
-                row_string += f'\t\t<th onclick="sortTable({i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>\n'
-
-        # create rows for html table 
-        row_string += '\t</tr>'       
-        for row in reader:
-            row_string += '\n\t<tr>\n'
-            # Table columns vary depending on 4 different csv files:
-            # Columns:         0   1            2             3             4          5   6          7                     8                      9            10          11      12 
-            # Notifications  : No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content,   Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Status, Photo Link
-      
-            # Unique users   : No, Avatar Href, Avatar Local, Display Name, User Name, ID, Count,    
-            # Followers List : No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
-            # Followings List: No, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers, Status
-            #                  1              2             3             4             5          6   7                8       9                10   
-            # new userformat   Follower Order, Avatar Href, Avatar Local, Display Name, User Name, ID, Followers Count, Status, Following Order, _merg
-
-            for i in range(len(headers)): 
-                col_header = headers[i]   
-                # ignore unwanted columns
-                if col_header in ignore_columns:
-                    continue
-
-                text = row[col_header]
-
-                # In Display Name column, show user's avatar and the display name with link 
-                if col_header == 'Display Name' : 
-                    user_home_page = f'https://500px.com/{row["User Name"]}'        
-                    user_name = row["Display Name"]
-
-                    row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{user_home_page}" target="_blank">\n'
-                    if use_local_thumbnails:
-                        user_avatar =f"{avatars_folder}/{row['Avatar Local']}"
-                    else:
-                        user_avatar = row['Avatar Href']
-
-                    row_string += f'\t\t\t\t<img src={user_avatar}></a>\n'
-                    row_string += f'\t\t\t\t<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>\n'
-
-                elif col_header == 'Status':
-                    if text.find('Following') != -1: 
-                        row_string += f'\t\t<td class="alignLeft" bgcolor="#00FF00">{text}</td> \n'   # green cell for following users                    
-                    else:  
-                        if text and text != 'Unknown':
-                            row_string += f'\t\t<td class="alignLeft">{text}</td> \n'                 # default background color (white)
-                        else:
-                            row_string += f'\t\t<td></td> \n'                                         # empty td cell                       
-  
-                # In Photo Tile column, show photo thumbnail and photo title with <a href> link
-                elif  col_header == 'Photo Title': 
-                    if use_local_thumbnails:
-                        photo_thumbnail = f"{thumbnails_folder}/{row['Photo Thumbnail Local']}"
-                    else:
-                        photo_thumbnail = row['Photo Thumbnail Href']
-                    # if photo thumbnail is empty, write an empty div to keep the same layout 
-                    if (use_local_thumbnails and not row['Photo Thumbnail Local'].strip()) or (not use_local_thumbnails and not row['Photo Thumbnail Href'].strip()) :
-                        row_string += f'\t\t<td><div><div></div></div></td> \n'
-                    else:
-                        photo_link =  row['Photo Link']                 
-                        row_string += f'\t\t<td>\n\t\t\t<div>\n\t\t\t\t<a href="{photo_link}" target="_blank">\n'
-                        row_string += f'\t\t\t\t<img class="photo" src={photo_thumbnail}></a>\n'
-                        row_string += f'\t\t\t\t<div>{text}</div></div></td>\n'
-
-                elif  col_header == 'Relationship':
-                    if text == 'both':
-                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightgreen">Reciprocal</td> \n'   # green cell for following users   
-                    if text == 'left_only':
-                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightskyblue">Follower only</td> \n'   # green cell for following users   
-                    if text == 'right_only':
-                        row_string += f'\t\t<td class="alignLeft" bgcolor="lightpink">Following only</td> \n'   # green cell for following users   
-                # All other columns, write text as is
-                else:                            
-                     row_string += f'\t\t<td>{text}</td> \n'
-
-            row_string += '\t</tr>'
-
-        html_string = f'<html>\n{HEADER_STRING}\n\n<body>\n{title_string}\n{legend_box}<table {table_width}> {row_string} </table>\n</body> </html>'
-        
-        #write html file 
-        with open(html_full_file_name, 'wb') as htmlfile:
-            htmlfile.write(html_string.encode('utf-16'))
-
-    return html_full_file_name
-
 #---------------------------------------------------------------  
 def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='No', ascending=True):
-    """Read a given csv file from disk and convert it to dataframe."""
+    """ Wrapper function for pandas' read_csv(),  with some frequently-used default arguments ."""
 
-    # do main task
+    if not os.path.isfile(csv_file_name):
+        return None
     dframe = pd.read_csv(csv_file_name, encoding = encoding)  
-    ## validate the given  csv file, if needed
-    #if len(list(dframe)) == 0 or not 'User Name' in list(dframe):
-    #    printR(f'   The given csv file is not valid. It should  have a header row with  at leat one column named "User Name":.\n\t{user_inputs.csv_file}')
-    #    return
-
-    #print(f'Table has {dframe.shape[0]} rows, {dframe.shape[1]} columns')
-    
     ##option to sort a selected column
-    #printG(list(dframe))
     #sort_header = input('Enter the desired sort column >')
     #if not sort_header:
     #    sort_header = "No" 
@@ -577,24 +143,27 @@ def CSV_file_to_dataframe(csv_file_name, encoding='utf-16', sort_column_header='
     #ans = input('Sort descending ?(y/n) >')
     #if ans == 'y':
     #    sort_ascending = False
-    df = dframe.sort_values(sort_column_header, ascending=ascending )  
-    #df = df.drop(df[df.ID == 0].index)
+    if sort_column_header and sort_column_header in list(dframe):
+        df = dframe.sort_values(sort_column_header, ascending=ascending )  
     return df
 
+#---------------------------------------------------------------  
 def write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
-    """ Write photos list to a csv file with the given  name. Return True if success.    
-        If the file is currently open, give the user a chance to close it and come back to re-try.   
+    """ Write photos list to a csv file with the given name. Return True if success.    
+        If the file is currently open, give the user a chance to close it and re-try.   
     """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Author Name', 'ID', 'Photo Title', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Views', 'Likes', 'Comments', 'Featured In Galleries', 'Highest Pulse', 'Rating', 'Date', 'Category','Tags'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Author Name', 'ID', 'Photo Title', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Views', 'Likes', 'Comments', 'Galleries', \
+                                                            'Highest Pulse', 'Rating', 'Date', 'Category', 'Featured In Galleries','Tags'])  
             writer.writeheader()
             for i, a_photo in enumerate(list_of_photos):
-                writer.writerow({'No' : str(a_photo.order), 'Author Name': a_photo.author_name, 'ID': str(a_photo.id), 'Photo Title' : str(a_photo.title), 'Href' :a_photo.href, 'Thumbnail Href': a_photo.thumbnail_href, \
-                                 'Thumbnail Local' : a_photo.thumbnail_local, 'Views': str(a_photo.stats.views_count), 'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), \
-                                 'Featured In Galleries': str(a_photo.galleries), 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), \
-                                 'Date': str(a_photo.stats.upload_date), 'Category': a_photo.stats.category, 'Tags': a_photo.stats.tags}) 
+                writer.writerow({'No' : str(a_photo.order), 'Author Name': a_photo.author_name, 'ID': str(a_photo.id), 'Photo Title' : str(a_photo.title), 'Href' :a_photo.href, \
+                                'Thumbnail Href': a_photo.thumbnail_href, 'Thumbnail Local' : a_photo.thumbnail_local, 'Views': str(a_photo.stats.views_count), \
+                                'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), 'Galleries': str(a_photo.stats.collections_count), \
+                                'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), 'Date': str(a_photo.stats.upload_date), \
+                                'Category': a_photo.stats.category, 'Featured In Galleries': str(a_photo.galleries), 'Tags': a_photo.stats.tags}) 
             print(f"    List of {user_name}\'s {len(list_of_photos)} photo(s) is saved at:")
             printG(f"   ./Output/{os.path.basename(csv_file_name)}")
         return True
@@ -610,19 +179,19 @@ def write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
 
 #---------------------------------------------------------------
 def write_users_list_to_csv(users_list, csv_file_name):
-    """ Write the users list to a csv file with the given  name. Return True if success.h
+    """ Write the users list to a csv file with the given name. Return True if success
     
-    The users list could be one of the following: followers list, friends list or unique users list. 
+    The users list could be one of the following: followers list, following (friends) list or unique users list. 
     If the file is currently open, give the user a chance to close the file and retry
     """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file: 
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Status'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Followers Count', 'Relationship'])  
             writer.writeheader()
             for a_user in users_list:
                 writer.writerow({'No' : a_user.order, 'Avatar Href': a_user.avatar_href,'Avatar Local': a_user.avatar_local, 'Display Name' : a_user.display_name, \
-                    'User Name': a_user.user_name, 'ID': a_user.id, 'Followers Count': a_user.number_of_followers, 'Status': a_user.following_status}) 
+                    'User Name': a_user.user_name, 'ID': a_user.id, 'Followers Count': a_user.number_of_followers, 'Relationship': a_user.following_status}) 
         print('    The users list is saved at:')
         printG(f'   ./Output/{os.path.basename(csv_file_name)}')
         return True
@@ -637,23 +206,23 @@ def write_users_list_to_csv(users_list, csv_file_name):
 #---------------------------------------------------------------
 def write_notifications_to_csvfile(notifications_list, csv_file_name):
     """ Write the  notifications list to a csv file with the given  name. Return True if success.
-        If the file is currently open, give the user a chance to close it and come back to retry
+        If the file is currently open, give the user a chance to close it and retry
 
-    Headers: 1   2            3             4             5          6   7        8                     9                      10           11          12      13
-             No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content, Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Status, Photo Link
+    Headers: 1   2            3             4             5          6   7        8                     9                      10           11          12            13
+             No, Avatar Href, Avatar Local, Display Name, User Name, ID, Content, Photo Thumbnail Href, Photo Thumbnail Local, Photo Title, Time Stamp, Relationship, Photo Link
     """
 
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
             writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Content', \
-                'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Title', 'Time Stamp', 'Status', 'Photo Link'])    
+                'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Title', 'Time Stamp', 'Relationship', 'Photo Link'])    
             writer.writeheader()
             for notif in notifications_list:
                 writer.writerow({'No': notif.order, 'Avatar Href' : notif.actor.avatar_href, 'Avatar Local': notif.actor.avatar_local, \
                                  'Display Name': notif.actor.display_name, 'User Name': notif.actor.user_name, 'ID' : notif.actor.id, \
                                  'Content': notif.content, 'Photo Thumbnail Href': notif.the_photo.thumbnail_href, 'Photo Thumbnail Local': notif.the_photo.thumbnail_local, \
-                                 'Photo Title': notif.the_photo.title, 'Time Stamp': notif.timestamp, 'Status': notif.status, 'Photo Link': notif.the_photo.href}) 
+                                 'Photo Title': notif.the_photo.title, 'Time Stamp': notif.timestamp, 'Relationship': notif.status, 'Photo Link': notif.the_photo.href}) 
         print('    Notifications list is saved at:')
         printG(f'   {os.path.basename(csv_file_name)}')
         return True 
@@ -668,21 +237,23 @@ def write_notifications_to_csvfile(notifications_list, csv_file_name):
 #---------------------------------------------------------------
 def write_unique_notificators_list_to_csv(unique_users_list, csv_file_name):
     """ Write the unique notifications list to a csv file with the given  name. Return True if success.   
-    If the file is currently open, give the user a chance to close it and come back to retry
+    If the file is currently open, give the user a chance to close it and retry
     
-    Headers:    0   1            2             3             4          5   6
-                No, Avatar Href, Avatar Local, Display Name, User Name, ID, Count
+    Headers:    0   1            2             3             4          5   6,             7
+                No, Avatar Href, Avatar Local, Display Name, User Name, ID, Actions Count, Last Action Date
     """
     try:
         with open(csv_file_name, 'w', encoding = 'utf-16', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Appearances Count'])  
+            writer = csv.DictWriter(csv_file, fieldnames = ['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', \
+                                                            'Actions Count', 'Last Action Date'])  
             writer.writeheader()
 
             for actor in unique_users_list:
                 items = actor.split(',')
-                if len(items) == 7:
-                    writer.writerow({'No': items[0], 'Avatar Href': items[1], 'Avatar Local': items[2], 'Display Name': items[3], 'User Name': items[4], 'ID' : items[5], 'Appearances Count': items[6]}) 
+                if len(items) == 8:
+                    writer.writerow({'No': items[0], 'Avatar Href': items[1], 'Avatar Local': items[2], 'Display Name': items[3], \
+                                    'User Name': items[4], 'ID' : items[5], 'Actions Count': items[6], 'Last Action Date': items[7]}) 
             print('    Unique notificators is saved at:')
             printG(f'   {os.path.basename(csv_file_name)}')
             return True 
@@ -714,7 +285,7 @@ def save_photo_thumbnail(url, path):
         Existing file will be overwritten
         Return the file name
      
-    This function is meant to be called repeatedly in the loop, so for better performance, we don't chech the existance of the given path
+    This function is meant to be called repeatedly in a loop, so for better performance, we don't chech the existance of the given path
     We have to make sure the given path is valid prio to calling this. 
     """ 
     file_name = '' 
@@ -732,81 +303,147 @@ def save_photo_thumbnail(url, path):
     return file_name
 
 #---------------------------------------------------------------
-def create_user_statistics_html(stats):
-    """ write user statistic object stats to an html file. """
-    if stats is None:
-        return
-
-    time_stamp = datetime.datetime.now().replace(microsecond=0).strftime(config.DATETIME_FORMAT)
-
-    output = f'''
-<html>\n\t<body>
-        <h2>User statistics</h2>
-        <p>Date: {time_stamp}</p>
-        <table>
-            <tr>                <td><b>User name</b></td>           <td>{stats.user_name}</td>\n</tr>
-            <tr>                <td><b>Display name</b></td>        <td>{stats.display_name}</td>\n</tr>
-            <tr>                <td><b>Id</b></td>                  <td>{stats.id}</td>\n</tr>
-            <tr>                <td><b>Location</b></td>            <td>{stats.location}</td>\n</tr>
-            <tr>                <td><b>Activities</b></td>          <td>{stats.affection_note}</td>\n</tr>
-            <tr>                <td> </td>                          <td>{stats.following_note}</td>\n</tr>
-            <tr>                <td><b>Affections</b></td>          <td>{stats.affections_count}</td>\n</tr>
-            <tr>                <td><b>Views</b></td>               <td>{stats.views_count}</td>\n</tr>
-            <tr>                <td><b>Followers</b></td>           <td>{stats.followers_count}</td>\n</tr>
-            <tr>                <td><b>Followings</b></td>          <td>{stats.followings_count}</td>\n</tr>
-            <tr>                <td><b>Photos count</b></td>        <td> {stats.photos_count}</td>\n</tr>
-            <tr>                <td><b>Galleries count</b></td>     <td>{stats.galleries_count}</td>\n</tr>
-            <tr>                <td><b>Registration date</b></td>   <td>{stats.registration_date}</td>\n</tr>
-            <tr>                <td><b>Last upload date</b></td>    <td>{stats.last_upload_date}</td>\n</tr>
-            <tr>                <td><b>User status</b></td>         <td>{stats.user_status}</td>\n</tr>
-        <table>\n\t<body>\n<html>
-'''
-    return output
-
-#---------------------------------------------------------------
-def get_latest_cvs_file(file_path, user_name, csv_file_type):
+def get_latest_cvs_file(file_path, user_name, csv_file_type, print_info = True):
     """ Find the latest csv file for the given csv_file_type, from the given user, at the given folder location"""
+
     files = [f for f in glob.glob(file_path + f"**/{user_name}*_{csv_file_type.name}_*.csv")]
     if len(files) > 0:
         if csv_file_type == apiless.CSV_type.notifications:
-            files = [f for f in files if not 'unique' in f]
+            files = [f for f in files if not 'unique' in f and not 'all' in f]
 
         files.sort(key=lambda x: os.path.getmtime(x))
         csv_file = files[-1]
-        dated = os.path.splitext(csv_file)[0].split('_')[-1]
-        print(f"    - The latest {user_name}'s {csv_file_type.name} csv file is on {dated}:")
-        printG(f'   - {os.path.basename(csv_file)}')
+        if print_info:
+            #dated = os.path.splitext(csv_file)[0].split('_')[-1]
+            print(f"    - Latest {csv_file_type.name.upper()} file: {os.path.basename(csv_file)}")
         return csv_file
     else:
         return ""
 
 #---------------------------------------------------------------
-def count_And_Remove_Duplications(values):
-    """Given a list containing the comma-separated strings of avatar href, avatar local, display name, user name and id( such as "http://...,  C://LocalAvatar, John Doe, johndoe, 1234567" ).
-       Count the duplication of each item in the list then remove the duplicated entry(ies). Append the count to each entry's count column.
-       An output list item has this form: Avatar Href, Avatar Local, Display Name, User Name, ID, Count"""
+def get_all_notifications_csv_files(file_path, user_name):
+    """ Return all the notifications csv files previously extracted, at the given folder.
+        Files are sorted on last mofification times"""
+
+    files = [f for f in glob.glob(file_path + f"**/{user_name}*_notifications_*.csv")]
+    if len(files) > 0:
+        files = [f for f in files if (not 'unique' in f and not 'all' in f)]
+        files.sort(key=lambda x: os.path.getmtime(x))
+    return files
+
+
+#---------------------------------------------------------------
+def find_unique_names_and_count_duplication(names_and_contents):
+    """Given a list of names and notification content (ex. [ ['johndoe','liked'], ['mariedo','commented'], ...]
+        - Count the number of occurences of each unique name in the given list 
+        - Get the index of the first occurence of unique name
+        - Get the statistic on the notification of each unique user
+        - Return a list of comma-separated strings containing
+          name, first original index, number of action, liked count, followed count, commented count, and added to gallery count """
 
     output = []
     seen = set()
-    count = 0
-    for value in values:
-        # If value has not been encountered yet, add it to the seen set then append count as "1" to value and add it to ouput list.
-        if value not in seen:           
-            seen.add(value)
-            output.append(value + ', 1')
+    count = 0 
+    items_to_process = len(names_and_contents)
+    for i, row in names_and_contents.iterrows():
+        update_progress(i / items_to_process, f'    - Finding unique users {i}/{items_to_process} ...')  
+
+        like_count, follow_count, comment_count, add_to_gallery_count = (0 for i in range(4) )
+        name = row['User Name']
+        content = row['Content']
+        if 'liked' in content:
+            like_count = 1
+        elif 'followed' in content:
+            follow_count = 1
+        elif 'commented' in content:
+            comment_count = 1
+        elif 'added' in content:
+            add_to_gallery_count = 1
+        
+        if name not in seen:           
+            seen.add(name)
+            output.append(f"{name},{str(i)},1,{str(like_count)},{str(follow_count)},{str(comment_count)},{str(add_to_gallery_count)}") # name, index in the full list, count
         else:
-            indexes = (output.index(s) for s in output if value in s)
-            index = next(indexes)
-            list_items = output[index].split(',')
-            try:
-                if len(list_items) == 6:
-                    new_count = int(list_items[5]) + 1
-               # elif len(list_items) == 4: # just in crazy situation where display name has comma in it 
-               #     new_count = int(list_items[3]) + 1
-                output[index] = f'{list_items[0]},{list_items[1]},{list_items[2]},{list_items[3]},{list_items[4]},{new_count}'
-            except:
-                continue
+            # name is already seen: increase the count number by one
+            for j, item in enumerate(output):
+                if name in item:
+                   list_items = item.split(',')
+                   try:
+                        if len(list_items) == 7:
+                            new_count = int(list_items[2]) + 1
+
+                        if 'liked' in content:
+                            like_count = int(list_items[3]) + 1
+                            output[j] = f'{name},{list_items[1]},{new_count},{str(like_count)},{list_items[4]},{list_items[5]},{list_items[6]}'
+                        elif 'followed' in content:
+                            follow_count = int(list_items[4]) + 1
+                            output[j] = f'{name},{list_items[1]},{new_count},{list_items[3]},{str(follow_count)},{list_items[5]},{list_items[6]}'
+                        elif 'commented' in content:
+                            comment_count = int(list_items[5]) + 1
+                            output[j] = f'{name},{list_items[1]},{new_count},{list_items[3]},{list_items[4]},{str(comment_count)},{list_items[6]}'
+                        elif 'added' in content:
+                            add_to_gallery_count = int(list_items[6]) + 1
+                            output[j] = f'{name},{list_items[1]},{new_count},{list_items[3]},{list_items[4]},{list_items[5]},{str(add_to_gallery_count)}'
+                   except:
+                        continue
+    update_progress(1, f'    - Finding unique users {items_to_process}/{items_to_process} ...')                      
     return output    
+
+#---------------------------------------------------------------
+def analyze_notifications(df):
+    """Given a  dataframe containing notification items
+        - Count the number of occurences of each unique name in the given list 
+        - Return a new dataframe containing unique names, last action date, number of actions, liked count, followed count, commented count, and added to gallery count """
+
+    all_users_count = df.shape[0]
+    if all_users_count == 0:
+        print_and_log(f'No notification item in the given dataframe ')
+        return
+    names_and_contents = df[['User Name', 'Content']]
+    # get the first index of each  unique users, their occurences countsand the count of each notification type 
+    indexes_and_counts_list = find_unique_names_and_count_duplication(names_and_contents) 
+    unique_users_count = len(indexes_and_counts_list)
+    if unique_users_count  == 0:
+        print_and_log(f'No unique names item in notification table ')
+        return
+    unique_notificators = []
+   
+    # update the given dataframe at the indexes found on indexes_and_counts_list, and added new columns with all the counts 
+    for i, item in enumerate(indexes_and_counts_list):    
+        update_progress(i / unique_users_count, f'    - Processing notification item {i}/{unique_users_count} ...')  
+        index_count_pair = item.split(',')
+        index = int(index_count_pair[1])
+        count = int(index_count_pair[2])
+        like_count = int(index_count_pair[3])
+        follow_count = int(index_count_pair[4])
+        comment_count = int(index_count_pair[5])
+        add_to_gallery_count = int(index_count_pair[6])
+        df.loc[index,'No'] = str(i +1)
+        df.loc[index,'Actions Count'] = count
+        df.loc[index,'Liked'] = like_count
+        df.loc[index,'Followed'] = follow_count
+        df.loc[index,'Commented'] = comment_count
+        df.loc[index,'Added To Gallery'] = add_to_gallery_count
+
+    # drop the duplicated users
+    df2 = df[df['Actions Count'].isnull()==False]
+
+    # drop the unwanted columns
+    df2.drop(['Content', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Title', 'Photo Link'], axis=1, inplace=True)
+
+    # rename one colume name: Time Stamp --> Last Action Date
+    df2.rename(columns={'Time Stamp':'Last Action Date'}, inplace=True)
+
+    unique_users_count = df2.shape[0]
+
+    # change the newly created columns data type from default float to int
+    df3 = df2.astype({"Actions Count":int, "Liked":int, "Followed":int, "Commented":int, "Added To Gallery":int})
+    
+    # Change the columns order for better representing the output html 
+    # No, Avatar Href, Avatar Local, Display Name, User Name,ID, Last Action, Relationship, Actions Count, Liked, Followed, Commented, Added To Gallery
+    df4 = df3[['No', 'Avatar Href', 'Avatar Local', 'Display Name', 'User Name', 'ID', 'Relationship', 'Last Action Date', 'Actions Count', 'Liked', 'Followed', 'Commented', 'Added To Gallery']]
+    update_progress(1, f'    - Processing notification item {unique_users_count}/{unique_users_count} ...')  
+    return df4
 
 #---------------------------------------------------------------
 def convert_relative_datetime_string_to_absolute_date(relative_time_string, format = "%Y %m %d" ):
@@ -899,4 +536,168 @@ def profile(func):
         print(s.getvalue())
         return retval
     return inner
+
 #---------------------------------------------------------------
+def merge_relationships(df_unique, df_all):
+    """ Update the values on the Relationship column from the given dataframe df_unique, with the one from the given df_all 
+        Both dataframe should contain, as a minimun, two columns: User Name and Relationship               
+    """
+    # rename Relationship values on df_unique to avoid confusion later when we merge with df_all 
+    # on notification, 'Not Follow' means this is your new follower and you do not follow back
+    # and 'Following' means this is your new follower and you also follow back
+    #df_unique.loc[df_unique.Relationship == 'Not Follow', 'Relationship'] = 'New follower'
+    df_unique.loc[df_unique.Relationship == 'Following', 'Relationship'] = 'Reciprocal'
+    df_unique.loc[df_unique.Relationship.isnull(), 'Relationship'] = ''
+
+    # merge Relationship from 2 dataframes, the left one, or Relationship_x, is the latest from notification page, the right one, or Relationship_y is the one from local database 
+    # We will update the right side, Relationship_y, then delete the left side    
+    df_merge = pd.merge(df_unique, df_all[['User Name', 'Relationship']], how='left', on='User Name')
+
+    # We use the left side if it has value ( override the right side)
+    df_merge.loc[df_merge.Relationship_x.notnull() , 'Relationship_y'] = df_merge.Relationship_x 
+   
+    # Delete column Relationship_x and rename Relationship_y to the orginin name before merging: Relationship 
+    df_merge.drop("Relationship_x", axis=1, inplace=True)    
+    df_merge.rename(columns={'Relationship_y': 'Relationship'}, inplace=True)
+        
+    # create an summary dictionary 
+    followers_count   = df_merge.loc[df_merge.Relationship.str.contains('Not Follow', regex=False), :].shape[0]
+    followings_count  = df_merge.loc[df_merge.Relationship.str.contains('Following',  regex=False), :].shape[0]
+    reciprocals_count = df_merge.loc[df_merge.Relationship.str.contains('Reciprocal', regex=False), :].shape[0]
+    no_relationship_counts = df_merge.shape[0] - (followers_count + followings_count + reciprocals_count )
+
+    # create the statistics list in such a way that an html table (4 rows, 3 columns) can be easily constructed from it.
+    # each row has 4 strings of the following usage:
+    # First string is the class name to be used in CSS for column 1 background color, the next 3 strings are the texts for column 1, 2, 3  
+    stats_list = [['reciprocal',      'Reciprocal Following',  reciprocals_count,      'You and this user follow each other'],
+                  ['not_follow',      'Not Follow',            followers_count,        'You do not follow your follower'],
+                  ['following',       'Following',             followings_count,       'You are following this user without being followed back'],
+                  ['no_relationship', 'None',                  no_relationship_counts, 'Not following each other']]
+
+    return df_merge, stats_list 
+
+#---------------------------------------------------------------
+def merge_duplicate_top_photos(df):
+    """ Given a dataframe containing 5 photos of these 5 categories: Highest Pulse, Most Views, Likes, Comments and Galleries, in that order. 
+        Some, if not all, are likely the same photo. The goal is to remove the duplicate photos, but the category of the removed photo is to be added to
+        the existing category that the same photo already holds.  
+        Return a non-duplicate photos dataframe, with the first column is a new column called 'Top Photos', holding the category or a combination of two or more categoies     
+        """
+
+    if df is None or df.shape[0] <=1:
+        return df
+    # add a new columns with 4 row of fixed text data representing top-photo categories
+    df['Top Photos'] = ['Highest Pulse', 'Most Viewed', 'Most Liked', 'Most Commented', 'Most Featured']    # , 'Most Featured In Galleries']
+
+    # add new index column with orderly numbers from 0 to 4
+    df['OrderlyIndex'] = [0, 1, 2, 3, 4]
+    
+    # reorder columns
+    new_columns_order = ['OrderlyIndex', 'Top Photos', 'No','Author Name','ID','Photo Title','Href','Thumbnail Href','Thumbnail Local','Views','Likes','Comments', 
+                         'Galleries', 'Highest Pulse', 'Rating', 'Date', 'Category', 'Featured In Galleries', 'Tags']
+    df_source = df[new_columns_order]
+    df_source.set_index('OrderlyIndex', drop=False, inplace=True)
+    
+    #create an one-row dataframe to store the merges duplicates
+    df_result = pd.DataFrame(index= [0], columns=list(df_source))
+
+    #copy the first row from source to result
+    df_result.loc[df_source.index[0]] = df_source.iloc[0]
+
+    # mark the duplications, using the 'No' column, by a boolean serie. (True means duplicate row) 
+    bool_series = df_source["No"].duplicated(keep = "first")
+
+    for i, val in df_source.iloc[1:].iterrows():
+        # copy over non-duplicate rows
+        if not bool_series[i]:
+            df_result.loc[df_source.index[i]] = df_source.iloc[i]
+        # this is the duplicate row, we will not copy it to the result, but we will concatenate its top-photo category to the existing row 
+        else:
+            for j, item in df_result.iterrows():
+                if val.No == item.No:                
+                    current_data = df_result.loc[j, 'Top Photos']
+                    df_result.loc[j, 'Top Photos'] = f'{current_data}<p></p>{ val["Top Photos"]}'  # Inserted <p></p> between categories to make sure each category shows in one line
+                    break
+    df_result.drop("OrderlyIndex", axis=1, inplace=True)     
+    return df_result 
+
+#---------------------------------------------------------------
+def get_notifications_statistics(df):
+    """Given a dataframe containing notifications, return a dictionary holding statistic data"""
+
+    liked  = df.loc[df.Content =='liked', "Content"].shape[0]
+    commented  = df.loc[df.Content =='commented', "Content"].shape[0]
+    followed = df.loc[df.Content =='followed', "Content"].shape[0]
+    gallery = df.loc[df.Content =='added to gallery', "Content"].shape[0]
+    not_follow = df.loc[df.Relationship =='Not Follow', "Relationship"].shape[0]
+    following = df.loc[df.Relationship =='Following', "Relationship"].shape[0]
+    
+    last_upload_date   = df['Time Stamp'].iloc[[0]].values[0]
+    first_upload_date = df['Time Stamp'].iloc[[-1]].values[0]
+    try:
+        last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
+        first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
+        days = (last_date_obj -first_date_obj).days
+        last_date  = last_date_obj.strftime("%b %d %Y")
+        first_date = first_date_obj.strftime("%b %d %Y")
+    except:
+        printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
+        last_date = last_upload_date
+        first_date = first_upload_date
+        days = ''
+
+    stats_dict = {'Notifications':    df.shape[0], 
+                  'From':             first_date, 
+                  'To':               last_date, 
+                  'Duration':         f'{days} days',
+                  'Liked':            liked, 
+                  'Commented':        commented,
+                  'Added To Gallery': gallery,
+                  'New Followers':    followed,
+                  'Following':        following , 
+                  'Not Follow':       not_follow } 
+    return stats_dict
+
+#---------------------------------------------------------------
+def convert_string_num_to_int(string_num):
+    """ convert a string of a floating number with a letter K representing 1000 (eg. 3.2K) to an integer (eg. 3200) """
+
+    str_num = string_num.strip()
+    if str_num.isnumeric():
+        return int(str_num)
+    if 'K' in str_num:
+        int_num = 0
+        str_num = str_num.replace('K', '')
+        try:
+            int_num = int(float(str_num) * 1000)
+        except:
+            printR(f'Error converting number {str_num}')
+        return int_num
+    
+
+#---------------------------------------------------------------
+def handle_local_avatar(avatar_href, save_to_disk, dir):
+    """ Given a link to an avatar image file, save the image to disk if 'save_to_disk' is True.
+        Expecting the link contains the user id, or the text 'userpic.png' if user uses the default avatar.
+        The file name is either [user_id].jpg or 'userpic.png'
+        Return the user id and saved file name."""
+
+    if not avatar_href: return '', ''
+    user_id, avatar_local = '', ''
+
+    # if user has default avatar
+    if 'userpic.png' in avatar_href:
+        if save_to_disk:
+            avatar_local = 'userpic.png'
+    else:
+        user_id  =  re.search('\/user_avatar\/(\d+)\/', avatar_href).group(1)
+        avatar_local = user_id + '.jpg'
+        # save avatar to disk if requested, and only if it does not exist
+        # this means that if the users changed theirs avatars after we get it, we will not update it. 
+        # To get the latest version of an avatar, we have to identify and delete the old file ([user_id].jpg) on disk before running the script
+            
+    avatar_full_file_name = os.path.join(dir, 'avatars', avatar_local)
+    # save avatar to disk if requested, and only if it does not already exist
+    if save_to_disk and not os.path.isfile(avatar_full_file_name):  
+        save_avatar(avatar_href, avatar_full_file_name)
+    return user_id, avatar_local
