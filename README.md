@@ -38,6 +38,8 @@ It is from  Andy Hutchinson and it pretty much said it all:
 
 ![Main menu](Snapshots/MainMenu.png)
 
+The program has four main functionalities:
+
 ### DATA COLLECTION <br/>
 The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
 CSV files are used for statistical analysis, and in the automated processes. 
@@ -50,16 +52,29 @@ The options 8 to 12 are the automated processes, or bots, that will perform some
 Option 13 allows you to play the slideshow of photos from preselected or customized galleries
 
 ### DATA ANALYSIS <br/>
-Followers and followings users are categorized into 3 groups: 
--	followers that you are also following
--	followers that you do not follow
--	users that you  are following but they do not follow you.
-<br/>
-To falicitate the analysis tasks, we have option to create a local SQL database using the csv files obtained in the data collection processes.
-<br/>
-<br/>
+To falicitate the analysis tasks, we create a local SQLite database using the csv files obtained in the data collection processes.<br/>
 
-The program can also run in un-attended mode, where it takes in command-line arguments and perform a single task. 
+Followers and followings users are categorized into 3 groups: <br/>
+-	followers that you are also following <br/>
+-	followers that you do not follow <br/>
+-	users that you  are following but they do not follow you. <br/>
+<br/>
+<br/>
+Notifications are collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
+-	All unique users  that had interactions with your photos <br/>
+-	For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
+-	The following status between you and each user <br/>
+<br/>
+<br/>
+You can start the program in one of three following ways:<br/>
+
+1.	Directly from the file 500px_APIless.py (start the script  and follow the main menu)<br/>
+
+2.	On the comand-line window (cmd.exe,  the Terminal Window). At theprompt, enter a single task, such as:<br/>
+(full path/)500px-APIless.py    --choice 2   --user_name   JohnDoe <br/>
+
+3.	From a window shortcut to the script file, with all the needed arguments provided in the shortcut properties settings
+Make many shortcuts as you like, each one for a specific task<br/>
 <br/>
 <br/>
 Refer to the document 500px-APIless.docx for algorithm of each option, sample outputs and a complete command-line syntaxes.
@@ -84,7 +99,7 @@ Selenium, Pandas and ChromeDriver
 
 Extract all to a location on disk, say "Download folder". You should have this folders structure: 
 <br/>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Folders Structure.PNG" width ="25%">
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Folders Structure.png" width ="25%">
 <br/>
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
@@ -101,22 +116,23 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 <br/>
 
 <br/>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/allUsers.png" width ="80%">
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/15.4.All_users_with_following_statuses.png" width ="80%">
 <br/>
 
-![](Snapshots/photopage.png)
+![](Snapshots/2.photos.png)
 The goal for this photo list is that we want to be able to search or filter our photos based on mulitple categories, such as tag, title, type ... (in future versions)
 <br/><br/>
 
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Notification.png" width ="80%">
-List of 200 notifications from index #50
+### Option 16.1: All notifications from local database  ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
 <br/></br>
 
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/UniqueUsers.png" width="500">
+### Option 16.2: Unique users in all recorded notifications  ###
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
 <br/>
 
 ### Check if a user is following you: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CheckFollowingStatus.jpg" width="80%">
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CheckFollowingStatus.png" width="80%">
 <br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
@@ -173,5 +189,5 @@ abusing or over-usage may result in your 500px account being banned.
 No web servers like being scraped. They are trying their best to prevent it. You need to take neccessary steps to avoid being detected and blacklisted. Rotating IP and user agents, among others, are some options that you may consider.  
 For obvious reason, such measures are not included in the code.
 
-**Stay clean, be reasonable and respectful. Don't get caught and Happy scraping !** )* 
+**Stay clean, be reasonable and respectful, don't get caught and then Happy scraping !** )* 
 
