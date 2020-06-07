@@ -55,15 +55,15 @@ Option 13 allows you to play the slideshow of photos from preselected or customi
 To falicitate the analysis tasks, we create a local SQLite database using the csv files obtained in the data collection processes.<br/>
 
 Followers and followings users are categorized into 3 groups: <br/>
--	followers that you are also following <br/>
--	followers that you do not follow <br/>
--	users that you  are following but they do not follow you. <br/>
+ -	Followers that you are also following <br/>
+ -	Followers that you do not follow <br/>
+ - Users that you  are following but they do not follow you. <br/>
 <br/>
 <br/>
 Notifications collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
--	All unique users  that had interactions with your photos <br/>
--	For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
--	The following status between you and each user <br/>
+- All unique users  that had interactions with your photos <br/>
+- For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
+- The following status between you and each user <br/>
 <br/>
 <br/>
 You can start the program in one of three following ways:<br/>
@@ -99,7 +99,9 @@ Selenium, Pandas and ChromeDriver
 
 Extract all to a location on disk, say "Download folder". You should have this folders structure: 
 <br/>
+<p align="center">
 <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/Folders Structure.png" width ="25%">
+ </p>
 <br/>
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
@@ -111,55 +113,59 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
 <br/>
 
 ## SOME SAMPLE OUTPUTS: ##
-<kbd>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
-</kbd>
-<br/>
-<br/>
+<p align="center">
+  <kbd><img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CategorizedUsers.png" width ="70%">
+  </kbd></p>
+<br/><br/>
 
-<kbd>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/15.4.All_users_with_following_statuses.png" width ="80%">
-</kbd>
+<p align="center"><kbd>
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/15.4.All_users_with_following_statuses.png" width ="80%">
+</kbd></p>
 <br/><br/><br/>
 
-
+<p align="center">
 ![](Snapshots/2.photos.png)
-
+</p>
 <br/><br/>
 
-<kbd>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
-</kbd>
+<p align="center"><kbd>
+   <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.1.All_recorded_notifications_from_local_db.png" width ="80%">
+</kbd></p>
 <br/><br/>
 
-<kbd>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
-</kbd>
+<p align="center">
+   <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/16.2.UniqueUsersInAllNotifications.PNG" width="90%">
+</p>
 <br/><br/>
 
 ### Check if a user is following you: ###
-<kbd>
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/6.CheckFollowingStatus.png" width="80%">
-</kbd><br/><br/>
+<p align="center">
+   <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/6.CheckFollowingStatus.png" width="80%">
+</p>
+<br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+<p align="center"><kbd>
+   <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/12.png" width="90%">
+</kbd></p>
 <br/><br/>
 
 ### Like n photos from a gallery: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
-<br/><br/>
+<p align="center">
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/9.details.PNG" width="90%">
+</p><br/><br/>
 
 ### Playing a slideshow: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/13.slideshow.png" width="90%">
+<p align="center">
+    <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/13.slideshow.png" width="90%">
+</p>
 <br/><br/><br/>
 
-## LIMITATIONS, ISSUES, TO DO LIST: ##br/><
-<br/><
+## LIMITATIONS, ISSUES, TO DO LIST: ##
+<br/>
 
--Not all exceptions are handled, especially with Selenium’s find_element… methods
+- Not all exceptions are handled, especially with Selenium’s find_element… methods
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
-b/r/><the slieshow, the vertical scrollbar is not always hidden 
 - TODO: 
    - [x] Handling more exceptions
 <  - [x] Using WebDriverWait whenever possible, instead of time.sleep()
