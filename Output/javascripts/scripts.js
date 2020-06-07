@@ -3,9 +3,10 @@
    2. sortByPhotoTitle:  					 By the innerHTML of the second "div" tag    
    3. undefined or anything but (1) and (2): By the innerHTML of the "td" tag  
 */
-function sortTable(columnIndex, special_sort) {
+function sortTable(table_id, columnIndex, special_sort) {
    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-    table = document.getElementsByTagName("table")[0] /* targer the first table instead of table with id-- getElementById("myTable"); */
+    /* table = document.getElementsByTagName("table")[0]  targer the first table instead of table with id-- getElementById("myTable"); */
+    table = document.getElementById(table_id);
     switching = true;
     dir = "asc";
     while (switching) {
@@ -13,22 +14,19 @@ function sortTable(columnIndex, special_sort) {
         rows = table.rows;
         for (i = 1; i < (rows.length - 1); i++) {
             shouldSwitch = false;
-			      x = rows[i].getElementsByTagName("TD")[columnIndex];
+			x = rows[i].getElementsByTagName("TD")[columnIndex];
             y = rows[i + 1].getElementsByTagName("TD")[columnIndex];
 			
-            if (special_sort == "sortByDisplayName"){
-			         x =x.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
-			         y =y.getElementsByTagName("DIV")[1].getElementsByTagName("a")[0].text; 
-            }
-			      else if (special_sort == "sortByPhotoTitle"){
-			         x =x.getElementsByTagName("DIV")[1].innerHTML 
-			         y =y.getElementsByTagName("DIV")[1].innerHTML 
+            if (special_sort == "sortByPhotoTitle" || special_sort == "sortByDisplayName"){
+			    x =x.getElementsByTagName("DIV")[2].getElementsByTagName("a")[0].text; 
+			    y =y.getElementsByTagName("DIV")[2].getElementsByTagName("a")[0].text; 
             }
 			else
 			{
 				x = x.innerHTML;
 				y = y.innerHTML;		    		
 			}
+			
  		    if (x == "" && y != "" && dir == "asc"){
 		        shouldSwitch = true;	
 			    break;
