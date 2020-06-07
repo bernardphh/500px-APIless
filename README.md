@@ -132,7 +132,7 @@ The goal for this photo list is that we want to be able to search or filter our 
 <br/>
 
 ### Check if a user is following you: ###
-<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/CheckFollowingStatus.png" width="80%">
+<img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/6.CheckFollowingStatus.png" width="80%">
 <br/><br/>
 
 ### Like n photos of each users in the last m notifications: ###
