@@ -60,30 +60,16 @@ Photos:<br/>
 <br/>
 <br/>
 Followers and followings users are categorized into 3 groups: <br/>
- -	Followers that you are also following <br/>
- -	Followers that you do not follow <br/>
- - Users that you  are following but they do not follow you. <br/>
+ *	Followers that you are also following <br/>
+ *	Followers that you do not follow <br/>
+ * Users that you  are following but they do not follow you. <br/>
 <br/>
 <br/>
 Notifications collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
-- All unique users  that had interactions with your photos <br/>
-- For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
-- The following status between you and each user <br/>
+* All unique users  that had interactions with your photos <br/>
+* For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
+* The following status between you and each user <br/>
 <br/>
-<br/>
-You can start the program in one of three following ways:<br/>
-
-1.	Directly from the file 500px_APIless.py (start the script  and follow the main menu)<br/>
-
-2.	On the comand-line window (cmd.exe,  the Terminal Window). At theprompt, enter a single task, such as:<br/>
-(full path/)500px-APIless.py    --choice 2   --user_name   JohnDoe <br/>
-
-3.	From a window shortcut to the script file, with all the needed arguments provided in the shortcut properties settings
-Make many shortcuts as you like, each one for a specific task<br/>
-<br/>
-<br/>
-Refer to the document 500px-APIless.docx for algorithm of each option, sample outputs and a complete command-line syntaxes.
-
 <br/>
 
 ## ENVIRONMENT: ##
@@ -110,9 +96,21 @@ Extract all to a location on disk, say "Download folder". You should have this f
 <br/>
 If Python and Selenium are installed properly, you should be able to double-click the file 500px-APIless.py in Window Explorer to run it.
 
-If it failed, make sure the locations of python executable and the ChromeDriver.exe are in the PATH environment, open the Windows Terminal (cmd.exe), navigate to the location of the python scripts and type: <br/>
- python.exe 500px-APIless.py
- 
+You can start the program in one of three following ways:<br/>
+
+1.	Directly from the file 500px_APIless.py (double-click the script and follow the main menu)<br/>
+
+2.	On the comand-line window (cmd.exe,  the Terminal Window). At theprompt, enter a single task.<br/>
+   For example, to get the photos list: <br/>
+        (full path/)500px-APIless.py    --choice 2   --user_name   JohnDoe <br/>
+
+3.	From a window shortcut to the script file, with all the needed arguments provided in the shortcut properties settings
+Make many shortcuts as you like, each one for a specific task<br/>
+<br/>
+<br/>
+Refer to the document [500px-APIless.docx](https://github.com/bernardphh/500px-APIless/blob/master/500px-APIless.docx) for algorithm of each option, sample outputs and a complete command-line syntaxes.
+
+<br/> 
 Also make sure the folder Output and ist sub-folders are extracted to the same location where the py scripts are. We need the css and javascript files from this folder for proper viewing of the result html files.
 
 <br/>
