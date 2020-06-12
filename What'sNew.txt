@@ -1,6 +1,6 @@
 ---------------------------
 Jun 11 2020:
-Used jquerry's DataTables to handle long html table. Pagination allows the users:
+Used jquery's DataTables to handle long html table. Pagination allows the users:
 - to have control of how many entries to be shown in one page
 - to be able to sort the columns of the whole table quickly, while keeping the same number of entries per page.
 - to be able to search the entire table for tags, names, titles, categories or any text. 
@@ -8,7 +8,7 @@ Used jquerry's DataTables to handle long html table. Pagination allows the users
 Note: 
 There is a new folder "DataTables". Make sure it is extracted under the 'Output' folder.
 The "Javascrips" folder under the 'Output' folder is no longer needed. It is deleted from the package.
-All the result html files can be run off-line. Avatar images, photos thumbnails, 'Datatables' scripts, they are all local on disk.
+All the result html files can be run off-line. Avatar images, photos thumbnails, 'Datatables' scripts, they are all locally on disk.
 
 ---------------------------
 
