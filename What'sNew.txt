@@ -1,3 +1,17 @@
+---------------------------
+Jun 11 2020:
+Used jquerry's DataTables to handle long html table. Pagination allows the users:
+- to have control of how many entries to be shown in one page
+- to be able to sort the columns of the whole table quickly, while keeping the same number of entries per page.
+- to be able to search the entire table for tags, names, titles, categories or any text. 
+
+Note: 
+There is a new folder "DataTables". Make sure it is extracted under the 'Output' folder.
+The "Javascrips" folder under the 'Output' folder is no longer needed. It is deleted from the package.
+All the result html files can be run off-line. Avatar images, photos thumbnails, 'Datatables' scripts, they are all local on disk.
+
+---------------------------
+
 Jun 7 2020:
 
 Major updates related to the recent changes from 500px: some page structures, relative datetime (eg. 'a year ago'), roundup views count (eg. 3.2K)...
