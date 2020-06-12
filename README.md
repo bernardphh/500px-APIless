@@ -42,8 +42,11 @@ The program has four main functionalities:
 
 ### DATA COLLECTION <br/>
 The first 7 options are for data collection. The results of these tasks are saved on disk in CSV and HTML formats. 
-CSV files are used for statistical analysis, and in the automated processes. 
-HTML files are used for presentation, which happens after a data collection task is completed. They are also served as a tool to sort data in each criteria.
+CSV files are used for statistical analysis, and for the automated processes. 
+HTML files are used for presentation, they are automatically shown after a data collection task is completed. 
+They are also served as a tool to sort, filter or search the data
+
+
 
 ### AUTOMATED PROCESSES <br/>
 The options 8 to 12 are the automated processes, or bots, that will perform some actions.
@@ -100,8 +103,8 @@ You can start the program in one of three following ways:<br/>
 
 1.	Directly from the file 500px_APIless.py (double-click the script and follow the main menu)<br/>
 
-2.	On the comand-line window (cmd.exe,  the Terminal Window). At theprompt, enter a single task.<br/>
-   For example, to get the photos list: <br/>
+2.	On the comand-line window (cmd.exe,  the Terminal Window). At the prompt, enter a single task.<br/>
+   For example, to get the photos list: <br/> 
         (full path/)500px-APIless.py    --choice 2   --user_name   JohnDoe <br/>
 
 3.	From a window shortcut to the script file, with all the needed arguments provided in the shortcut properties settings
@@ -170,7 +173,7 @@ Refer to the document [500px-APIless.docx] (https://github.com/bernardphh/500px-
 - For the requests involved more than 1000 items (list of notifications, photos, users…), processing time takes too long to my liking. 
 - TODO: 
    - [x] Handling more exceptions
-<  - [x] Using WebDriverWait whenever possible, instead of time.sleep()
+   - [x] Using WebDriverWait whenever possible, instead of time.sleep()
    - [x] Putting images thumbnails in the result files
    - [ ] Adding ChromeCast support to slideshow
    - [x] Supporting command-line arguments
