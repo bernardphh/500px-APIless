@@ -178,7 +178,7 @@ Refer to the document [500px-APIless.docx] (https://github.com/bernardphh/500px-
    - [ ] Making a GUI 
    - [x] Automatic data analysis: photos, users and notifications
    - [x] Sorting a column in the output HTML file is too long to be practical, especially if the table is big (200+ rows). 
-         Usinh jquery's DataTables.
+         Using jquery's DataTables for pagination, sort and search options.
          
    - [ ] Using multiprocessing (on processing already downloaded data, not on requests to servers)      
 
