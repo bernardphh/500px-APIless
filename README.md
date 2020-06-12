@@ -108,10 +108,7 @@ You can start the program in one of three following ways:<br/>
 Make many shortcuts as you like, each one for a specific task<br/>
 <br/>
 <br/>
-Refer to the document [500px-APIless.docx](https://github.com/bernardphh/500px-APIless/blob/master/500px-APIless.docx) for algorithm of each option, sample outputs and a complete command-line syntaxes.
-
-<br/> 
-Also make sure the folder Output and ist sub-folders are extracted to the same location where the py scripts are. We need the css and javascript files from this folder for proper viewing of the result html files.
+Refer to the document [500px-APIless.docx] (https://github.com/bernardphh/500px-APIless/blob/master/500px-APIless.docx) for algorithm of each option, sample outputs and a complete command-line syntaxes.
 
 <br/>
 
