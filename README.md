@@ -49,7 +49,7 @@ They are also served as a tool to sort, filter or search the data
 
 
 ### AUTOMATED PROCESSES <br/>
-The options 8 to 12 are the automated processes, or bots, that will perform some actions.
+The options 8 to 12 are the automated processes, robots, or bots, that will perform some actions.
 
 ### ENTERTAINMENT <br/>
 Option 13 allows you to play the slideshow of photos from preselected or customized galleries
@@ -63,15 +63,15 @@ Photos:<br/>
 <br/>
 <br/>
 Followers and followings users are categorized into 3 groups: <br/>
- *	Followers that you are also following <br/>
- *	Followers that you do not follow <br/>
- * Users that you  are following but they do not follow you. <br/>
+   -	Followers that you are also following <br/>
+   -	Followers that you do not follow <br/>
+   - Users that you  are following but they do not follow you. <br/>
 <br/>
 <br/>
 Notifications collected bit by bit over times are combined together into one  table in database, which is used for creating statistics such as: <br/>
-* All unique users  that had interactions with your photos <br/>
-* For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
-* The following status between you and each user <br/>
+  - All unique users  that had interactions with your photos <br/>
+  - For each user, the total number the interactions, total numbers of likes, comments, and featuring your photos <br/>
+  - The following status between you and each user <br/>
 <br/>
 <br/>
 
@@ -174,7 +174,7 @@ Refer to the document [500px-APIless.docx] (https://github.com/bernardphh/500px-
 - TODO: 
    - [x] Handling more exceptions
    - [x] Using WebDriverWait whenever possible, instead of time.sleep()
-   - [x] Putting images thumbnails in the result files
+   - [x] Putting images thumbnails and user avatars in the result files
    - [ ] Adding ChromeCast support to slideshow
    - [x] Supporting command-line arguments
    - [ ] Playing slideshow in random order
@@ -194,14 +194,16 @@ Feedback, bug report, contributions are more than welcomed.
 
 ## DISCLAIMER: ## 
 
-As in any web scraping, a change in page structure may break one or more options. Hopefully we can adapt when it happens. 
+As in any web scraping, a change in page structure may break one or more options. 
+Hopefully we can adapt when it happens, time and weather permitted.
+Euh..., I meant time and mood permitted. (as I go older in age, my mood tends to change as quickly as weather. It can swing unpredictably, freely to all direction :)  
 
 As stated earlier, this project is created for fun and for gaining personal experience with python and web scraping. 
 
 **The owner assumes no responsibility**.
 
 Even though some limits have been set, and some processes have been intentionally slowed down to make it look more human, 
-abusing or over-usage may result in your 500px account being banned. 
+abusing or over-usage may result in your IP being temporary suspended, or your 500px account being banned. 
 
 **Use this at your own risk**.
 
