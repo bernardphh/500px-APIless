@@ -6,10 +6,18 @@ import common.config as config
 import common.utils as utils
 import os, time, datetime, csv
 
+
 HEAD_STRING = ('<head>'
-                   '\n\t<script charset="UTF-8" type = "text/javascript" src="javascripts/scripts.js"></script>'
-	               '\n\t<link   charset="UTF-8" type = "text/css" rel  = "stylesheet"  href = "css/styles.css" />'
-               '</head>' )
+                   '\n\t<link rel="stylesheet" type="text/css" charset="UTF-8" href = "css/styles.css" />'
+	               '\n\t<link rel="stylesheet" type="text/css" charset="UTF-8" href="DataTables/DataTables-1.10.21/css/jquery.dataTables.css"/>\n'
+	               '\n\t<script  type="text/javascript" charset="utf8" src="DataTables/jQuery-3.3.1/jquery-3.3.1.min.js"></script> '
+	               '\n\t<script  type="text/javascript" charset="utf8" src="DataTables/datatables.js"></script>	'	
+	               '\n\t<script>'
+                   '\n\t    $(document).ready(function() {'
+			       '\n\t    $("#main_table").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], '
+				   '\n\t	   	  	                     "pageLength": 25} );'
+			       '\n\t       } );'
+                   '\n\t</script></head>\n')
 
 # associate table width with csv file type
 TABLE_WIDTHS = {'photos':       '100%',
@@ -36,27 +44,27 @@ TABLE_CAPTION = {'photos':      'All Photos',
                 'following':    'Users'}
 
 # associate column width with column header text
-COL_WIDTHS = {'Actions Count':          '100px',
-              'Added To Gallery':       '100px',
+COL_WIDTHS = {'Actions Count':          '80px',
+              'Added To Gallery':       '80px',
               'Category':               '130px',
-              'Commented':              '100px',
+              'Commented':              '80px',
               'Comments':               '110px',
-              'Content':                '100px',
+              'Content':                '80px',
               'Date':                   '110px',
               'Display Name':           'auto',
               'Featured In Galleries':  '240px',
-              'Followed':               '100px',
-              'Followers Count':        '100px',
-              'Follower Order':         '100px',
-              'Following Order':        '100px',
+              'Followed':               '80px',
+              'Followers Count':        '80px',
+              'Follower Order':         '80px',
+              'Following Order':        '80px',
               'Galleries':              '110px',
               'Highest Pulse':          '110px',
-              'Last Action Date':       '100px',
-              'Liked':                  '100px',
+              'Last Action Date':       '80px',
+              'Liked':                  '80px',
               'Likes':                  '110px',
-              'No':                     '50px',
+              'No':                     '40px',
               'Photo Title':            '300px',
-              'Relationship':           '100px',
+              'Relationship':           '80px',
               'Tags':                   'auto',
               'Time Stamp':             '100px',
               'Views':                  '130px'
@@ -133,36 +141,7 @@ def CSV_top_photos_list_to_HTML_table(csv_file_name, output_lists, use_local_thu
             if header in ignore_columns:
                 ignore_columns_count += 1
                 continue  
-            # break long word(s) so that we can minimize columns widths
-            if   header == 'Highest Pulse': header = 'Highest<br>Pulse'    
-            elif header == 'Comments':      header = 'Com-<br>ments'    
-            elif header == 'Galleries':     header = 'Gal-<br>leries'    
-           
-            sort_direction_arrows = f"""
-                    <div class="hdr_arrows">
-		                <div id ="arrow-up-{table_id}-{i-ignore_columns_count}">&#x25B2;</div>
-		                <div id ="arrow-down-{table_id}-{i-ignore_columns_count}">&#x25BC;</div></div>"""
-            if header == 'Top Photos':
-                left_div = f'''
-                    <div class="hdr_text"></div>'''
-            else:
-                left_div = f'''
-                    <div class="hdr_text">{header}</div>'''
-
-            if header == "No":
-                first_left_div = f'{tab4}<div class="hdr_text">{header}</div>'
-                # the No column is initially in ascending order, so we do not show the down arrow
-                ascending_arrow_only = f"""
-                    <div class="hdr_arrows">
-				        <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-				        <div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>"""
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{first_left_div}{ascending_arrow_only}</th>'''
-            
-            # special sort for title cell: we want to sort the displayed photo titles, not the photo link
-            elif header == "Photo Title":
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count}, true)">{left_div}{sort_direction_arrows}</th>'''
-            else:
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>'''
+            header_string += f'{tab3}<th>{header}</th>'
         header_string += f'{tab2}</tr>'
 
         # write each row 
@@ -250,6 +229,8 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     tab5 = tab4 + '\t'
     tab6 = tab5 + '\t'
     tab7 = tab6 + '\t'   
+    tab7 = tab6 + '\t'
+    tab8 = tab7 + '\t'   
 
     if ignore_columns is None:
         ignore_columns = []
@@ -285,11 +266,11 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     # render summary html table
     description_html_table = ''
     if desc_dict and len(desc_dict)> 0:
-        description_html_table = dict_to_html_table(desc_dict, table_id = 'description', table_width = main_table_width)
+        description_html_table = dict_to_html_table(desc_dict, table_id = 'description', table_width = main_table_width, start_indent=2)
 
    # render statistic html table, the info could be a dict or a list
     stats_html_table = ''
-    stats_html_table = dict_to_html_table(stats_dict, table_id = 'overview', table_caption='Overview' )  
+    stats_html_table = dict_to_html_table(stats_dict, table_id = 'overview', table_caption='Overview', start_indent=2 )  
 
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
@@ -302,51 +283,27 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
         # write headers and assign sort method for appropriate columns   
         # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
         ignore_columns_count = 0
-        header_string = f'{tab2}<tr>'
+        header_string = f'{tab2}<thead>{tab3}<tr>'
 
         for i, header in enumerate(reader.fieldnames):
             if header in ignore_columns:
                 ignore_columns_count += 1
                 continue  
-
             # break long word(s) so that we can minimize columns widths
             if   header == 'Comments':        header = 'Com-<br>ments'
             elif header == 'Highest Pulse': header = 'Highest<br>Pulse'    
             elif header == 'Galleries':       header = 'Gal-<br>leries'    
-                
-            sort_direction_arrows = f"""
-                <div class="hdr_arrows">
-		            <div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>
-		            <div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>"""
-
-            ascending_arrow_only = f"""
-                <div class="hdr_arrows">
-				    <div id ="arrow-up-{table_id}-{i-ignore_columns_count}">&#x25B2;</div>
-				    <div id ="arrow-down-{table_id}-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>"""
-            left_div = f'''
-                <div class="hdr_text">{header}</div>'''
-
-            if header == "No":
-                first_left_div = f'{tab3}<div class="hdr_text">{header}</div>'
-                # the No column is initially in ascending order, so we do not show the down arrow
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count})">{first_left_div}{ascending_arrow_only}</th>'''
-            
-            # special sort for title cell: we want to sort the displayed photo titles, not the photo link
-            elif header == "Photo Title":
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count}, 'sortByPhotoTitle')">{left_div}{sort_direction_arrows}</th>'''
-
-            else:
-                header_string += f'''{tab3}<th onclick="sortTable('{table_id}', {i-ignore_columns_count})">{left_div}{sort_direction_arrows}</th>'''
-        
-        header_string += f'{tab2}</tr>'
+            header_string += f'''{tab4}<th>{header}</th>'''
+  
+        header_string += f'{tab3}</tr>{tab2}</thead>'
 
        # create rows for html table 
         rows  = list(reader)
         rows_count = len(rows)
-        row_string = ''       
+        row_string = f'{tab2}<tbody>'       
         for i, row in enumerate(rows):
             utils.update_progress(i / rows_count, f'    - Writing items to html {i}/{rows_count} ...')  
-            row_string += f'{tab2}<tr>'
+            row_string += f'{tab3}<tr>'
 
             for j in range(len(headers) ):
                 col_header = headers[j]
@@ -359,29 +316,29 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
                     
                     # if photo thumbnail is empty, write an empty div to keep the same layout 
                     if (use_local_thumbnails and not row['Thumbnail Local']) or (not use_local_thumbnails and not row['Thumbnail Href']) :
-                        row_string += f'\t\t\t<td><div><div><a/></div><div></a></div></div></td> \n' 
+                        row_string += f'\t\t\t\t<td><div><div><a/></div><div></a></div></div></td> \n' 
                     else:
                         photo_link =  row['Href']                 
-                        row_string += f'{tab3}<td><div><div style="width: 40%; float:left; margin-right:10px;">{tab6}<a href="{photo_link}" target="_blank">'
-                        row_string += f'{tab7}<img class="photo" src={photo_thumbnail}></a></div>'
-                        row_string += f'{tab5}<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>'
+                        row_string += f'{tab4}<td><div><div style="width: 40%; float:left; margin-right:10px;">{tab7}<a href="{photo_link}" target="_blank">'
+                        row_string += f'{tab8}<img class="photo" src={photo_thumbnail}></a></div>'
+                        row_string += f'{tab6}<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>'
  
                 elif  col_header == 'Category':
-                    row_string += f'{tab3}<td class="alignLeft">{text}</td>' 
+                    row_string += f'{tab4}<td class="alignLeft">{text}</td>' 
 
                 elif  col_header == 'Tags':
-                    row_string += f'{tab3}<td class="alignLeft">{text}</td>' 
+                    row_string += f'{tab4}<td class="alignLeft">{text}</td>' 
                 
                 elif  col_header == 'Featured In Galleries' and text != '':
                     # a gallery link has this format: https://500px.com/[photographer_name]/galleries/[gallery_name]
                     galleries = text.split(',')
                     if len(galleries) == 0:
-                           row_string += f'{tab3}<td></td>'
+                           row_string += f'{tab4}<td></td>'
                     else:
-                        row_string += f'{tab3}<td>'
+                        row_string += f'{tab4}<td>'
                         for k, gallery in enumerate(galleries):
                             gallery_name = gallery[gallery.rfind('/') + 1:]    
-                            row_string += f'{tab3}<a href="{gallery}" target="_blank">{gallery_name}</a>'
+                            row_string += f'{tab4}<a href="{gallery}" target="_blank">{gallery_name}</a>'
                             if k < len(galleries) -1:
                                 row_string += ',\n'                    
                         row_string += f'\t\t</td>'  
@@ -389,9 +346,10 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
                 else: 
                     # write empty string if text == 0
                     alt_text = '' if text == '0' else text
-                    row_string += f'{tab3}<td>{alt_text}</td>' 
+                    row_string += f'{tab4}<td>{alt_text}</td>' 
 
-            row_string += f'{tab2}</tr>\n'
+            row_string += f'{tab3}</tr>\n'
+        row_string += f'{tab2}</tbody>\n'
 
         html_string = ('<html>\n'
                        f'{HEAD_STRING}\n'
@@ -404,7 +362,8 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
                           f'{tab1}<div class="float_right">'
                           f'{stats_html_table}</div>\n\n'
 
-                          f'{top_photos_html_table}\n'
+                          f'{top_photos_html_table}\n\n'
+
                           f'{tab1}<table id="{table_id}"style="width:{main_table_width}">'
                              f'{tab2}<caption>Photos</caption>'
                              f'{tab3}{CUSTOMED_COLUMN_WIDTHS}'
@@ -445,7 +404,10 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
     tab4 = tab3 + '\t'
     tab5 = tab4 + '\t'
     tab6 = tab5 + '\t'
-    tab7 = tab6 + '\t'   
+    tab7 = tab6 + '\t'
+    tab8 = tab7 + '\t'
+    tab9 = tab8 + '\t'
+    
     # file extension check
     file_path, file_extension = os.path.splitext(csv_file_name)
     if file_extension != ".csv":
@@ -470,16 +432,16 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
     description_html_table = ''
     if desc_dict and len(desc_dict)> 0:
         if csv_file_type.name == 'notifications':
-            description_html_table = dict_to_html_table(desc_dict, table_id = 'description', csv_file_type = csv_file_type )
+            description_html_table = dict_to_html_table(desc_dict, table_id = 'description', csv_file_type = csv_file_type, start_indent=3 )
         else:
             description_html_table = dict_to_html_table(desc_dict, table_id = 'description', table_width = main_table_width, csv_file_type = csv_file_type )
 
     # render statistic html table, the info could be a dict or a list
     stats_html_table = ''
     if type(statistics_info) is dict:
-        stats_html_table = dict_to_html_table(statistics_info, table_id = 'overview', table_caption='Overview', csv_file_type = csv_file_type )  
+        stats_html_table = dict_to_html_table(statistics_info, table_id = 'overview', table_caption='Overview', csv_file_type = csv_file_type, start_indent=3 )  
     elif type(statistics_info) is list  and len(statistics_info)> 0:
-        stats_html_table = statistics_list_to_html_table(statistics_info, table_style= f'width:{main_table_width}')
+        stats_html_table = statistics_list_to_html_table(statistics_info, table_style= f'width:{main_table_width}', start_indent=3)
 
     with open(csv_file_name, newline='', encoding=encoding) as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
@@ -491,124 +453,86 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
         # write headers and assign appropriate sort method for each columns   
         # # each header cell has 2 parts: the left div for the header name, the right div for sort direction arrows     
         ignore_columns_count = 0
-        header_string = f'{tab2}<tr>'
+        header_string = f'{tab3}<thead>{tab4}<tr>'
         for i, header in enumerate(reader.fieldnames):
             if header in ignore_columns:
                 ignore_columns_count += 1
                 continue
             
             col_width = f'width="{COL_WIDTHS[header]}"'
-            
-            up_down_arrows = (f'{tab5}<div class="hdr_arrows">'
-		                        f'{tab6}<div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>'
-		                        f'{tab6}<div id ="arrow-down-{i-ignore_columns_count}">&#x25BC;</div></div>')
-            down_arrow_only = (f'{tab5}<div class="hdr_arrows">'
-				                 f'{tab6}<div id ="arrow-up-{i-ignore_columns_count}">&#x25B2;</div>'
-				                 f'{tab6}<div id ="arrow-down-{i-ignore_columns_count}" hidden>&#x25BC;</div></div>')
-            
-            # break the multi-words headers text into multiple lines
-            if header == "Display Name" or header  == "Photo Title":
-                left_div = f'<div class="hdr_text">{header}</div>'
-            else:
-                left_div = f"""<div class="hdr_text">{header.replace(' ','<br>')}</div>"""
-        
-            if header == "No":
-                first_left_div = f'<div class="hdr_text">{header}</div>'
-                # Initially, the No column is in ascending order, so we need to hide the up arrow
-                sort_arrows = down_arrow_only if header == column_to_sort else up_down_arrows
-                header_string += f'''{tab3}<th {col_width} onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{first_left_div}{sort_arrows}</th>'''
-
-            elif header == "Display Name":
-                header_string += f"""{tab3}<th {col_width} onclick="sortTable('{table_id}', {i-ignore_columns_count}, 'sortByDisplayName')">{tab4}{left_div}{up_down_arrows}</th>"""
-            
-            elif header == "Photo Title":
-                header_string += f"""{tab3}<th {col_width} onclick="sortTable('{table_id}', {i-ignore_columns_count}, 'sortByPhotoTitle')">{tab4}{left_div}{up_down_arrows}</th>"""
- 
-            elif (header == "Follower Order"  or header == "Following Order"   or header == "Content"  or header == "Last Action Date" or
-                                                 header == "Followers Count" or header == "Relationship" or header == "Added To Gallery"):
-                header_string += f'''{tab3}<th {col_width} onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{left_div}{up_down_arrows}</th>'''
-            
-            elif ( header == "Actions Count" or  header == "Liked" or header == "Followed" or header == "Commented" ):
-                header_string += f'''{tab3}<th {col_width}  onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{left_div}{up_down_arrows}</th>'''
-
-            elif header == "Time Stamp":
-                header_string += f'''{tab3}<th {col_width}  onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{left_div}{up_down_arrows}</th>\n'''
-            
-            else:
-                header_string += f'''{tab3}<th {col_width} onclick="sortTable('{table_id}', {i-ignore_columns_count})">{tab4}{left_div}{up_down_arrows}</th>'''
-
-        header_string += '</tr>' 
+            header_string += f'''{tab5}<th {col_width}><div class="hdr_text">{header}</div></th>'''
+        header_string += '</tr></thead>' 
 
         # create rows for html table 
         rows  = list(reader)
         rows_count = len(rows)
-        row_string = ''       
+        row_string = f'{tab3}<tbody>'       
         for i, row in enumerate(rows):
             utils.update_progress(i / rows_count, f'    - Writing items to html {i}/{rows_count} ...')  
-            row_string += f'{tab2}<tr>'
+            row_string += f'{tab4}<tr>'
             
             for j in range(len(headers)): 
                 col_header = headers[j]   
                 # ignore unwanted columns
                 if col_header in ignore_columns:
                     continue
-
                 text = row[col_header]
 
                 # In Display Name column, show user's avatar and the display name with link 
                 if col_header == 'Display Name' : 
                     user_home_page = f'https://500px.com/{row["User Name"]}'        
                     user_name = row["Display Name"]
-                    row_string += f'{tab3}<td><div><div style="width: 30%; float:left;">{tab6}<a href="{user_home_page}" target="_blank">'
+                    row_string += f'{tab5}<td><div><div style="width: 30%; float:left;">{tab8}<a href="{user_home_page}" target="_blank">'
                     if use_local_thumbnails:
                         user_avatar =f"{avatars_folder}/{row['Avatar Local']}"
                     else:
                         user_avatar = row['Avatar Href']
 
-                    row_string += f'{tab7}<img src={user_avatar}></a></div>'
-                    row_string += f'{tab5}<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>'
+                    row_string += f'{tab9}<img src={user_avatar}></a></div>'
+                    row_string += f'{tab7}<div><a href="{user_home_page}" target="_blank">{user_name}</a></div></div></td>'
  
                 # In Photo Tile column, show photo thumbnail and photo title with <a href> link
                 elif  col_header == 'Photo Title': 
                     photo_thumbnail = f"{thumbnails_folder}/{row['Photo Thumbnail Local']}"  if use_local_thumbnails else  row['Photo Thumbnail Href']
                     # if photo thumbnail is empty, write an empty divs to keep the same layout 
                     if (use_local_thumbnails and not row['Photo Thumbnail Local'].strip()) or (not use_local_thumbnails and not row['Photo Thumbnail Href'].strip()) :
-                        row_string += f'{tab3}<td><div><div><a/></div><div><a/></div></div></td>'
+                        row_string += f'{tab5}<td><div><div><a/></div><div><a/></div></div></td>'
                     else:
                         photo_link =  row['Photo Link']                 
-                        row_string += f'{tab3}<td><div><div style="width: 30%; float:left;">{tab7}<a href="{photo_link}" target="_blank">'
-                        row_string += f'{tab7}<img class="photo" src={photo_thumbnail}></a></div>'
-                        row_string += f'{tab5}<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>'
+                        row_string += f'{tab5}<td><div><div style="width: 30%; float:left;">{tab9}<a href="{photo_link}" target="_blank">'
+                        row_string += f'{tab9}<img class="photo" src={photo_thumbnail}></a></div>'
+                        row_string += f'{tab7}<div><a href="{photo_link}" target="_blank">{text}</a></div></div></td>'
 
                 elif  col_header == 'Relationship':
                     color_class_name = text.lower().replace(' ', '_')
                     if csv_file_type.name == 'reciprocal' or csv_file_type.name == 'not_follow' or csv_file_type.name == 'following' or csv_file_type.name == 'all_users' or csv_file_type.name == 'unique_users': 
-                        row_string += f'{tab3}<td class="alignLeft {color_class_name}" >{text}</td>'    
+                        row_string += f'{tab5}<td class="alignLeft {color_class_name}" >{text}</td>'    
                     elif csv_file_type.name == 'notifications' or csv_file_type.name == 'like_actors':
                         if text == 'Following': 
-                            row_string += f'{tab3}<td class="alignLeft following_raw">{text}</td>'  # green cell for following users from notification                   
+                            row_string += f'{tab5}<td class="alignLeft following_raw">{text}</td>'  # green cell for following users from notification                   
                         elif text == 'Not Follow':  
-                            row_string += f'{tab3}<td class="alignLeft">{text}</td>'                # default background color (white)
+                            row_string += f'{tab5}<td class="alignLeft">{text}</td>'                # default background color (white)
                         else:
-                            row_string += f'{tab3}<td></td>'                                        # empty td cell     
+                            row_string += f'{tab5}<td></td>'                                        # empty td cell     
                     else:
-                        row_string += f'{tab3}<td>{text}</td>'                                             
+                        row_string += f'{tab5}<td>{text}</td>'                                             
                
                 elif  col_header == 'Content': 
-                     row_string += f'{tab3}<td class="alignCenter">{text}</td>'
+                     row_string += f'{tab5}<td class="alignCenter">{text}</td>'
 
                 else:                            
-                     row_string += f'{tab3}<td class="alignRight">{text}</td>'
+                     row_string += f'{tab5}<td class="alignRight">{text}</td>'
 
-            row_string += '\t</tr>'
+            row_string += '</tr>'
+        row_string += f'{tab3}</tbody>'
 
         #special layout for notification type
         if csv_file_type == apiless.CSV_type.notifications:
             desc_and_stats_box = (f'{tab1}<div style="width:{main_table_width}">'
                                         f'{tab2}<div class="float_left" style="width:65%">' 
-                                        f'{tab3}{description_html_table}</div>'
+                                        f'{description_html_table}</div>'
                                         f'{tab2}<div class="float_right">'
-                                        f'{tab3}{stats_html_table}</div>\n')
+                                        f'{stats_html_table}</div>\n')
         else:
             desc_and_stats_box = (f'{description_html_table}\n\n'                          
                                   f'{stats_html_table}\n\n')
@@ -618,11 +542,12 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
                        f'<body>'
                           f'{tab1}{title_string}\n'
                           f'{desc_and_stats_box}'
-                          f'{tab1}<table id="{table_id}" style="width:{main_table_width}">'
-                              f'{tab2}<caption>{main_table_caption}</caption>'
-                              f'{tab2}{header_string}'
-                              f'{tab2}{row_string}'
-                          f'{tab1}</table>'
+                          f'{tab1}<div class="float_left" style="width:{main_table_width}">'
+                          f'{tab2}<table id="{table_id}">'
+                              f'{tab3}<caption>{main_table_caption}</caption>'
+                              f'{tab3}{header_string}'
+                              f'{tab3}{row_string}'
+                          f'{tab2}</table>{tab1}</div>'
                        '</body> </html>')
         utils.update_progress(1, f'    - Writing items to html {rows_count}/{rows_count} ...')  
         
