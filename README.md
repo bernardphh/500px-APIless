@@ -53,7 +53,12 @@ Option 13 allows you to play the slideshow of photos from preselected or customi
 
 ### DATA ANALYSIS <br/>
 To falicitate the analysis tasks, we create a local SQLite database using the csv files obtained in the data collection processes.<br/>
-
+We have the analysis for photos, users, and notifications:<br/><br/>
+Photos:<br/> 
+-	List of top photos in terms of Highest Pulse, Views, Likes, Comments, and Featured Galleries <br/>
+-	List of all photos with the detail info arranged in columns, where you can sort, filter, or search<br/>
+<br/>
+<br/>
 Followers and followings users are categorized into 3 groups: <br/>
  -	Followers that you are also following <br/>
  -	Followers that you do not follow <br/>
@@ -176,9 +181,9 @@ Also make sure the folder Output and ist sub-folders are extracted to the same l
    - [x] Supporting command-line arguments
    - [ ] Playing slideshow in random order
    - [ ] Making a GUI 
-   - [ ] Automatic data analysis
-   - [ ] Sorting a column in the output HTML file is too long to be practical, especially if the table is big (200+ rows). 
-         Possible solutions: Break the long html into pages, sort the list before creating html or doing it on a GUI.
+   - [x] Automatic data analysis: photos, users and notifications
+   - [x] Sorting a column in the output HTML file is too long to be practical, especially if the table is big (200+ rows). 
+         Usinh jquery's DataTables.
          
    - [ ] Using multiprocessing (on processing already downloaded data, not on requests to servers)      
 
