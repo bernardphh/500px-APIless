@@ -146,37 +146,27 @@ def get_user_summary(driver, user_inputs, output_lists):
 
 #---------------------------------------------------------------
 #@utils.profile
-def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele, user_name, user_password, thumbnails_list, thumbnails_dir):
+def process_a_photo_element(driver, index, photos_count, photo_href, photo_thumbnail_href, user_name, user_password, thumbnails_list, thumbnails_dir):
     """Extract photo info from web element, return a photo object"""
 
     global logged_in
 
-    utils.update_progress(index / (items_count -1), f'    - Extracting  {index + 1}/{items_count} photos:')
     # reset variables
-    photo_id, title, photo_thumbnail_href, photo_thumbnail_local = '', '0', '', ''
+    photo_id, title, photo_thumbnail_local = '0', '', ''
     photo_stats = apiless.PhotoStats()        
-    
-    # get photo link, 
-    photo_href = r'https://500px.com' + photo_link_ele.attrib["href"]
 
     # photo id
     photo_id  =  re.search('\/photo\/(\d+)', photo_href).group(1)
 
-    # title and thumbnail 
-    if img_ele is not None:
-        #title = img_ele.attrib["alt"]
-
-        photo_thumbnail_href = img_ele.attrib["src"]
-        # save the photo thumbnail to disk
-        if config.USE_LOCAL_THUMBNAIL:
-            photo_thumbnail_local = photo_id + '.jpg'
-            if not photo_thumbnail_local in  thumbnails_list:
-                #time.sleep(random.randint(5, 10) / 10)  
-                photo_thumbnail_local = utils.save_photo_thumbnail(photo_thumbnail_href, thumbnails_dir )
+    # save the photo thumbnail to disk
+    if config.USE_LOCAL_THUMBNAIL:
+        photo_thumbnail_local = photo_id + '.jpg'
+        if not photo_thumbnail_local in  thumbnails_list:
+            #time.sleep(random.randint(5, 10) / 10)  
+            photo_thumbnail_local = utils.save_photo_thumbnail(photo_thumbnail_href, thumbnails_dir )
 
     # open each photo page to get photo statistics
     id = ''
-    #galleries_list = []
     order = index + 1      
 
     driver.get(photo_href)   
@@ -214,11 +204,11 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
     if len(votes_count) > 0:
         votes_count = votes_count[0].replace('people liked this photo', '')
         photo_stats.votes_count = utils.convert_string_num_to_int(votes_count)
-
+    
+    # category
     index_category = info.index('Category:') if 'Category:' in info else -1
     index_featured = info.index('Featured in these Galleries') if 'Featured in these Galleries' in info else -1
-    if index_category != -1 and index_featured != -1:
-        # category
+    if index_category != -1 and index_featured != -1:        
         photo_stats.category = info[index_category + 1] 
 
         # string of tags
@@ -268,7 +258,9 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
         # then their href attributes
         for ele in href_eles:
             href = ele.get_attribute('href')
-            if href:
+            if 'null' in href or 'galleries' not in href:
+                continue
+            if not href in hrefs:
                 hrefs.append(href)
         # then remove the duplicates, and filter out unwanted hrefs, ie. not containing the text 'galleries'
         galleries = [] 
@@ -281,7 +273,7 @@ def process_a_photo_element(driver, index, items_count, photo_link_ele, img_ele,
 
 #---------------------------------------------------------------
 #@utils.profile
-def get_photos_list(driver, user_inputs, output_lists):
+def get_photos_list(driver, user_inputs, output_lists, photo_group_href):
     """Return the list of photos from a given user.
 
     Process: 
@@ -297,48 +289,52 @@ def get_photos_list(driver, user_inputs, output_lists):
             user_inputs.user_name,  user_inputs.db_path = '', ''
         return [], message
 
-    hide_banners(driver)
-    time.sleep(2)
-    # We intend to scroll down an indeterminate number of times until the end is reached
-    # In order to have a realistic progress bar, we need to give an estimate of the number of scrolls needed
-    estimate_scrolls_needed = 3  #default value, just in case
-    photos_count  = 1
-    photos_count_ele = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="content"]/div[2]/div/ul/li[1]/a/span')  
-    
-    if photos_count_ele is not None:
-        try:
-            photos_count = int(photos_count_ele.text.replace('.', '').replace(',', ''))
-        except:
-            photos_count = 0
-        estimate_scrolls_needed =  math.floor( photos_count / config.PHOTOS_PER_PAGE) +1
-
-    webtools.scroll_to_end_by_class_name(driver, 'photo_link', photos_count)
-    
+    driver.get(photo_group_href)
     time_out = 30
     try:
-        WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'finished')))
-        innerHTML = driver.execute_script("return document.body.innerHTML")  
-        time.sleep(1)
-    except TimeoutException :
-        return [], f"Error loading user {user_inputs.user_name}'s photo page"
+        photo_list_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'photos_list')))
+    except TimeoutException:
+        printR(f'Timed out {time_out}s while loading photos container. Please try again later')
+        return
+    # we request 3 specific photo groups, public, unlisted, limited access. Some links may not exist for some users. If this is the case, we just silently forget about the group  
+    if driver.current_url != photo_group_href:
+        return [], ''
 
-    page = html.document_fromstring(innerHTML)
+    time_out= 30
 
-    #extract photo title and href (alt tag) using lxml and regex
-    photo_link_eles = page.xpath("//a[@class='photo_link ']")  
-    img_eles = page.xpath("//img[@data-src='']")
-    items_count = len(photo_link_eles)
-    if items_count == 0:
-        return [], f'User {user_inputs.user_name} does not upload any photo'
+    # get photos count
+    photos_count = 0
+    try:
+        total_count_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'total_count')))
+        total_count = total_count_ele.text.split(' ')[0].strip()
+        if total_count.isnumeric():
+            photos_count = int(total_count)
+    except TimeoutException:
+        printR(f'Timed out {time_out}s while loading photos. Please try again later')
+        return
+    webtools.scroll_to_end_by_class_name(driver, 'photo_item', photos_count)
+   
+    # get container element from it we can extract all photo thumbnails and photo links
+    try:
+        photo_list_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'photos_list')))
+    except TimeoutException:
+        printR(f'Timed out {time_out}s while loading photos container. Please try again later')
+        return
 
-    utils.update_progress(0, f'    - Extracting 0/{items_count} photos:')
+    img_eles = webtools.check_and_get_all_elements_by_tag_name(photo_list_ele, 'img')
+    a_eles = webtools.check_and_get_all_elements_by_tag_name(photo_list_ele, 'a')
+    photos_thumbnail_href = [ele.get_attribute('src') for ele in img_eles]
+    photos_href =  [ele.get_attribute('href') for ele in a_eles]
+    if False: #DEBUG:
+        assert len(photos_thumbnail_href) == photos_count and len(photos_href) == photos_count 
 
-    # Create the photos list
-    for i in range(items_count): 
-        this_photo = process_a_photo_element(driver, i, items_count, photo_link_eles[i], img_eles[i], 
+    for i in range(photos_count): 
+        utils.update_progress((i + 1) / (photos_count), f'    - Extracting  {i + 1}/{photos_count} photos:')
+        this_photo = process_a_photo_element(driver, i, photos_count, photos_href[i], photos_thumbnail_href[i], 
                                           user_inputs.user_name, user_inputs.password, output_lists.thumbnails_list, output_lists.thumbnails_dir)
         photos_list.append(this_photo)
-    return photos_list, ''
+
+    return  photos_list, ''
 
 #---------------------------------------------------------------
 def get_followers_list(driver, user_inputs, output_lists):
@@ -561,7 +557,7 @@ def does_this_user_follow_me(driver, user_inputs):
             except NoSuchElementException:
                 continue  #ignore if follower name not found
         users_done = current_index
-    return False, "Not following"
+    return False, "Not following you"
 
 #---------------------------------------------------------------
 # This is a time-consuming process for users that have thousands of following user. This option is taken off from the main menu. 
@@ -980,8 +976,8 @@ def like_n_photos_from_user(driver, target_user_name, number_of_photos_to_be_lik
 
     success, message = webtools.open_user_home_page(driver, target_user_name)
     if not success:
-        if message.find('Error reading') != -1:
-            user_inputs.target_user_name = ''
+        #if message.find('Error reading') != -1:
+        #    user_inputs.target_user_name = ''
         return False, message
     time.sleep(2)
 
@@ -1094,7 +1090,7 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
                 photo_link = icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link')
             except Exception as e:
                 logger.info(f'Exception: {e}')
-                printY('   The page structure of this photo gallery has changed. The process will stop.')
+                printY('   Failed to get the photo link. Please try again.')
                 # we set this to end the outer loop, while:
                 photos_done = number_of_photos_to_be_liked
                 break
@@ -1435,20 +1431,20 @@ def show_menu(user_inputs, special_message=''):
         return 
 
     # password is optional:
-    #  - 2  Get user photos list: if logged in, we can get the list of galleries that featured your photos
-    #  - 5  Get a list of users who liked a given photo: if logged in, we can get the following status to each user in the list
     if (sel == 2  or sel == 5) and user_inputs.password == '':
         if sel == 2:
-            ans = input('Optional: logged-in user can see the galleries featuring their photos.\nProceed (y/n)?')
+            printY('Optional: logged-in user can see the galleries featuring their photos.')
         else:
-            ans = input('Optional: logged-in user can get the following status of each user.\nProceed (y/n)?')
-        if ans == 'n':
-            user_inputs.choice = str(sel)
-            return 
-        else:
-            user_inputs.password, abort =  utils.validate_non_empty_input('Enter password >', user_inputs)
-            if abort:
-                return
+            printY('Optional: logged-in user can get the following status of each user.')
+
+        printY('Type in your password or just press ENTER to ignore', write_log=False)
+        expecting_password = utils.win_getpass(prompt='Password >')
+        if expecting_password == 'q' or expecting_password == 'r': #change of mind: quit or reset
+            user_inputs.choice = expecting_password
+            return True 
+        if len(expecting_password) > 0:
+            user_inputs.password = expecting_password
+
             
     if sel <= 6:
         user_inputs.choice = str(sel)
@@ -1781,78 +1777,85 @@ def handle_option_2(driver, user_inputs, output_lists):
         login(driver, user_inputs)
         if not logged_in:
             printR('     Error logging in. Featured galleries will not be extracted.')
-
-    # do the main task
     hide_banners(driver)
-    output_lists.photos, error_message = get_photos_list(driver, user_inputs, output_lists)
-    if error_message:
-        printR('   - ' + error_message)
-        if len(output_lists.photos) == 0:
-            return
+  
+    # do the main task
 
-    # write result to csv, convert it to html, show html in browser
-    if output_lists.photos is not None and len(output_lists.photos) > 0:
-        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.csv')    
-        # write photos list to csv
-        if not utils.write_photos_list_to_csv(user_inputs.user_name, output_lists.photos, csv_file):
-            printR(f'   Error writing the output file\n:{csv_file}')
-            return
+    # 1. unlisted photos
+    print('    - Getting Unlisted photos ...')
+    output_lists.photos_unlisted, csv_unlisted_file, unlisted_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+                'https://web.500px.com/manage/unlisted', date_string, apiless.CSV_type.photos_unlisted, config.USE_LOCAL_THUMBNAIL)
 
-        # create a photo summary
-        desc_dict = {'Option 2'     : '<b>Get photos list', 
-                     'Date processed':  time_start.strftime("%b %d %Y"),
-                     'User'          : user_inputs.user_name, 
-                     'Data file'     : os.path.basename(csv_file), 
-                     'Title'         : f'Photos list ({len(output_lists.photos)})'}
+    # 2. limited access photos
+    print('    - Getting Unlimitted Access photos ...')
+    output_lists.photos_limited_access, csv_limited_access_file, limited_access_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+                 'https://web.500px.com/manage/limited_access', date_string, apiless.CSV_type.photos_limited_access, config.USE_LOCAL_THUMBNAIL)
+
+    # 2. public photos
+    print('    - Getting Public photos ...')    
+    output_lists.photos, csv_public_photos_file, public_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+                 'https://web.500px.com/manage/public', date_string, apiless.CSV_type.photos_public, config.USE_LOCAL_THUMBNAIL)
+
+    # 4. create a description table
+    desc_dict = {'Option 2'     : '<b>Get photos list', 
+                 'Date processed':  time_start.strftime("%b %d %Y"),
+                 'User'          : user_inputs.user_name, 
+                 'Data file'     : os.path.basename(csv_public_photos_file), 
+                 'Title'         : f'Photos list ({len(output_lists.photos)})'}
         
-        # create a top-photos list
-        # create dataframe from list of photo objects
-        df = pd.DataFrame.from_records([item.to_dict() for item in output_lists.photos])           
-        # ref: No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments, Galleries, Highest Pulse,Rating, Date, Category, Featured In Galleries, Tags      
-        # get some statistics:
-        total_views = df['Views'].sum()
-        total_likes = df['Likes'].sum()
-        total_comments = df['Comments'].sum()
-        last_upload_date   = df['Date'].iloc[[0]].values[0]
-        first_upload_date = df['Date'].iloc[[-1]].values[0]                
-        try:
-            last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
-            first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
-            days = (last_date_obj -first_date_obj).days
-            last_date  = last_date_obj.strftime("%b %d %Y")
-            first_date = first_date_obj.strftime("%b %d %Y")
-        except:
-            printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
-            last_date = last_upload_date
-            first_date = first_upload_date
-            days = ''
+    # 5. create a top-photos list
+    # create dataframe from list of photo objects
+    df = pd.DataFrame.from_records([item.to_dict() for item in output_lists.photos]) 
+    # get indexes of top photos 
+    maxPulse_index      = df['Highest Pulse'].astype(float).argmax()
+    maxViews_index      = df['Views'].astype(int).argmax()
+    maxLikes_index      = df['Likes'].astype(int).argmax()
+    maxComments_index   = df['Comments'].astype(int).argmax()
+    max_galleries_index = df['Galleries'].astype(int).argmax()
+    # create the top-photos dataframe, merge duplicate photos 
+    df2 = df.iloc[[maxPulse_index, maxViews_index, maxLikes_index, maxComments_index, max_galleries_index ],:]
+    df3 = utils.merge_duplicate_top_photos(df2)
+    # write top photos dataframe to csv file
+    csv_top_photos_file =  os.path.join(config.OUTPUT_PATH, f'{user_inputs.user_name}_top_photos.csv')
+    df3.to_csv(csv_top_photos_file, encoding='utf-16', index = False)        
+    # Convert the top-photos csv to a html table
+    top_photos_html_table = htmltools.CSV_top_photos_list_to_HTML_table(csv_top_photos_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                    ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating', 'Date', 'Category', 'Tags'])    
 
-        stats_dict = {'Last Upload Date': last_date, 'First Upload Date': first_date, 'Duration': f'{days} days', 
-                      'Total Views' : total_views, 'Total Likes': total_likes, 'Total Comments': total_comments}
+    # 6. create  statistics table
+    # ref: No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments, Galleries, Highest Pulse,Rating, Date, Category, Featured In Galleries, Tags      
+    # get some statistics:
+    total_views = df['Views'].sum()
+    total_likes = df['Likes'].sum()
+    total_comments = df['Comments'].sum()
+    last_upload_date   = df['Date'].iloc[[0]].values[0]
+    first_upload_date = df['Date'].iloc[[-1]].values[0]                
+    try:
+        last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
+        first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
+        days = (last_date_obj -first_date_obj).days
+        last_date  = last_date_obj.strftime("%b %d %Y")
+        first_date = first_date_obj.strftime("%b %d %Y")
+    except:
+        printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
+        last_date = last_upload_date
+        first_date = first_upload_date
+        days = ''
+    stats_dict = {'Last Upload Date': last_date, 'First Upload Date': first_date, 'Duration': f'{days} days', 
+                    'Total Views' : total_views, 'Total Likes': total_likes, 'Total Comments': total_comments}
 
-        # Create a html table for the top photos
-        # get indexes of top photos 
-        maxPulse_index      = df['Highest Pulse'].astype(float).argmax()
-        maxViews_index      = df['Views'].astype(int).argmax()
-        maxLikes_index      = df['Likes'].astype(int).argmax()
-        maxComments_index   = df['Comments'].astype(int).argmax()
-        max_galleries_index = df['Galleries'].astype(int).argmax()
-        # create the top-photos dataframe, merge duplicate photos 
-        df2 = df.iloc[[maxPulse_index, maxViews_index, maxLikes_index, maxComments_index, max_galleries_index ],:]
-        df3 = utils.merge_duplicate_top_photos(df2)
-        # write top photos dataframe to csv file
-        top_photos_csv_file =  os.path.join(config.OUTPUT_PATH, f'{user_inputs.user_name}_top_photos.csv')
-        df3.to_csv(top_photos_csv_file, encoding='utf-16', index = False)        
-        # Convert the top-photos csv to a html table
-        top_photos_html_table = htmltools.CSV_top_photos_list_to_HTML_table(top_photos_csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                        ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating', 'Date', 'Category', 'Tags'])
 
-        # write result html: title, summary, statistic table, top-photos table, and all photos table
-        html_file = htmltools.CSV_photos_list_to_HTML(csv_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                            ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'], 
-                            desc_dict = desc_dict, stats_dict = stats_dict,  top_photos_html_table = top_photos_html_table)
-        utils.show_html_file(html_file)  
-        printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
+
+    # write result html: title, summary, statistic table, top-photos table, and all photos tables
+    html_file = htmltools.write_photos_tables_to_HTML(  csv_public_photos_file, apiless.CSV_type.photos_public,
+                                                    desc_dict = desc_dict, 
+                                                    stats_dict = stats_dict,  
+                                                    top_photos_html_table = top_photos_html_table,
+                                                    unlisted_photos_table= unlisted_photos_table,
+                                                    limited_access_photos_table = limited_access_photos_table,
+                                                    public_photos_table= public_photos_table)
+    utils.show_html_file(html_file)  
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
 def handle_option_3(driver, user_inputs, output_lists):
@@ -2486,7 +2489,7 @@ def handle_option_14(driver, user_inputs, output_lists):
     db.create_if_not_exists_followers_and_followings_tables(db_connection)
     db.create_if_not_exists_notifications_tables(db_connection)
     
-    types_to_process = [apiless.CSV_type.photos, apiless.CSV_type.notifications, apiless.CSV_type.followers, apiless.CSV_type.followings]
+    types_to_process = [apiless.CSV_type.photos_public, apiless.CSV_type.notifications, apiless.CSV_type.followers, apiless.CSV_type.followings]
     records_changed_sofar = 0
     for csv_type in types_to_process:
         records_changed_sofar, recent_changes, csv_file =  db.insert_latest_csv_data_to_database(db_connection, 
@@ -2776,6 +2779,34 @@ def process_unique_users(df_notif, user_name, output_dir):
         df_all_users = utils.CSV_file_to_dataframe(all_users_file)
         df_merge, stats_list = utils.merge_relationships(df_unique, df_all_users)
         return df_merge, stats_list        
+
+#--------------------------------------------------------------
+def process_photo_group(driver, user_inputs, output_lists, group_href, date_string, csv_type, use_local_thumbnails = True ):
+    """ Given the link to a photo group page(public, unlisted or limited access):
+            1) Extract all the photos on the page, scrolling down if needed, create a list of photo objects
+            2) Save photos list to a csv file 
+            3) Convert the photos list to an html table 
+        Return photos list, csv_file_name, html_table_string """
+
+    photos_list= []
+    photos_html_table_string = '' 
+    csv_file_name = ''
+    
+    photos_list, error_message = get_photos_list(driver, user_inputs, output_lists, group_href)
+    if error_message:
+        printR('   - ' + error_message)
+    else:
+        if photos_list and len(photos_list) > 0:
+            csv_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(photos_list)}_{csv_type.name}_{date_string}.csv')    
+            # write photos list to csv
+            if not utils.write_photos_list_to_csv(user_inputs.user_name, photos_list, csv_file_name):
+                printR(f'   Error writing the output file\n:{csv_file_name}')
+                csv_file_name = ''
+            else:
+                photos_html_table_string = htmltools.CSV_photos_list_to_HTML_table(csv_file_name, csv_type, output_lists, use_local_thumbnails, 
+                                ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'] )
+    return photos_list, csv_file_name, photos_html_table_string
+
 
 #--------------------------------------------------------------
 def main():
