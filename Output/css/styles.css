@@ -27,12 +27,10 @@ th {
 	padding: 5px;
 }
 
-table#main_table {
-	/*width: 100%;*/
-	/*min-width: 800px;*/
+ table#main_table {
 	table-layout:fixed;  
 	text-align:center;
-}
+} 
 
 table#stats {
     display: inline-block;
@@ -51,6 +49,10 @@ table#top_photos{
 	table-layout:fixed;  
 	text-align:center;
  	margin-top:0px;
+}
+table.main {
+	table-layout:fixed;  
+	text-align:center;
 }
 
 img {
