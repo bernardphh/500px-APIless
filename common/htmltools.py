@@ -14,34 +14,40 @@ HEAD_STRING = ('<head>'
 	               '\n\t<script  type="text/javascript" charset="utf8" src="DataTables/datatables.js"></script>	'	
 	               '\n\t<script>'
                    '\n\t    $(document).ready(function() {'
-			       '\n\t    $("#main_table").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], '
-				   '\n\t	   	  	                     "pageLength": 25} );'
+			       '\n\t    $("#main_table").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], "pageLength": 10} );'
+			       '\n\t    $("#photos_public").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], "pageLength": 10} );'
+			       '\n\t    $("#photos_unlisted").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], "pageLength": 10} );'
+			       '\n\t    $("#photos_limited_access").DataTable( {"lengthMenu": [[10, 25, 50, 100, 500, 1000, -1], [10, 25, 50, 100, 500, 1000, "All"]], "pageLength": 10} );'
 			       '\n\t       } );'
                    '\n\t</script></head>\n')
 
 # associate table width with csv file type
-TABLE_WIDTHS = {'photos':       '100%',
-                'notifications':'1000px',
-                'unique_users': '1100px',
-                'like_actors':  '700px',
-                'followers':    '500px',
-                'followings':   '500px',
-                'all_users':    '800px',
-                'reciprocal':   '800px',
-                'not_follow':   '700px',
-                'following':    '700px'}
+TABLE_WIDTHS = {'photos_public'         : '100%',
+                'photos_unlisted'       : '100%',
+                'photos_limited_access' : '100%',
+                'notifications'         : '1100px',
+                'unique_users'          : '1200px',
+                'like_actors'           : '700px',
+                'followers'             : '500px',
+                'followings'            : '500px',
+                'all_users'             : '800px',
+                'reciprocal'            : '800px',
+                'not_follow'            : '700px',
+                'following'             : '700px'}
 
 # associate table caption with csv file type
-TABLE_CAPTION = {'photos':      'All Photos',
-                'notifications':'Notifications',
-                'unique_users': 'Unique users',
-                'like_actors':  'Users',
-                'followers':    'Users',
-                'followings':   'Users',
-                'all_users':    'Users',
-                'reciprocal':   'Users',
-                'not_follow':   'Users',
-                'following':    'Users'}
+TABLE_CAPTION = {'photos_public'        : 'Public Photos',
+                 'photos_unlisted'      : 'Unlisted Photos',
+                 'photos_limited_access': 'Limited Access Photos',
+                 'notifications'        : 'Notifications',
+                 'unique_users'         : 'Unique users',
+                 'like_actors'          : 'Users',
+                 'followers'            : 'Users',
+                 'followings'           : 'Users',
+                 'all_users'            : 'Users',
+                 'reciprocal'           : 'Users',
+                 'not_follow'           : 'Users',
+                 'following'            : 'Users'}
 
 # associate column width with column header text
 COL_WIDTHS = {'Actions Count':          '80px',
@@ -77,6 +83,9 @@ TD_BACKGROUND_COLOR = {'Recoprocal': 'lightgreen',
 def dict_to_html_table (dict, table_id = '', table_width = '', table_caption='Description', csv_file_type = apiless.CSV_type.not_defined, start_indent=1):
     """ Write a given dictionay to a html table, with option to assign a named class to the key cell, when key in dict matches with key_classes"""
         
+    if not dict  or len(dict) == 0:
+        return ''
+
     tab1 = '\n' + '\t'* start_indent
     tab2 = tab1 + '\t'
 
@@ -212,8 +221,14 @@ def CSV_top_photos_list_to_HTML_table(csv_file_name, output_lists, use_local_thu
         return top_photos_html_table_string
 
 #--------------------------------------------------------------- 
-
-def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = True, ignore_columns = None, desc_dict = {}, stats_dict = {}, top_photos_html_table = '', start_indent=1):
+def write_photos_tables_to_HTML(csv_file_name, 
+                            csv_type,
+                            desc_dict = {}, 
+                            stats_dict = {}, 
+                            top_photos_html_table = '',
+                            unlisted_photos_table = '', 
+                            limited_access_photos_table = '',
+                            public_photos_table = ''):
     """Create a html file from a given photos list csv  file. Save it to disk and return the file name.
 
     Save the html file using the same name but with extension '.html'
@@ -221,6 +236,71 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     Hide the columns specified in the given IGNORE_COLUMNS LIST. The data in these columns are still being used to form the web link tag <a href=...>
     """
     global HEAD_STRING, TABLE_WIDTHS, TABLE_CAPTION, COL_WIDTHS 
+
+
+
+    # file name and extension check
+    file_path, file_extension = os.path.splitext(csv_file_name)
+    if file_extension != ".csv":
+        return None
+
+    html_file = file_path + '.html'
+    main_table_width = TABLE_WIDTHS[f'{csv_type.name}'] 
+
+    # get the title out of the dictionary
+    title_string = ''
+    if 'Title' in desc_dict:
+        title_string = f'<h2>{desc_dict["Title"]}</h2>' 
+        desc_dict.pop('Title')
+
+    # render summary html table
+    description_html_table = ''
+    if desc_dict != '' and len(desc_dict)> 0:
+        description_html_table = dict_to_html_table(desc_dict, table_id = 'description', table_width = main_table_width, start_indent=2)
+
+   # render statistic html table, the info could be a dict or a list
+    stats_html_table = ''
+    stats_html_table = dict_to_html_table(stats_dict, table_id = 'overview', table_caption='Overview', start_indent=2 )  
+
+    html_string = ('<html>\n'
+                    f'{HEAD_STRING}\n'
+                    '<body>'
+                        f'\n\t{title_string}\n'
+
+                        f'\n\t<div class="float_left" style="width:60%">'
+                        f'{description_html_table}</div>\n\n'
+                          
+                        f'\n\t<div class="float_right">'
+                        f'{stats_html_table}</div>\n\n'
+
+                        f'{top_photos_html_table}\n\n'
+
+                        '\t\t<p style="margin-bottom:3cm;"></p>\n'
+
+                        f'{public_photos_table}\n\n'   
+                        '\t\t<p style="margin-bottom:3cm;"></p>\n'
+
+                        f'{unlisted_photos_table}\n\n'
+                        '\t\t<p style="margin-bottom:3cm;"></p>\n'
+
+                        f'{limited_access_photos_table}\n\n'
+                    f'\n\t</body> </html>')
+        
+    #write html file 
+    with open(html_file, 'wb') as htmlfile:
+        htmlfile.write(html_string.encode('utf-16'))
+
+    return html_file
+
+#--------------------------------------------------------------- 
+
+def CSV_photos_list_to_HTML_table(csv_file_name, csv_type, output_lists, use_local_thumbnails = True, ignore_columns = None, start_indent=1):
+    """ Given a csv file containing a list of photos, create the html table and return it as a string.
+
+    We use the csv_type.name for table id, and for fetching the preset table caption and table width
+    Hide the columns specified in the given IGNORE_COLUMNS LIST. The data in these columns are still being used to form the web link tag <a href=...>
+    """
+    global TABLE_WIDTHS, TABLE_CAPTION
 
     tab1 = '\t'* start_indent
     tab2 = '\n' + tab1 + '\t'
@@ -235,8 +315,6 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     if ignore_columns is None:
         ignore_columns = []
 
-    table_id = 'main_table'
-
     CUSTOMED_COLUMN_WIDTHS = """
         <colgroup>
 		    <col style="width:4%">    
@@ -244,8 +322,8 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
 		    <col span= "5" style="width:6%" >
 		    <col style="width:5%" >
 		    <col style="width:8%" >
-		    <col style="width:14%">	
-		    <col style="width:auto">				
+		    <col style="width:15%">	
+		    <col style="width:23%">				
 	    </colgroup> """
 
 # file name and extension check
@@ -256,32 +334,12 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
     html_file = file_path + '.html'
     avatars_folder    = os.path.basename(os.path.normpath(output_lists.avatars_dir))
     thumbnails_folder = os.path.basename(os.path.normpath(output_lists.thumbnails_dir))
-    main_table_width = TABLE_WIDTHS['photos'] 
-    main_table_caption = TABLE_CAPTION['photos'] 
-
-    # get the title out of the dictionary
-    title_string =f'<h2>{desc_dict["Title"]}</h2>'
-    desc_dict.pop('Title')
-
-    # render summary html table
-    description_html_table = ''
-    if desc_dict and len(desc_dict)> 0:
-        description_html_table = dict_to_html_table(desc_dict, table_id = 'description', table_width = main_table_width, start_indent=2)
-
-   # render statistic html table, the info could be a dict or a list
-    stats_html_table = ''
-    stats_html_table = dict_to_html_table(stats_dict, table_id = 'overview', table_caption='Overview', start_indent=2 )  
+    table_width = TABLE_WIDTHS[f'{csv_type.name}'] 
+    table_caption = TABLE_CAPTION[f'{csv_type.name}'] 
 
     with open(csv_file_name, newline='', encoding='utf-16') as csvfile:
         reader = csv.DictReader(row.replace('\0', '') for row in csvfile)
         headers = reader.fieldnames
-
-        # Ref:
-        # Columns    : 0   1            2   3            4     5               6                7      8      9         10         11             12      13    14        15                     16
-        # Photo List : No, Author Name, ID, Photo Title, Href, Thumbnail Href, Thumbnail Local, Views, Likes, Comments, Galleries, Highest Pulse, Rating, Date, Category, Featured In Galleries, Tags
-
-        # write headers and assign sort method for appropriate columns   
-        # each header cell has 2 DIVs: the left DIV for the header name, the right DIV for sort direction arrows     
         ignore_columns_count = 0
         header_string = f'{tab2}<thead>{tab3}<tr>'
 
@@ -290,9 +348,9 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
                 ignore_columns_count += 1
                 continue  
             # break long word(s) so that we can minimize columns widths
-            if   header == 'Comments':        header = 'Com-<br>ments'
-            elif header == 'Highest Pulse': header = 'Highest<br>Pulse'    
-            elif header == 'Galleries':       header = 'Gal-<br>leries'    
+            if   header == 'Comments'       : header = 'Com-<br>ments'
+            elif header == 'Highest Pulse'  : header = 'Highest<br>Pulse'    
+            elif header == 'Galleries'      : header = 'Gal-<br>leries'    
             header_string += f'''{tab4}<th>{header}</th>'''
   
         header_string += f'{tab3}</tr>{tab2}</thead>'
@@ -350,34 +408,16 @@ def CSV_photos_list_to_HTML(csv_file_name, output_lists, use_local_thumbnails = 
 
             row_string += f'{tab3}</tr>\n'
         row_string += f'{tab2}</tbody>\n'
-
-        html_string = ('<html>\n'
-                       f'{HEAD_STRING}\n'
-                       '<body>'
-                          f'{tab1}{title_string}\n'
-
-                          f'{tab1}<div class="float_left" style="width:60%">'
-                          f'{description_html_table}</div>\n\n'
-                          
-                          f'{tab1}<div class="float_right">'
-                          f'{stats_html_table}</div>\n\n'
-
-                          f'{top_photos_html_table}\n\n'
-
-                          f'{tab1}<table id="{table_id}"style="width:{main_table_width}">'
-                             f'{tab2}<caption>Photos</caption>'
+       # table_id_string = f'id="{table_id}"' if table_id != '' else ''
+        table_string = ( f'{tab1}<table id="{csv_type.name}" class="main" style="width:{table_width}">'
+                             f'{tab2}<caption>{table_caption} ({rows_count})</caption>'
                              f'{tab3}{CUSTOMED_COLUMN_WIDTHS}'
                              f'{tab3}{header_string}' 
                              f'{tab3}{row_string}' 
-                          f'{tab2}</table>'
-                       f'{tab1}</body> </html>')
+                          f'{tab2}</table>' )
         
         utils.update_progress(1, f'    - Writing items to html {rows_count}/{rows_count} ...')  
-        #write html file 
-        with open(html_file, 'wb') as htmlfile:
-            htmlfile.write(html_string.encode('utf-16'))
-
-    return html_file
+    return table_string
 
 #--------------------------------------------------------------- 
 def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails = True, ignore_columns = None, 
@@ -544,7 +584,7 @@ def CSV_to_HTML(csv_file_name, csv_file_type, output_lists, use_local_thumbnails
                           f'{desc_and_stats_box}'
                           f'{tab1}<div class="float_left" style="width:{main_table_width}">'
                           f'{tab2}<table id="{table_id}">'
-                              f'{tab3}<caption>{main_table_caption}</caption>'
+                              f'{tab3}<caption>{main_table_caption} ({rows_count})</caption>'
                               f'{tab3}{header_string}'
                               f'{tab3}{row_string}'
                           f'{tab2}</table>{tab1}</div>'

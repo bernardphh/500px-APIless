@@ -84,8 +84,8 @@ def create_if_not_exists_notifications_tables(db_connection):
                                      "Photo Link" text,
                                      PRIMARY KEY ("User Name", "Content", "Photo Link"))''')
     db_connection.commit()
-    # note: time_stamp should be included in primary key but it was taken out. 
-    # It is because after about a year time, buggy or not, the 500px server stops updating it.
+    # Jun 16 2020: 500px masks out the exact date. The absolute date that we are used to have now became relative (such as 'a year ago'). 
+    # To keep the integrity of the database, we are force to take out the Time stamp out of primary keys.
 
 #---------------------------------------------------------------
 def insert_photo_to_photo_table(db_connection, photo_info):
@@ -193,7 +193,7 @@ def insert_latest_csv_data_to_database(db_connection, csv_dir, records_changed_s
         df = utils.CSV_file_to_dataframe(csv_file)
         data_list = df.values.tolist()
         for item in data_list:
-            if csv_file_type == apiless.CSV_type.photos:
+            if csv_file_type == apiless.CSV_type.photos_public:
                 insert_photo_to_photo_table(db_connection, tuple(item))
             elif csv_file_type == apiless.CSV_type.followers or csv_file_type == apiless.CSV_type.followings:
                 insert_user_to_table(db_connection, tuple(item), csv_file_type.name)

@@ -164,8 +164,8 @@ def write_photos_list_to_csv(user_name, list_of_photos, csv_file_name):
                                 'Likes': str(a_photo.stats.votes_count), 'Comments': str(a_photo.stats.comments_count), 'Galleries': str(a_photo.stats.collections_count), \
                                 'Highest Pulse': str(a_photo.stats.highest_pulse), 'Rating': str(a_photo.stats.rating), 'Date': str(a_photo.stats.upload_date), \
                                 'Category': a_photo.stats.category, 'Featured In Galleries': str(a_photo.galleries), 'Tags': a_photo.stats.tags}) 
-            print(f"    List of {user_name}\'s {len(list_of_photos)} photo(s) is saved at:")
-            printG(f"   ./Output/{os.path.basename(csv_file_name)}")
+            print(f"    - File saved at:")
+            printG(f"   - ./Output/{os.path.basename(csv_file_name)}")
         return True
 
     except PermissionError:

@@ -299,7 +299,7 @@ def start_chrome_browser(options_list, headless_mode, desired_capab= None, my_qu
         chrome_options.add_argument("--headless") 
     else:
         printY('DO NOT INTERACT WITH THE CHROME BROWSER. IT IS CONTROLLED BY THE SCRIPT AND  WILL BE CLOSED WHEN THE TASK FINISHES')
-        chrome_options.add_argument("--window-size=800,1000")
+        #chrome_options.add_argument("--window-size=900,1200")
 
     if desired_capab:
         driver = webdriver.Chrome(options=chrome_options, desired_capabilities= desired_capab)

@@ -231,16 +231,21 @@ class OutputData():
     """ Represent all the output lists and data"""
 
     def __init__(self, output_dir = '', avatars_dir = '', thumbnails_dir = '', 
-                 json_data = None, photos = None,notifications = None, unique_notificators = None, followers_list = None, followings_list = None, like_actioners_list= None,  thumbnails_list=None):
-        self.json_data = [] if json_data is None else json_data      
-        self.photos = [] if photos is None else photos      
-        self.notifications = [] if notifications is None else notifications      
-        self.unique_notificators = [] if unique_notificators is None else unique_notificators      
-        self.followers_list = [] if followers_list is None else followers_list      
-        self.followings_list = [] if followings_list is None else followings_list     
-        self.like_actioners_list = [] if like_actioners_list is None else like_actioners_list     
-        #self.avatars_list = [] if avatars_list is None else avatars_list     
-        #self.thumbnails_list = [] if thumbnails_list is None else thumbnails_list     
+                 json_data = None, photos = None, photos_unlisted = None, photos_limit_access = None,
+                 notifications = None, unique_notificators = None, 
+                 followers_list = None, followings_list = None, like_actioners_list= None,  thumbnails_list=None):
+        self.json_data             = [] if json_data           is None else json_data      
+        self.photos                = [] if photos              is None else photos      
+        self.photos_unlisted       = [] if photos_unlisted     is None else photos_unlisted      
+        self.photos_limited_access = [] if photos_limit_access is None else photos_limit_access     
+        
+        self.notifications         = [] if notifications       is None else notifications      
+        self.unique_notificators   = [] if unique_notificators is None else unique_notificators      
+        
+        self.followers_list        = [] if followers_list      is None else followers_list      
+        self.followings_list       = [] if followings_list     is None else followings_list     
+        self.like_actioners_list   = [] if like_actioners_list is None else like_actioners_list     
+        
         self.stats = UserStats()  
         
         output_dir =  config.OUTPUT_PATH 
@@ -259,7 +264,9 @@ class OutputData():
  
     def Reset(self):
         self.json_data = None       
-        self.photos =None        
+        self.photos = None        
+        self.photos_unlisted = None        
+        self.photos_limit_access = None        
         self.notifications = None   
         self.unique_notificators = None
         self.followers_list = None  
@@ -271,16 +278,22 @@ class OutputData():
 class CSV_type(Enum):
     """ Enum representing 10 types of output list"""
     not_defined              = 0
-    photos                   = 1         # your photos     
-    notifications            = 2         # notification of liked, comment, added to gallery
-    unique_users             = 3         # Unique users in a notifications list, with the count of their appearances in the list 
-    like_actors              = 4         # users that liked one specific photos of yours
+    photos_public            = 1         # accessible everywhere, including on Profile
+    photos_unlisted          = 2         # accessible everywhere, except on Profile 
+    photos_limited_access    = 3         # only visible to you, unless added to a Gallery
 
-    followers                = 5         # all your followers, regardless you are following them or not
-    followings               = 6         # all your followings, regardless they are following you back or not
+    notifications            = 4         # notification of liked, comment, added to gallery
+    unique_users             = 5         # Unique users in a notifications list, with the count of their appearances in the list 
+    like_actors              = 6         # users that liked one specific photos of yours
 
-    all_users                = 7         # combined your followers and your followings
-    reciprocal               = 8         # users who follow you and you follow them 
-    not_follow               = 9         # list of users that you do not follow, but they are following you
-    following                = 10        # list of users that you are following but they do not follow you
-    interactor               = 11        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other
+    followers                = 7         # all your followers, regardless you are following them or not
+    followings               = 8         # all your followings, regardless they are following you back or not
+
+    all_users                = 9         # combined your followers and your followings
+    reciprocal               = 10         # users who follow you and you follow them 
+    not_follow               = 11         # list of users that you do not follow, but they are following you
+    following                = 12        # list of users that you are following but they do not follow you
+    interactor               = 13        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other
+
+
+
