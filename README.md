@@ -130,6 +130,10 @@ Refer to the document [500px-APIless.docx] (https://github.com/bernardphh/500px-
 <p align="center"><kbd>
  <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/2.photos.png" width ="100%">
 </kbd></p>
+<br/>
+<p align="center"><kbd>
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/Snapshots/unlisted-limitedaccess.png" width ="100%">
+</kbd></p>
 <br/><br/><br/>
 
 
