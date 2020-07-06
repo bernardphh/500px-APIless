@@ -297,7 +297,7 @@ def get_photos_list(driver, user_inputs, output_lists, photo_group_href):
         printR(f'Timed out {time_out}s while loading photos container. Please try again later')
         return
     # we request 3 specific photo groups, public, unlisted, limited access. Some links may not exist for some users. If this is the case, we just silently forget about the group  
-    if driver.current_url != photo_group_href:
+    if driver.current_url.split('/')[-1] != photo_group_href.split('/')[-1]:
         return [], ''
 
     time_out= 30
@@ -1085,7 +1085,7 @@ def like_n_photos_on_current_page(driver, number_of_photos_to_be_liked, index_of
             webtools.hover_by_element(driver, icon) # not needed, but good to have a visual demonstration
  
             #intentional slowing down a bit to make it look more like human
-            time.sleep(random.randint(10, 15)/10)  
+            time.sleep(random.randint(15, 20)/10)  
             try:
                 photo_link = icon.find_element_by_xpath('../../../../..').find_element_by_class_name('photo_link')
             except Exception as e:
