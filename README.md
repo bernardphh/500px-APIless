@@ -45,10 +45,6 @@ The first 7 options are for data collection. The results of these tasks are save
 CSV files are used for statistical analysis, and for the automated processes. 
 HTML files are used for presentation, they are automatically shown after a data collection task is completed. 
 They are also served as a tool to sort, filter or search the data
-</br>
-</br>
-For a demo of data collection and analysis, see [main-html-page_demo.gif](https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif) or go to the end of the page.
-
 
 
 ### AUTOMATED PROCESSES <br/>
@@ -77,6 +73,9 @@ Notifications collected bit by bit over times are combined together into one  ta
   - The following status between you and each user <br/>
 <br/>
 <br/>
+
+For a demo of this data collection & analysis results, see [main-html-page_demo.gif](https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif), or go to the end of this page.
+
 
 ## ENVIRONMENT: ##
 
