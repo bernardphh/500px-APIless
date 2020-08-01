@@ -295,7 +295,7 @@ def get_photos_list(driver, user_inputs, output_lists, photo_group_href):
         photo_list_ele = WebDriverWait(driver, time_out).until(EC.presence_of_element_located((By.CLASS_NAME, 'photos_list')))
     except TimeoutException:
         printR(f'Timed out {time_out}s while loading photos container. Please try again later')
-        return
+        return [], ''
     # we request 3 specific photo groups, public, unlisted, limited access. Some links may not exist for some users. If this is the case, we just silently forget about the group  
     if driver.current_url.split('/')[-1] != photo_group_href.split('/')[-1]:
         return [], ''
@@ -902,7 +902,7 @@ def get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = T
  
     # make a meaningful output file name
     like_actioners_file_name = os.path.join(output_lists.output_dir, \
-        f"{user_inputs.user_name}_{likes_count}_likes_{photo_title.replace(' ', '-')}_{date_string}.csv")
+        f"{user_inputs.user_name}_{likes_count}_{apiless.CSV_type.like_actors.name}_{photo_title.replace(' ', '-')}_{date_string}.csv")
 
     if container is None:
         return [], {}
@@ -1422,7 +1422,18 @@ def show_menu(user_inputs, special_message=''):
     # user name is mandatory for all options, except playing the slideshow
     if user_inputs.user_name == '':
         user_inputs.user_name = input('Enter 500px user name >')
-        user_inputs.db_path =  config.OUTPUT_PATH +  r'\500px_' + user_inputs.user_name + '.db'
+        user_inputs.db_path = os.path.join(config.OUTPUT_PATH, f'500px_{user_inputs.user_name}.db')  
+        user_inputs.main_html_page = os.path.join(config.OUTPUT_PATH, f'500px-APIless_{user_inputs.user_name}.html')
+        user_inputs.js_file_name   = os.path.join(config.OUTPUT_PATH, rf'javascripts\dynamic_menu_{user_inputs.user_name}.js')
+
+        # generate the main html file that hosts all the result html files
+        if not os.path.isfile(user_inputs.main_html_page):
+            htmltools.create_main_html_page(user_inputs.main_html_page, user_inputs.user_name)
+
+        # generate a javascript file that handles the dynamic menu on the main html page 
+        #if not os.path.isfile(user_inputs.js_file_name):
+        utils.create_menu_items(user_inputs.user_name, config.OUTPUT_PATH, user_inputs.js_file_name)
+
     printG(f'Current user: {user_inputs.user_name}', write_log=False)
 
     # analysis for users' relationship and creating local database options need nothing else
@@ -1719,7 +1730,29 @@ def get_additional_user_inputs(user_inputs):
             else:
                 user_inputs.csv_file =user_inputs.csv_file.replace("\"", "").replace("\'", "") 
         return True
- 
+
+#--------------------------------------------------------------- 
+def show_result_in_browser(html_file_name):
+    """ Show the given html file on the global selenium's webdriver. Start a new one if it is not yet created """
+
+    global web_browser_for_result
+    if not web_browser_for_result:
+        web_browser_for_result = webtools.start_result_web_browser() 
+    
+    try:
+        web_browser_for_result.get(html_file_name)
+    except WebDriverException:
+        # if the browser has been closed, we will get 'chrome not reachable' exception. If it is the case, start a new one
+        web_browser_for_result = webtools.start_result_web_browser() 
+        web_browser_for_result.get(html_file_name)
+
+    # if the browser has been minimized, or is an inactive state, this trick will activate and bring the window to the front,
+    # but it will get exception if it is already maximized
+    try:
+        web_browser_for_result.maximize_window()
+    except WebDriverException:
+        pass
+
 #---------------------------------------------------------------
 def handle_option_1(driver, user_inputs, output_lists):
     """ Get user status."""
@@ -1727,7 +1760,7 @@ def handle_option_1(driver, user_inputs, output_lists):
     time_start = datetime.datetime.now().replace(microsecond=0)
     date_string = time_start.strftime(config.DATE_FORMAT)
 
-    html_file_name =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_stats_{date_string}.html')
+    html_file_name =  os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_user_summary_{date_string}.html')
     printG(f"1. Getting {user_inputs.user_name}'s summary:")
 
     # do task   
@@ -1739,17 +1772,19 @@ def handle_option_1(driver, user_inputs, output_lists):
             return
     user_stats_dict = {'Option 1 '      : '<b>Get user summary', 
                        'Date processed' : time_start.strftime("%b %d %Y"),
-                       'Data file'      : os.path.basename(html_file_name),
-                       'Title'          : 'User summary'}
+                       'Data file'      : os.path.basename(html_file_name)}
     detail_dict = stats.to_dict()
     user_stats_dict.update(detail_dict)
 
-    html_string = htmltools.dict_to_html(user_stats_dict, table_id='description')
+    html_string = htmltools.dict_to_html(user_stats_dict, table_id='user_summary', title = 'User Summary')
 
     # write result to html file, show it on browser
     utils.write_string_to_text_file(html_string, html_file_name, 'utf-16')
-    utils.show_html_file(html_file_name)
 
+    # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.user_summary.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+   
     # print summary report
     printG(f"   File saved at: {os.path.basename(html_file_name)}")
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
@@ -1764,10 +1799,14 @@ def handle_option_2(driver, user_inputs, output_lists):
     printG(f"2. Getting {user_inputs.user_name.capitalize()}'s photos list:")
     # avoid to do the same thing twice: if list (in memory) has items AND output file (on disk) exists
     if output_lists.photos is not None and len(output_lists.photos) > 0:
-        html_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.html')
-        if  os.path.isfile(html_file):
+        html_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.photos)}_photos_{date_string}.html')
+        if  os.path.isfile(html_file_name):
             printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-            utils.show_html_file(html_file)
+
+           # update the javascript used in the main html page to use the just created html result page
+            utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.photos_public.name, os.path.basename(html_file_name))
+            show_result_in_browser(user_inputs.main_html_page)
+
             ans = input('This file will be overidden if you want to redo. Proceed ? (y/n)')
             if ans == 'n' : 
                 return
@@ -1779,82 +1818,55 @@ def handle_option_2(driver, user_inputs, output_lists):
             printR('     Error logging in. Featured galleries will not be extracted.')
     hide_banners(driver)
   
-    # do the main task
-
+    # main task
     # 1. unlisted photos
     print('    - Getting Unlisted photos ...')
-    output_lists.photos_unlisted, csv_unlisted_file, unlisted_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+    output_lists.photos_unlisted, csv_unlisted_file, unlisted_photos_table_string = process_photo_group(driver, user_inputs, output_lists, 
                 'https://web.500px.com/manage/unlisted', date_string, apiless.CSV_type.photos_unlisted, config.USE_LOCAL_THUMBNAIL)
 
     # 2. limited access photos
     print('    - Getting Unlimitted Access photos ...')
-    output_lists.photos_limited_access, csv_limited_access_file, limited_access_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+    output_lists.photos_limited_access, csv_limited_access_file, limited_access_photos_table_string = process_photo_group(driver, user_inputs, output_lists, 
                  'https://web.500px.com/manage/limited_access', date_string, apiless.CSV_type.photos_limited_access, config.USE_LOCAL_THUMBNAIL)
 
-    # 2. public photos
+    # 3. public photos
     print('    - Getting Public photos ...')    
-    output_lists.photos, csv_public_photos_file, public_photos_table = process_photo_group(driver, user_inputs, output_lists, 
+    output_lists.photos, csv_public_photos_file, public_photos_table_string = process_photo_group(driver, user_inputs, output_lists, 
                  'https://web.500px.com/manage/public', date_string, apiless.CSV_type.photos_public, config.USE_LOCAL_THUMBNAIL)
 
     # 4. create a description table
+    description_html_string = ''
     desc_dict = {'Option 2'     : '<b>Get photos list', 
                  'Date processed':  time_start.strftime("%b %d %Y"),
                  'User'          : user_inputs.user_name, 
-                 'Data file'     : os.path.basename(csv_public_photos_file), 
-                 'Title'         : f'Photos list ({len(output_lists.photos)})'}
-        
+                 'Data file'     : os.path.basename(csv_public_photos_file) }
+
     # 5. create a top-photos list
-    # create dataframe from list of photo objects
-    df = pd.DataFrame.from_records([item.to_dict() for item in output_lists.photos]) 
-    # get indexes of top photos 
-    maxPulse_index      = df['Highest Pulse'].astype(float).argmax()
-    maxViews_index      = df['Views'].astype(int).argmax()
-    maxLikes_index      = df['Likes'].astype(int).argmax()
-    maxComments_index   = df['Comments'].astype(int).argmax()
-    max_galleries_index = df['Galleries'].astype(int).argmax()
-    # create the top-photos dataframe, merge duplicate photos 
-    df2 = df.iloc[[maxPulse_index, maxViews_index, maxLikes_index, maxComments_index, max_galleries_index ],:]
-    df3 = utils.merge_duplicate_top_photos(df2)
-    # write top photos dataframe to csv file
-    csv_top_photos_file =  os.path.join(config.OUTPUT_PATH, f'{user_inputs.user_name}_top_photos.csv')
-    df3.to_csv(csv_top_photos_file, encoding='utf-16', index = False)        
+    # 6. create a statistics (overview) dictionary
+    top_photos_csv_file_name, stats_dict = create_top_photos_and_statistics(user_inputs.user_name, output_lists.photos)
+    
     # Convert the top-photos csv to a html table
-    top_photos_html_table = htmltools.CSV_top_photos_list_to_HTML_table(csv_top_photos_file, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                    ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating', 'Date', 'Category', 'Tags'])    
+    top_photos_html_string = ''
+    if top_photos_csv_file_name != "":
+        top_photos_html_string = htmltools.CSV_top_photos_list_to_HTML_table(top_photos_csv_file_name, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
+                                 ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating', 'Date', 'Category', 'Tags'], headline_tag='h4')
 
-    # 6. create  statistics table
-    # ref: No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments, Galleries, Highest Pulse,Rating, Date, Category, Featured In Galleries, Tags      
-    # get some statistics:
-    total_views = df['Views'].sum()
-    total_likes = df['Likes'].sum()
-    total_comments = df['Comments'].sum()
-    last_upload_date   = df['Date'].iloc[[0]].values[0]
-    first_upload_date = df['Date'].iloc[[-1]].values[0]                
-    try:
-        last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
-        first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
-        days = (last_date_obj -first_date_obj).days
-        last_date  = last_date_obj.strftime("%b %d %Y")
-        first_date = first_date_obj.strftime("%b %d %Y")
-    except:
-        printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
-        last_date = last_upload_date
-        first_date = first_upload_date
-        days = ''
-    stats_dict = {'Last Upload Date': last_date, 'First Upload Date': first_date, 'Duration': f'{days} days', 
-                    'Total Views' : total_views, 'Total Likes': total_likes, 'Total Comments': total_comments}
+    # assemble all html table into one section
+    all_photos_sections_html_string =(f'{top_photos_html_string}\n\n'
+                                      f'{unlisted_photos_table_string}\n\n'
+                                      f'{limited_access_photos_table_string}\n\n'
+                                      f'{public_photos_table_string}\n\n')
 
+    # write everything to a html page  
+    html_file_name = htmltools.write_html_page( csv_public_photos_file, apiless.CSV_type.photos_public, output_lists, 
+                                                description_dict = desc_dict, 
+                                                statistics_info = stats_dict,
+                                                page_title = f'Photos list ({len(output_lists.photos)})',
+                                                photos_html_string = all_photos_sections_html_string)
 
-
-    # write result html: title, summary, statistic table, top-photos table, and all photos tables
-    html_file = htmltools.write_photos_tables_to_HTML(  csv_public_photos_file, apiless.CSV_type.photos_public,
-                                                    desc_dict = desc_dict, 
-                                                    stats_dict = stats_dict,  
-                                                    top_photos_html_table = top_photos_html_table,
-                                                    unlisted_photos_table= unlisted_photos_table,
-                                                    limited_access_photos_table = limited_access_photos_table,
-                                                    public_photos_table= public_photos_table)
-    utils.show_html_file(html_file)  
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.photos_public.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
@@ -1871,31 +1883,42 @@ def handle_option_3(driver, user_inputs, output_lists):
         html_file = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.html'
         if os.path.isfile(html_file):
             printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-            utils.show_html_file(html_file) 
-            return
+
+        # update the javascript used in the main html page to use the just created html result page
+        utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followers.name, os.path.basename(html_file_name))
+        show_result_in_browser(user_inputs.main_html_page)
+        return
    
-    # do task    
+    # main task    
     hide_banners(driver)
     output_lists.followers_list = get_followers_list(driver, user_inputs, output_lists)
     
     # write result to csv, convert it to html, show html in browser
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
-        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')  
-        description_dict = {'Option 3'       : f"<b>Get followers list",
-                            'Date processed' : time_start.strftime("%b %d %Y"),
-                            'User'           : user_inputs.user_name,
-                            'Data file'      : os.path.basename(csv_file), 
-                            'Title'          : f'List of {len(output_lists.followers_list)} followers' }
+        csv_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.csv')  
+        
+        # write description section: a h4 headline and a table   
+        desc_dict = {'Option 3'       : f"<b>Get followers list",
+                     'Date processed' : time_start.strftime("%b %d %Y"),
+                     'User'           : user_inputs.user_name,
+                     'Data file'      : os.path.basename(csv_file_name)}
 
-        if utils.write_users_list_to_csv(output_lists.followers_list, csv_file) == True:
-            # show output and print summary report
-            html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
-            utils.show_html_file(html_file) 
-            printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
-        else:
-            printR(f'   Error writing the output file\n:{csv_file}')
+        if utils.write_users_list_to_csv(output_lists.followers_list, csv_file_name) == False:
+            printR(f'   Error writing the output file\n:{csv_file_name}')
+            return
 
+        # write main items in csv file and everything else to the result html page  
+        html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.followers, output_lists, 
+                                                    description_dict= desc_dict, 
+                                                    page_title = f'List of  {len(output_lists.followers_list)} followers',
+                                                    use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], 
+                                                    headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followers.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
+ 
 #---------------------------------------------------------------
 def handle_option_4(driver, user_inputs, output_lists):
     """ Get followings (friends)"""
@@ -1911,30 +1934,46 @@ def handle_option_4(driver, user_inputs, output_lists):
         files.sort(key=lambda x: os.path.getmtime(x))
         html_file = files[-1]
         printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
-        utils.show_html_file(html_file)
+
+       # update the javascript used in the main html page to use the just created html result page
+        utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followings.name, os.path.basename(html_file_name))
+        show_result_in_browser(user_inputs.main_html_page)
+
         ans = input('This file will be overidden if you want to redo. Proceed ? (y/n)')
         if ans == 'n' : 
             return
 
-    # do task
+    # main task
     output_lists.followings_list = get_followings_list(driver, user_inputs, output_lists)
     
     # write result to csv, convert it to html, show html in browser
-    if len(output_lists.followings_list) > 0:
-        csv_file = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
-        description_dict = {'Option 4'       : f"<b>Get followings list", 
-                            'Date processed' : time_start.strftime("%b %d %Y"),
-                            'User'           : user_inputs.user_name, 
-                            'Data file'      : os.path.basename(csv_file), 
-                            'Title'          : f'List of {len(output_lists.followings_list)} followings' }
-        if utils.write_users_list_to_csv(output_lists.followings_list, csv_file) == True:
-            # show output and print summary report
-            html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
-            utils.show_html_file(html_file) 
-            printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
-        else:
-            printR(f'   Error writing the output file\n:{csv_file}')
+    if len(output_lists.followings_list) == 0:
+        return
+
+    csv_file_name = os.path.join(output_lists.output_dir, f'{user_inputs.user_name}_{len(output_lists.followings_list)}_followings_{date_string}.csv')
+         
+    # write description section: a h4 headline and a table   
+    description_dict = {'Option 4'       : f"<b>Get followings list", 
+                        'Date processed' : time_start.strftime("%b %d %Y"),
+                        'User'           : user_inputs.user_name, 
+                        'Data file'      : os.path.basename(csv_file_name) }
+
+    if utils.write_users_list_to_csv(output_lists.followings_list, csv_file_name) == False:
+        printR(f'   Error writing the output file\n:{csv_file_name}')
+        return
+
+    # write main items in csv file and everything else to the result html page  
+    html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.followings, output_lists, 
+                                                description_dict= description_dict, 
+                                                page_title = f'List of {len(output_lists.followings_list)} users you are following',
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], 
+                                                headline_tag='h4')
+
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followings.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+    printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
 def handle_option_5(driver, user_inputs, output_lists):
@@ -1957,35 +1996,49 @@ def handle_option_5(driver, user_inputs, output_lists):
         show_menu(user_inputs)        
         return
 
-    # do task
+    # main task
     time.sleep(1)
     hide_banners(driver)
-    description_dict = {'Option 5'       : f"<b>Get users who liked a given photo", 
-                        'Date processed' : time_start.strftime("%b %d %Y"),
-                        'User'           : user_inputs.user_name}
     output_lists.like_actioners_list, details_dict = get_like_actioners_list(driver, user_inputs, output_lists, get_name_only = False)
     if len(output_lists.like_actioners_list) == 0:
         return
-
-    csv_file = details_dict['Data file']
-    html_file = os.path.splitext(csv_file)[0] + '.html'
-    details_dict['Data file'] = os.path.basename(csv_file)
-    description_dict.update(details_dict)
-       
+    
+    csv_file_name = details_dict['Data file']
+    page_title = details_dict['Title']
+      
     # write result to csv, convert it to html, show html in browser
-    if output_lists.like_actioners_list is not None and  len(output_lists.like_actioners_list) > 0 and \
-                                            utils.write_users_list_to_csv(output_lists.like_actioners_list, csv_file) == True:
-        # get stats
-        # No,Avatar Href,Avatar Local,Display Name,User Name,ID,Followers Count,Relationship
-        df = utils.CSV_file_to_dataframe(csv_file)
-        followings_count  = df.loc[df.Relationship == 'Following', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
-        not_follows_count  = df.loc[df.Relationship == 'Not Follow', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
-        unknowns_count     = df.loc[df.Relationship == 'Unknown', "Relationship"].shape[0]
-        description_dict.update({'Following': str(followings_count), 'Not Follow': str(not_follows_count), 'Unknown': str(unknowns_count) } )
+    if len(output_lists.like_actioners_list) == 0 or utils.write_users_list_to_csv(output_lists.like_actioners_list, csv_file_name) == False:
+        return
+ 
+   # get stats
+    # No,Avatar Href,Avatar Local,Display Name,User Name,ID,Followers Count,Relationship
+    df = utils.CSV_file_to_dataframe(csv_file_name)
+    followings_count  = df.loc[df.Relationship == 'Following', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
+    not_follows_count  = df.loc[df.Relationship == 'Not Follow', "Relationship"].shape[0] if logged_in else '<i>Unknown: user did not log in'
+    unknowns_count     = df.loc[df.Relationship == 'Unknown', "Relationship"].shape[0]
 
-        htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.like_actors, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                          ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict)
-        utils.show_html_file(html_file) 
+    description_dict = {'Option 5'       : f"<b>Get users who liked a given photo", 
+                        'Date processed' : time_start.strftime("%b %d %Y"),
+                        'User'           : user_inputs.user_name,
+                        'Data file'      : os.path.basename(csv_file_name),
+                        'Following'      : str(followings_count),
+                        'Not Follow'     : str(not_follows_count),
+                        'Unknown'        : str(unknowns_count) }
+
+    if utils.write_users_list_to_csv(output_lists.like_actioners_list, csv_file_name) == False:
+        printR(f'   Error writing the output file\n:{csv_file_name}')
+        return
+
+    # write everything to an html page
+    html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.like_actors, output_lists, 
+                                                description_dict= description_dict, 
+                                                page_title = page_title,
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], 
+                                                headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.like_actors.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
 
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
@@ -1998,7 +2051,7 @@ def handle_option_6(driver, user_inputs, output_lists):
 
     # check the status from recorded data first
     # find the latest all_users csv file on disk
-    all_users_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.all_users, print_info = False)  
+    all_users_file = utils.get_latest_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.all_users, file_extenstion = 'csv', print_info = False)  
     if all_users_file != '':
         print(f'    - According to the local database:')
         df = utils.CSV_file_to_dataframe(all_users_file)
@@ -2078,50 +2131,66 @@ def handle_option_7(driver, user_inputs, output_lists):
     hide_banners(driver)
 
     # do task 1 of 2: get notifications
-    description_dict = {'Option 7 (1 of 2)' : f'<b>Get {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification + 1}', 
-                        'Date processed'    : time_start.strftime("%b %d %Y"),
-                        'User'              : user_inputs.user_name }
-    
     output_lists.notifications = get_notification_list(driver, user_inputs, output_lists)[0]
     if len(output_lists.notifications) == 0 and len(output_lists.unique_notificators) == 0:
         show_menu(user_inputs)
         return 
     # read notifications objects into a dataframe
     df_notif = pd.DataFrame.from_records([item.to_dict() for item in output_lists.notifications])   #or utils.CSV_file_to_dataframe(csv_file)        
-    stats_dict = utils.get_notifications_statistics(df_notif)
+ 
+    #  write statictics section: a h4 headline and a table  
+    stats_dict = utils.get_notifications_statistics(df_notif)  
 
     # Write the notification list to csv and html, show html in browser     
     file_name =  f'{user_inputs.user_name}_{len(output_lists.notifications)}_notifications_{date_string}' 
-    csv_file  = os.path.join(output_lists.output_dir, f'{file_name}.csv')
+    csv_file_name  = os.path.join(output_lists.output_dir, f'{file_name}.csv')
 
-    description_dict.update({'Title': f'{len(output_lists.notifications)} notifications', 'Data file': os.path.basename(csv_file)})
-    if len(output_lists.notifications) > 0 and  utils.write_notifications_to_csvfile(output_lists.notifications, csv_file) == True:
-        html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                          ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'],
-                          desc_dict=description_dict, statistics_info = stats_dict)
-        utils.show_html_file(html_file) 
+    # write description section: a h4 headline and a table   
+    description_dict = {'Option 7 (1 of 2)' : f'<b>Get {user_inputs.number_of_notifications} notifications, starting from index {user_inputs.index_of_start_notification + 1}', 
+                        'Date processed'    : time_start.strftime("%b %d %Y"),
+                        'User'              : user_inputs.user_name,
+                        'Data file'         : os.path.basename(csv_file_name)}
+   
+    # write notification list csv file and everything else to an html page
+    if len(output_lists.notifications) > 0 and  utils.write_notifications_to_csvfile(output_lists.notifications, csv_file_name) == True:
+       html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.notifications, output_lists, 
+                                                    description_dict= description_dict, 
+                                                    statistics_info = stats_dict, 
+                                                    page_title = f'List of {len(output_lists.notifications)} notifications',
+                                                    use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'], 
+                                                    headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.notifications.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
 
     # do task 2 of 2:Process Unique users list with detailed analysis, write to csv, html and show html 
     df_unique, stats_list = process_unique_users(df_notif, user_inputs.user_name, output_lists.output_dir)
 
-    csv_file  = os.path.join(config.OUTPUT_PATH,  
-                f"{user_inputs.user_name}_{str(df_unique.shape[0])}_unique-users_in_all_{len(output_lists.notifications)}_notifications_{date_string}.csv")
+    csv_file_name  = os.path.join(config.OUTPUT_PATH,  
+                f"{user_inputs.user_name}_{str(df_unique.shape[0])}_unique_users_in_{len(output_lists.notifications)}_notifications_{date_string}.csv")
  
-    # write the result to csv file
-    df_unique.to_csv(csv_file, encoding='utf-16', index = False)
+    # write unique users list to csv file
+    df_unique.to_csv(csv_file_name, encoding='utf-16', index = False)
 
+    # write description section: a h4 headline and a table 
     description_dict = {'Option 7 (2 of 2)' : f"<b>Extract unique users in {user_inputs.number_of_notifications} notifications", 
                         'Date processed'    : time_start.strftime("%b %d %Y"),
                         'User'              : user_inputs.user_name,
-                        'Title'             : f'{str(df_unique.shape[0])} unique users in {len(output_lists.notifications)} notifications',
-                        'Data file'         : os.path.basename(csv_file)}
-
-    # write to csv, html, and show result
-    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict, statistics_info= stats_list)
-    utils.show_html_file(html_file)     
+                        'Data file'         : os.path.basename(csv_file_name)}
+    # write everything to a html page
+    html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.unique_users, output_lists, 
+                                                description_dict= description_dict, 
+                                                statistics_info = stats_list, 
+                                                page_title = f'List of {str(df_unique.shape[0])} unique users in {len(output_lists.notifications)} notifications',
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'],
+                                                headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.unique_users.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
-    
+ 
 #---------------------------------------------------------------
 def handle_option_8(driver, user_inputs, output_lists):
     """ Like n photos from a given user."""
@@ -2375,7 +2444,7 @@ def handle_option_99(driver, user_inputs, output_lists):
     
     csv_file = ''
     # Provide option whether to use the last Followings list on disk or to start from scratch
-    following_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
+    following_file = utils.get_latest_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings, file_extenstion = 'csv')
     if following_file != '':
         print('    Existing Followings list on disk:')
         printY(f"{following_file}", write_log=False)
@@ -2397,9 +2466,20 @@ def handle_option_99(driver, user_inputs, output_lists):
                 return ''
     # do task
     get_following_statuses(driver, user_inputs, output_lists, csv_file )
-    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.followings , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                            ignore_columns = ['Avatar Href', 'Avatar Local','User Name', 'ID'])
-    utils.show_html_file(html_file) 
+
+    # write main items in csv file and everything else to the result html page  
+    html_file_name = htmltools.write_html_page( csv_file, apiless.CSV_type.followings, output_lists, 
+                                                description_dict = description_dict, 
+                                                page_title = f'List of {str(len(output_lists.followings_list ))} followings',
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], 
+                                                headline_tag='h4')
+
+
+    # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followings.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
 
 #---------------------------------------------------------------
@@ -2502,12 +2582,12 @@ def handle_option_14(driver, user_inputs, output_lists):
 
 #--------------------------------------------------------------
 def handle_option_15(driver, user_inputs, output_lists):
-    """ Data analysis: catergorize users according to the following statuses, based on two latest csv files on disk: the followers and followings lists.
+    """ Data analysis: categorize users according to the following statuses, based on two latest csv files on disk: the followers and followings lists.
         If these files do not exist, or if they exist but the user wants to re-extract the lists, then there is option to do so. 
         The results are 4 pairs of csv and html files: 
             - List of reciprocal following users
-            - List of users who followed you
-            - List of users you followed
+            - List of users who followed you but you do not follow them
+            - List of users you followed but they do not follow you
             - List of all users combined """
 
     time_start = datetime.datetime.now().replace(microsecond=0)
@@ -2516,12 +2596,12 @@ def handle_option_15(driver, user_inputs, output_lists):
     printG(option)
     use_followers_file_on_disk, use_followings_file_on_disk = 'n', 'n'
     # Provide option whether to use the last followers csv file on disk or to start from scratch
-    followers_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers)
+    followers_file = utils.get_latest_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followers, file_extenstion = 'csv')
     if followers_file != '':
         use_followers_file_on_disk = input("Using this file? (y/n) > ")
 
     # Provide option whether to use the last following csv file on disk or to start from scratch
-    followings_file = utils.get_latest_cvs_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings)
+    followings_file = utils.get_latest_file(output_lists.output_dir, user_inputs.user_name, apiless.CSV_type.followings, file_extenstion = 'csv')
     if followings_file != '':
         use_followings_file_on_disk = input("Using this file? (y/n) > ")
     
@@ -2544,11 +2624,16 @@ def handle_option_15(driver, user_inputs, output_lists):
         description_dict = {'Option 15'     : '<b>Categorize users based on theirs following statuses', 
                             'Date processed': time_start.strftime("%b %d %Y"),
                             'User'          : user_inputs.user_name, 
-                            'Title'         : f'List of {str(len(output_lists.followers_list ))} followers' ,
                             'Data file'     : file_name}
-        # write result to html
-        htmltools.CSV_to_HTML(followers_file, apiless.CSV_type.followers, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                                    ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
+  
+        # write main items in csv file and everything else to the result html page  
+        html_file_name = htmltools.write_html_page( followers_file, apiless.CSV_type.followers, output_lists, 
+                                                    description_dict = description_dict, 
+                                                    page_title = f'List of {str(len(output_lists.followers_list ))} followers' ,
+                                                    use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], 
+                                                    headline_tag='h4')
+
 
     # close the popup windows, if they are opened from previous task
     webtools.close_popup_windows(driver, close_ele_class_names = ['close', 'ant-modal-close-x'])
@@ -2571,12 +2656,21 @@ def handle_option_15(driver, user_inputs, output_lists):
         description_dict = {'Option 15'     : '<b>Categorize users based on theirs following statuses', 
                             'Date processed': date_string, 
                             'User'          : user_inputs.user_name,
-                            'Title'         : f'List of {str(len(output_lists.followings_list ))} followings',
                             'Data file'     : os.path.basename(followings_file)}
-        # write result to html
-        htmltools.CSV_to_HTML(followings_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
+        ## write result to html
+        #htmltools.CSV_to_HTML(followings_file, apiless.CSV_type.followings, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+        #            ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], desc_dict = description_dict)
+
+        # write main items in csv file and everything else to the result html page  
+        html_file_name = htmltools.write_html_page( followings_file, apiless.CSV_type.followings, output_lists, 
+                                                    description_dict = description_dict, 
+                                                    page_title = f'List of {str(len(output_lists.followings_list ))} followings',
+                                                    use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                    ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Relationship'], 
+                                                    headline_tag='h4')
+
     
+    # main task
     # create followers dataframe
     df_followers= utils.CSV_file_to_dataframe(followers_file)
 
@@ -2674,15 +2768,21 @@ def handle_option_15(driver, user_inputs, output_lists):
         description_dict = {f'{option_key}'   : f'<b>{option}', 
                              'Date processed' : time_start.strftime("%b %d %Y"),
                              'User'           : user_inputs.user_name, 
-                             'Title'          : file_title ,
                              'Data file'      : file_name}
-  
-        html_file = htmltools.CSV_to_HTML(csv_file_name, csv_type, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                                      ignore_columns = ignore_columns, desc_dict = description_dict, statistics_info = stats_list)
-        utils.show_html_file(html_file) 
+
+        # write everything to a html page
+        html_file_name = htmltools.write_html_page( csv_file_name, csv_type, output_lists, 
+                                                    description_dict= description_dict, 
+                                                    statistics_info = stats_list, 
+                                                    page_title = file_title,
+                                                    use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                    ignore_columns = ignore_columns, 
+                                                    headline_tag='h4')
+        # update the javascript used in the main html page to use the just created html result page
+        utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, csv_type.name, os.path.basename(html_file_name))
+        show_result_in_browser(user_inputs.main_html_page)
 
     printG(f'   Duration {datetime.datetime.now().replace(microsecond=0) - time_start}s') 
-
 
 #-------------------------------------------------------------
 def handle_option_16(driver, user_inputs, output_lists):
@@ -2696,52 +2796,71 @@ def handle_option_16(driver, user_inputs, output_lists):
     date_string = time_start.replace(microsecond=0).strftime(config.DATE_FORMAT)
     printG("16. Notifications analysis ...")
     # update database
-    db.insert_all_notification_csv_files_to_database(user_inputs.db_path, config.OUTPUT_PATH, user_inputs.user_name)
+    records_changed = db.insert_all_notification_csv_files_to_database(user_inputs.db_path, config.OUTPUT_PATH, user_inputs.user_name)
+    if records_changed == 0:
+        print_and_log('No records changed')
+        return
 
-    # 1 of 2: All notifications: read from database, write to csv, html and show html
+    # Task 1 of 2: All notifications: read from database, write to csv, html and show html
     conn = sqlite3.connect(user_inputs.db_path)  
     df_notif = pd.read_sql_query("SELECT * FROM notifications", conn)   
     df_notif.sort_values(by=['Time Stamp'], ascending=False, inplace=True)
-    file_name = f'{user_inputs.user_name}_all_{str(df_notif.shape[0])}_notifications_{date_string}'
-    csv_file =  os.path.join(output_lists.output_dir, f'{file_name}.csv')
-    html_file = os.path.join(output_lists.output_dir, f'{file_name}.html')
+    file_name = f'{user_inputs.user_name}_all_notifications_({str(df_notif.shape[0])})_{date_string}'
+    csv_file_name =  os.path.join(output_lists.output_dir, f'{file_name}.csv')
 
     ## gather statistics 
     stats_dict = utils.get_notifications_statistics(df_notif)
-
+ 
+    # description 
     description_dict = {'Option 16 (1of2)'  : f'<b>Notification analysis: All recorded notifications from database', 
                         'Date processed'    : time_start.strftime("%b %d %Y"),
                         'User'              : user_inputs.user_name,  'Data file': f'{file_name}.csv',
-                        'Title'             : 'All recorded notifications from local database',  #f'{str(df_notif.shape[0])} notifications from {first_date} to {last_date}',
                         'Following'         : '<i>You are following your new follower',
                         'Not Follow'        : '<i>You do not follow your new follower'}
+    # write notification objects list to csv 
+    df_notif.to_csv(csv_file_name, encoding='utf-16', index = False)   
 
-    df_notif.to_csv(csv_file, encoding='utf-16', index = False)   
-    htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.notifications , output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
-                ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'], 
-                column_to_sort='Time Stamp', desc_dict = description_dict, statistics_info = stats_dict )
-    utils.show_html_file(html_file) 
+    # write everything to html
+    html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.all_notifications, output_lists, 
+                                                description_dict= description_dict, 
+                                                statistics_info = stats_dict, 
+                                                page_title = f'List of all {str(df_notif.shape[0])} recorded notifications from local database',
+                                                photos_html_string = '',  
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID', 'Photo Thumbnail Href', 'Photo Thumbnail Local', 'Photo Link'], 
+                                                headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.all_notifications.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+
     conn.close()
 
-    # 2 of 2: Process unique users list with detailed analysis, write to csv, html and show html 
+    # Task 2 of 2: Process unique users list with detailed analysis, write to csv, html and show html 
     df_unique, stats_list = process_unique_users(df_notif, user_inputs.user_name, output_lists.output_dir)
-
-    csv_file  = os.path.join(config.OUTPUT_PATH,  
-                f"{user_inputs.user_name}_{str(df_unique.shape[0])}_unique-users_in_all_{df_notif.shape[0]}_notifications_{date_string}.csv")
- 
+    
     # write the result to csv file
-    df_unique.to_csv(csv_file, encoding='utf-16', index = False)
+    csv_file_name  = os.path.join(config.OUTPUT_PATH,  
+                f"{user_inputs.user_name}_all_unique_users_({str(df_unique.shape[0])})_in_all_{df_notif.shape[0]}_notifications_{date_string}.csv")
+    df_unique.to_csv(csv_file_name, encoding='utf-16', index = False)
 
     description_dict = {'Option 16 (2of2)' : '<b>Notification analysis: extract unique users and theirs statistics',  
                         'Date processed'    : time_start.strftime("%b %d %Y"),
                         'User'              : user_inputs.user_name,
-                        'Title'             : f'{str(df_unique.shape[0])} unique users in {df_notif.shape[0]} notifications',
-                        'Data file'         : os.path.basename(csv_file)}
+                        'Title'             : f'{str(df_unique.shape[0])} unique users in {df_notif.shape[0]} recorded notifications',
+                        'Data file'         : os.path.basename(csv_file_name)}
 
-    # write to csv, html, and show result
-    html_file = htmltools.CSV_to_HTML(csv_file, apiless.CSV_type.unique_users, output_lists, use_local_thumbnails = config.USE_LOCAL_THUMBNAIL,  
-                        ignore_columns = ['Avatar Href', 'Avatar Local', 'User Name', 'ID'], desc_dict= description_dict, statistics_info= stats_list)
-    utils.show_html_file(html_file)     
+    # write everything to an html page
+    html_file_name = htmltools.write_html_page( csv_file_name, apiless.CSV_type.all_unique_users, output_lists, 
+                                                description_dict= description_dict, 
+                                                statistics_info = stats_list, 
+                                                page_title = f'All {str(df_unique.shape[0])} unique users in {df_notif.shape[0]} recorded notifications', 
+                                                use_local_thumbnails = config.USE_LOCAL_THUMBNAIL, 
+                                                ignore_columns=['Avatar Href', 'Avatar Local', 'User Name', 'ID'], 
+                                                headline_tag='h4')
+   # update the javascript used in the main html page to use the just created html result page
+    utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.all_unique_users.name, os.path.basename(html_file_name))
+    show_result_in_browser(user_inputs.main_html_page)
+
     printG(f"   Duration: {datetime.datetime.now().replace(microsecond=0) - time_start}s")
         
 #--------------------------------------------------------------
@@ -2763,7 +2882,7 @@ def process_unique_users(df_notif, user_name, output_dir):
     df_unique = utils.analyze_notifications(df_notif)  
  
     # find the latest all_users csv file on disk
-    all_users_file = utils.get_latest_cvs_file(output_dir, user_name, apiless.CSV_type.all_users)
+    all_users_file = utils.get_latest_file(output_dir, user_name, apiless.CSV_type.all_users, file_extenstion = 'csv')
 
     # no users analysis file (i.e step 15: Categorize users based on following statuses was not done
     stats_list = []
@@ -2786,10 +2905,10 @@ def process_photo_group(driver, user_inputs, output_lists, group_href, date_stri
             1) Extract all the photos on the page, scrolling down if needed, create a list of photo objects
             2) Save photos list to a csv file 
             3) Convert the photos list to an html table 
-        Return photos list, csv_file_name, html_table_string """
+        Return photos list, csv_file_name, html_table_object """
 
     photos_list= []
-    photos_html_table_string = '' 
+    photos_html_string = None 
     csv_file_name = ''
     
     photos_list, error_message = get_photos_list(driver, user_inputs, output_lists, group_href)
@@ -2803,18 +2922,73 @@ def process_photo_group(driver, user_inputs, output_lists, group_href, date_stri
                 printR(f'   Error writing the output file\n:{csv_file_name}')
                 csv_file_name = ''
             else:
-                photos_html_table_string = htmltools.CSV_photos_list_to_HTML_table(csv_file_name, csv_type, output_lists, use_local_thumbnails, 
-                                ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'] )
-    return photos_list, csv_file_name, photos_html_table_string
+                photos_html_string = htmltools.CSV_photos_list_to_HTML_table(csv_file_name, csv_type, output_lists, use_local_thumbnails, 
+                                ignore_columns = ['ID', 'Author Name', 'Href', 'Thumbnail Href', 'Thumbnail Local', 'Rating'], headline_tag='h4' )
+    return photos_list, csv_file_name, photos_html_string
 
+#--------------------------------------------------------------
+def create_top_photos_and_statistics(user_name, photos_list):
+    """ Given a list of photos;
+        - extract the top photos and write them to a csv file
+        - create dictionary for summary, or overview of the photos 
+       Return the csv file name or an empty string if no file was written"""
+
+ 
+    # create dataframe from list of photo objects
+    top_photos_html_string = ''
+    df = pd.DataFrame.from_records([item.to_dict() for item in photos_list]) 
+    if df.shape[0] == 0:
+        return '' 
+
+    # get indexes of top photos 
+    maxPulse_index      = df['Highest Pulse'].astype(float).argmax()
+    maxViews_index      = df['Views'].astype(int).argmax()
+    maxLikes_index      = df['Likes'].astype(int).argmax()
+    maxComments_index   = df['Comments'].astype(int).argmax()
+    max_galleries_index = df['Galleries'].astype(int).argmax()
+
+    # create the top-photos dataframe, merge duplicate photos 
+    df2 = df.iloc[[maxPulse_index, maxViews_index, maxLikes_index, maxComments_index, max_galleries_index ],:]
+    df3 = utils.merge_duplicate_top_photos(df2)
+
+    # write top photos dataframe to csv file
+    csv_top_photos_file_name =  os.path.join(config.OUTPUT_PATH, f'{user_name}_top_photos.csv')
+    df3.to_csv(csv_top_photos_file_name, encoding='utf-16', index = False)
+  
+    # create  statistics table
+    # ref: No,Author Name,ID,Photo Title,Href,Thumbnail Href,Thumbnail Local,Views,Likes,Comments, Galleries, Highest Pulse,Rating, Date, Category, Featured In Galleries, Tags      
+    # get some statistics:
+    total_views = df['Views'].sum()
+    total_likes = df['Likes'].sum()
+    total_comments = df['Comments'].sum()
+    last_upload_date   = df['Date'].iloc[[0]].values[0]
+    first_upload_date = df['Date'].iloc[[-1]].values[0]                
+    try:
+        last_date_obj = datetime.datetime.strptime(last_upload_date, "%Y %m %d").date()
+        first_date_obj = datetime.datetime.strptime(first_upload_date, "%Y %m %d").date()
+        days = (last_date_obj -first_date_obj).days
+        last_date  = last_date_obj.strftime("%b %d %Y")
+        first_date = first_date_obj.strftime("%b %d %Y")
+    except:
+        printR(f'Error converting datetime string:{last_upload_date}, {first_upload_date}')
+        last_date = last_upload_date
+        first_date = first_upload_date
+        days = ''
+    stats_dict = {'Last Upload Date': last_date, 'First Upload Date': first_date, 'Duration': f'{days} days', 
+                    'Total Views' : total_views, 'Total Likes': total_likes, 'Total Comments': total_comments}
+
+
+    return csv_top_photos_file_name, stats_dict  
 
 #--------------------------------------------------------------
 def main():
- 
     global logged_in
+    global web_browser_for_result
+    web_browser_for_result = None
 
     os.system('color')
-    driver = None
+    driver = None   
+ 
     logger.info('Started: =====================================')
     print_and_log(f'Script path: {os.path.dirname(sys.argv[0])}')
     print_and_log(f'Output path: {config.OUTPUT_PATH}')
@@ -2864,17 +3038,16 @@ def main():
     user_inputs = define_and_read_command_line_arguments()
     if  user_inputs.use_command_line_args == False:
         show_menu(user_inputs)  
-   
+
     while user_inputs.choice != 'q':
         #restart for different user
         if user_inputs.choice == 'r': 
             user_inputs.Reset()
             output_lists.Reset()
-            webtools.close_chrome_browser(driver)
             logged_in = False
+            # close and start a new web driver
+            webtools.close_chrome_browser(driver)
             driver = None
-            
-            my_queue = queue.Queue()
             th = Thread(target = webtools.start_chrome_browser, args=([], config.HEADLESS_MODE, desired_capab, my_queue) )
             th.start()
             
@@ -2886,9 +3059,10 @@ def main():
             if not user_inputs.use_command_line_args and int(user_inputs.choice) >= 5:
                 if get_additional_user_inputs(user_inputs) == False:
                     continue
+
             # make sure the driver is ready 
             while driver == None:
-                driver = my_queue.get()
+                driver = my_queue.get()     
 
             # dynamically call the function to perform the task 
             Functions_dictionary[user_inputs.choice](driver, user_inputs, output_lists)
@@ -2907,6 +3081,7 @@ def main():
             continue
 
     webtools.close_chrome_browser(driver)
+    #webtools.close_chrome_browser(web_browser_for_result)
     logged_in = False
 
 #---------------------------------------------------------------

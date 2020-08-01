@@ -312,6 +312,23 @@ def start_chrome_browser(options_list, headless_mode, desired_capab= None, my_qu
     return driver
 
 #---------------------------------------------------------------
+def start_result_web_browser(my_queue = None):
+    """ Start a selenium's chrome webdriver with specific options meant for displaying all the result html pages
+        Put the result chrome driver in the queue, if given, so that it can be retrieved in an multithread/multiprocessing environments
+    """
+    chrome_options = Options()  
+    chrome_options.add_argument('--hide-scrollbars')   
+    chrome_options.add_argument('--start-maximized')   
+    chrome_options.add_argument("disable-infobars")   
+    # disable the notification "Chrome is being controlled by automated test software" 
+    # suppress popup 'Disable Developer Mode Extension'
+    chrome_options.add_experimental_option("excludeSwitches", ['enable-automation', 'load-extension']);
+    driver = webdriver.Chrome(options=chrome_options)
+    if my_queue:
+        my_queue.put(driver)   
+    return driver
+
+#---------------------------------------------------------------
 def has_server_connection(driver, server_url):
     """ Check the internet connection and check whether a given server is down or not.
         We use the text on the chrome page when it detects no internet connection (this may change)
@@ -422,7 +439,7 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
 
     while new_count != count:
         try:
-            utils.update_progress(new_count / likes_count, f'    - Scrolling to load more items {new_count}/{likes_count}:')
+            utils.update_progress(new_count / likes_count, f'    - Scrolling down to load more items {new_count}/{likes_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(random.randint(15, 20) / 10)  
@@ -438,7 +455,7 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
         except NoSuchElementException:
             pass
     if new_count < likes_count:
-        utils.update_progress(1, f'    - Scrolling to load more items:{new_count}/{likes_count}')
+        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count}/{likes_count}')
 
 #---------------------------------------------------------------
 def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name= '', tag_name=''):
@@ -456,7 +473,7 @@ def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name=
 
     while new_count != count:
         try:
-            utils.update_progress(new_count / expected_items_count, f'    - Scrolling to load more items {new_count}/{expected_items_count}:')
+            utils.update_progress(new_count / expected_items_count, f'    - Scrolling down to load more items {new_count}/{expected_items_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(random.randint(15, 20) / 10)  
@@ -476,7 +493,7 @@ def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name=
         except NoSuchElementException:
             pass
     if new_count >= expected_items_count:
-        utils.update_progress(1, f'    - Scrolling to load more items:{expected_items_count}/{expected_items_count}')
+        utils.update_progress(1, f'    - Scrolling down to load more items:{expected_items_count}/{expected_items_count}')
     else:
         print(f'     - Available items: {new_count}')
     return eles
@@ -494,7 +511,7 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
     count_down_timer = time_out
     while new_count != count:
         try:
-            utils.update_progress(new_count / likes_count, f'    - Scrolling to load more items {new_count}/{likes_count}:')
+            utils.update_progress(new_count / likes_count, f'    - Scrolling down to load more items {new_count}/{likes_count}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(1)
@@ -518,7 +535,7 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
         except NoSuchElementException:
             pass
     if new_count >= likes_count:
-        utils.update_progress(1, f'    - Scrolling to load more items:{likes_count}/{likes_count}')
+        utils.update_progress(1, f'    - Scrolling down to load more items:{likes_count}/{likes_count}')
     return eles
 
 #---------------------------------------------------------------
@@ -585,4 +602,4 @@ def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_t
     else:
         utils.update_progress(1, f'    - Scrolling down {number_of_items_requested}/{number_of_items_requested}')
 
-
+    

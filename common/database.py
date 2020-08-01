@@ -85,7 +85,7 @@ def create_if_not_exists_notifications_tables(db_connection):
                                      PRIMARY KEY ("User Name", "Content", "Photo Link"))''')
     db_connection.commit()
     # Jun 16 2020: 500px masks out the exact date. The absolute date that we are used to have now became relative (such as 'a year ago'). 
-    # To keep the integrity of the database, we are force to take out the Time stamp out of primary keys.
+    # To keep the integrity of the database, we are force to take the Time stamp out of primary keys.
 
 #---------------------------------------------------------------
 def insert_photo_to_photo_table(db_connection, photo_info):
@@ -181,14 +181,15 @@ def insert_all_notification_csv_files_to_database(db_full_file_name, csv_dir, us
         printG(f'    Records changed: {str(recent_changes)}')
         total_changed_sofar = db_connection.total_changes
     db_connection.close()
+    return total_changed_sofar
 
 #---------------------------------------------------------------
 def insert_latest_csv_data_to_database(db_connection, csv_dir, records_changed_sofar, user_name, csv_file_type):
     """ Update the local database with the latest csv file of the given type"""
 
-    recent_changes = 0
+    recent_changes, changes_sofar = 0, 0
     # find the latest csv file on disk
-    csv_file = utils.get_latest_cvs_file(csv_dir, user_name, csv_file_type)
+    csv_file = utils.get_latest_file(csv_dir, user_name, csv_file_type, file_extenstion = 'csv')
     if csv_file != '':
         df = utils.CSV_file_to_dataframe(csv_file)
         data_list = df.values.tolist()

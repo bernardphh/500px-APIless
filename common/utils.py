@@ -303,10 +303,10 @@ def save_photo_thumbnail(url, path):
     return file_name
 
 #---------------------------------------------------------------
-def get_latest_cvs_file(file_path, user_name, csv_file_type, print_info = True):
-    """ Find the latest csv file for the given csv_file_type, from the given user, at the given folder location"""
+def get_latest_file(file_path, user_name, csv_file_type, file_extenstion = 'csv', print_info = True):
+    """ Find the latest file of the given csv_file_type, from the given user, at the given folder location"""
 
-    files = [f for f in glob.glob(file_path + f"**/{user_name}*_{csv_file_type.name}_*.csv")]
+    files = [f for f in glob.glob(file_path + f"**/{user_name}*_{csv_file_type.name}_*.{file_extenstion}")]
     if len(files) > 0:
         if csv_file_type == apiless.CSV_type.notifications:
             files = [f for f in files if not 'unique' in f and not 'all' in f]
@@ -515,7 +515,7 @@ def update_progress(progress, message = ''):
         progress = 1
         status = "Done\r\n"
     block = int(round(barLength*progress))
-    text = f'\r{message:<46.45}[{"."*block + " "*(barLength-block)}] {int(round(progress*100)):<3}% {status}'
+    text = f'\r{message:<52.51}[{"."*block + " "*(barLength-block)}] {int(round(progress*100)):<3}% {status}'
     sys.stdout.write(text)
     sys.stdout.flush()
 
@@ -674,7 +674,6 @@ def convert_string_num_to_int(string_num):
             printR(f'Error converting number {str_num}')
         return int_num
     
-
 #---------------------------------------------------------------
 def handle_local_avatar(avatar_href, save_to_disk, dir):
     """ Given a link to an avatar image file, save the image to disk if 'save_to_disk' is True.
@@ -701,3 +700,146 @@ def handle_local_avatar(avatar_href, save_to_disk, dir):
     if save_to_disk and not os.path.isfile(avatar_full_file_name):  
         save_avatar(avatar_href, avatar_full_file_name)
     return user_id, avatar_local
+
+#---------------------------------------------------------------
+def update_active_page_on_main_html_page_js(js_file_name, menu_item_name, new_html_page):
+    """ - Open the given javascript file (menu.js), search for the given menu item, then update the associated file with the given html page  
+        - Set the value of the global variable 'active_html_page' to the new html page
+        
+        This function is meant to be called whenever the user run a task that results in a new html file.
+        The javascript file is used in the main 500px-APIless.html file, which provides instant access to all html results.
+
+        Example:
+          var active_html_file = ""                  <-- set value to the 'new_html_page'
+          var active_menu_item = ""                  <-- set value to the 'menu_item_name'
+          ...
+          { "item" : "user_summary",                  <-- menu_item_name (used the csv_type.name)
+           "file" : "johndoe_stats_2020-07-08.html"  <-- new_html_page
+          },
+     """
+   
+    # identify the variable 'active_html_file'
+    var_patttern1 = r'(\s+var\s+active_html_file\s+=\s+")(.+)'
+
+    # identify the variable 'active_menu_item'
+    var_patttern2 = r'(\s+var\s+active_menu_item\s+=\s+")(.+)'
+
+    # identify the given menu item (== csv_type.name)
+    menu_pattern = rf'("{menu_item_name}",\s+"file"\s+:\s+")(.+)'
+
+    # Read in the file
+    with open(js_file_name, 'r') as file :
+        filedata = file.read()
+        new_filedata1 = re.sub(var_patttern1, rf'\1{new_html_page}"', filedata )
+        new_filedata2 = re.sub(var_patttern2, rf'\1{menu_item_name}"', new_filedata1 )
+        new_filedata3 = re.sub(menu_pattern, rf'\1{new_html_page}"', new_filedata2 )
+
+    # Write the file out again
+    with open(js_file_name, 'w') as file:
+        file.write(new_filedata3)
+    
+#---------------------------------------------------------------
+def create_menu_items(user_name, file_path, js_file_name = 'menu_items.js', active_html_file='', active_menu_item=''):
+    """ Create a javascript file that handles the menu items with the latest html files on disk
+        This function is called when a user_name is entered """
+    csv_types_to_process = [apiless.CSV_type.user_summary, 
+                            apiless.CSV_type.photos_public,
+                            apiless.CSV_type.followers, 
+                            apiless.CSV_type.followings,
+                            apiless.CSV_type.reciprocal,
+                            apiless.CSV_type.not_follow,
+                            apiless.CSV_type.following,
+                            apiless.CSV_type.all_users,
+                            apiless.CSV_type.like_actors,
+                            apiless.CSV_type.notifications, 
+                            apiless.CSV_type.unique_users, 
+                            apiless.CSV_type.all_notifications, 
+                            apiless.CSV_type.all_unique_users]
+
+ 
+    js_string = f"""jQuery(document).ready(function() {{
+    var active_html_file = "{active_html_file}";
+    var active_menu_item = "{active_menu_item}";
+    var main_container_ele = document.getElementById("div_main_content")
+    // associate menu items (csv_type.name) with html files by using an array of objects
+    // this js file is generated when the user wants to update the main html file
+    var menu_items =[\n"""
+
+    for i, csv_type in enumerate(csv_types_to_process):                            
+        csv_file = get_latest_file(file_path, user_name, csv_type, file_extenstion = 'html', print_info=False)
+        js_string += (f'\t\t{{ "item" : "{csv_type.name}",\n' 
+	                  f'\t\t  "file" : "{os.path.basename(csv_file)}"\n'  
+	                   '\t\t}')
+        if i < len(csv_types_to_process) -1: 
+            js_string += ',\n'
+    js_string += '\n\t]\n'
+
+    # add functions
+    js_string += """
+	//for dynamic menu items
+    menu_items.forEach(add_listeners);
+	
+	//--------------------------------------------------------------------------
+	//for dynamic menu items: gray out text of un-available menu items, add click event listener
+	function add_listeners(menu_item) {
+		var ele = document.getElementById(menu_item.item)
+		if (menu_item.file == ""){
+			// add css class to change text color (gray out)
+			ele.classList += " inactive_menu" ;
+		}
+		else{
+			// remove class to restore the normal text color
+			ele.classList.remove("inactive_menu");	
+		    // add event listener 
+		    ele.addEventListener("click", function(){
+			    switch_page(menu_item.file, menu_item.item, main_container_ele)
+		    });				
+	    }				
+    }
+	//--------------------------------------------------------------------------   
+	// assign class to elements (identified by tag names), depending on its indexes
+	// this means to set background colors for different menu items depending on its group	
+    function reset_default_menu_bg_colors(tag_name){
+		var li_eles = document.getElementsByTagName(tag_name);
+		var i;
+		for (i = 0; i < li_eles.length; i++) {
+			if (i >= 2 && i <= 7){
+				li_eles[i].classList += ' users_group';				
+			}
+			else if ( i >= 9 && i <= 12 ){
+				li_eles[i].classList += ' notifications_group';				
+			}
+			else{
+				li_eles[i].classList += ' other_group';	
+			}
+		}	
+	}	
+	//--------------------------------------------------------------------------    
+    // set main html object, handle menu items background colors and update global variables	
+	function switch_page(active_html_file, active_menu_item, main_container_ele){
+		// replace the main html object
+        if (active_html_file != ""){ 
+		    new_inner_HTML = `<object type="text/html" data="${active_html_file}" width="100%" height="100%" "></object>`
+		    main_container_ele.innerHTML = new_inner_HTML;
+        }		
+		reset_default_menu_bg_colors('li');
+		
+		// set the background of the active item 
+		var ele = document.getElementById(active_menu_item);		
+		ele.className = '';		
+		ele.classList += ' active_menu'
+		
+		// update the global variables
+		window.active_html_file = active_html_file;
+		window.active_menu_item = active_menu_item;
+	};	
+	//--------------------------------------------------------------------------
+	// load the main object on page load or on refresh
+    if (active_html_file != "" &&  active_menu_item != ""){
+	    switch_page(active_html_file, active_menu_item, main_container_ele)	
+    }	
+}); 
+"""
+# Write 
+    with open(js_file_name, 'w', encoding = 'utf-8') as file:
+        file.write(js_string)

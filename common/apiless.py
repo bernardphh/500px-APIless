@@ -205,8 +205,11 @@ class UserInputs():
         self.index_of_start_user            = index_of_start_user
         self.number_of_users                = number_of_users
         self.csv_file                       = csv_file
-        self.db_path                        = config.OUTPUT_PATH + r'/500px_' + user_name + '.db'
+        self.db_path                        = '' 
         self.index_of_start_notification    = index_of_start_notification
+        self.main_html_page                 = '' 
+        self.js_file_name                   = ''
+
 
     def Reset(self):
         self.use_command_line_args = False
@@ -226,6 +229,7 @@ class UserInputs():
         self.csv_file                       = ''
         self.db_path                        = ''
         self.index_of_start_notification    = 0
+        self.main_html_page                 = ''  
 #--------------------------------------------------
 class OutputData():
     """ Represent all the output lists and data"""
@@ -278,22 +282,23 @@ class OutputData():
 class CSV_type(Enum):
     """ Enum representing 10 types of output list"""
     not_defined              = 0
-    photos_public            = 1         # accessible everywhere, including on Profile
-    photos_unlisted          = 2         # accessible everywhere, except on Profile 
-    photos_limited_access    = 3         # only visible to you, unless added to a Gallery
+    user_summary             = 1
+    photos_public            = 2         # accessible everywhere, including on Profile
+    photos_unlisted          = 3         # accessible everywhere, except on Profile 
+    photos_limited_access    = 4         # only visible to you, unless added to a Gallery
 
-    notifications            = 4         # notification of liked, comment, added to gallery
-    unique_users             = 5         # Unique users in a notifications list, with the count of their appearances in the list 
-    like_actors              = 6         # users that liked one specific photos of yours
+    notifications            = 5         # the last n notification of liked, comment, added to gallery
+    all_notifications        = 6         # all recorded notification of liked, comment, added to gallery
+    unique_users             = 7         # the last unique users in a notifications list, with the count of their appearances in the list 
+    all_unique_users         = 8         # unique users in all recorded notifications, with the count of their appearances in the list 
+    like_actors              = 9         # users that liked one specific photos of yours
 
-    followers                = 7         # all your followers, regardless you are following them or not
-    followings               = 8         # all your followings, regardless they are following you back or not
+    followers                = 10        # all your followers, regardless you are following them or not
+    followings               = 11        # all your followings (friends), regardless they are following  or not
 
-    all_users                = 9         # combined your followers and your followings
-    reciprocal               = 10         # users who follow you and you follow them 
-    not_follow               = 11         # list of users that you do not follow, but they are following you
-    following                = 12        # list of users that you are following but they do not follow you
-    interactor               = 13        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other
-
-
-
+    all_users                = 12        # combined your followers and your followings
+    reciprocal               = 13        # users who follow you and you follow them 
+    not_follow               = 14        # list of users that you do not follow, but they are following you
+    following                = 15        # list of users that you are following but they do not follow you
+    interactor               = 16        # users who interact with you by liking, commenting, featuring your photo, but you and them are not following each other
+    

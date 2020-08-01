@@ -15,10 +15,10 @@ USE_LOCAL_THUMBNAIL = True                              # Save the user avatars 
 CREATE_LOCAL_DATABASE = True                            # for local SQLITE
 USE_MULTIPROCESSING = False                             # to be implemented
 
-# used mainly for a more realistic demonstration of progress on the console progress bar  
+# these settings are just the estimate values, used mainly for a more realistic demonstration of progress on the console progress bar  
 PHOTOS_PER_PAGE         = 50                            # 500px currently loads 50 photos per page
 LOADED_ITEM_PER_PAGE    = 50                            # it also loads 50 followers, or friends, at a time in the popup window
-NOTIFICATION_PER_LOAD   = 20                            # currently notifications are requested to display ( by scrolling the window) 20 items at a time
+NOTIFICATION_PER_LOAD   = 20                            # number of notifications loaded for each scroll down 
 
 # self limitation to avoid abusing
 MAX_NOTIFICATION_REQUEST = 5000  
