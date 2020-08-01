@@ -45,6 +45,8 @@ The first 7 options are for data collection. The results of these tasks are save
 CSV files are used for statistical analysis, and for the automated processes. 
 HTML files are used for presentation, they are automatically shown after a data collection task is completed. 
 They are also served as a tool to sort, filter or search the data
+</br>
+To see how the results of data collection, go to the end of the page or click [here](#demo)
 
 
 
@@ -216,3 +218,14 @@ For obvious reason, such measures are not included in the code.
 
 **Stay clean, be reasonable and respectful, don't get caught and then Happy scraping !** )* 
 
+<br/>
+<br/>
+
+## DEMO OF DATA COLLECTION RESULTS: ##
+
+<br/>
+#demo
+<p align="center"><kbd>
+ <img src="https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif" width ="100%">
+</kbd></p>
+<br/><br/><br/>
