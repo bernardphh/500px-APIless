@@ -46,7 +46,8 @@ CSV files are used for statistical analysis, and for the automated processes.
 HTML files are used for presentation, they are automatically shown after a data collection task is completed. 
 They are also served as a tool to sort, filter or search the data
 </br>
-To see how the results of data collection look like, see [main-html-page_demo.gif](https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif) or go to the end of the page [here](#datacollectiondemo)
+</br>
+For a demo of data collection and analysis, see [main-html-page_demo.gif](https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif) or go to the end of the page.
 
 
 
@@ -224,8 +225,6 @@ For obvious reason, such measures are not included in the code.
 ## DEMO OF DATA COLLECTION RESULTS: ##
 
 <br/>
-
-#datacollectiondemo
 
 <p align="center"><kbd>
  <img src="https://github.com/bernardphh/500px-APIless/blob/master/main-html-page_demo.gif" width ="100%">
