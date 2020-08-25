@@ -1,6 +1,5 @@
 ``` diff
-! Note: I just realize that recent structure changes in 500px pages break some of my functionalities. <br/>
-!       I'm adjusting the code to address these changes. Stay tuned for the update.
+! Note: I just realize that recent structure changes in 500px pages break some of my functionalities. I'm adjusting the code to address these changes. Stay tuned for the update.
 ```
 # 500px-APIless: Scraping and automation
 A personal project created by curiosity and for fun, to extract information from 500px web site for data analyzing, and to perform some automated processes.
