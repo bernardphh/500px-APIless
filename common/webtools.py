@@ -52,10 +52,7 @@ def get_element_attribute_by_ele_xpath(page, xpath, attribute_name):
 #---------------------------------------------------------------
 def get_web_ele_text_by_xpath(element_or_driver, xpath):
     """ Use WebDriver function to find text from a given xpath, return empty string if not found.
-    
-    Use absolute xpath if the driver is passed
-    Use relative xpath if an web element is passed
-     """
+    """
     if element_or_driver is None or not xpath:
         return ''
     try:
@@ -120,7 +117,7 @@ def check_and_get_ele_by_xpath(element, xpath):
 
 #---------------------------------------------------------------
 def check_and_get_all_elements_by_xpath(element, xpath):
-    """ Find the web elements from a given xpath, return none if not found.
+    """ Find the web elements from a given xpath, return empty array if not found.
     
     The search can be limited within a given web element, or the whole document if the browser driver is passed instead of the web element
     """
@@ -428,10 +425,10 @@ def scroll_down(driver, scroll_pause_time = 0.5, number_of_scrolls = 10, estimat
     time.sleep(scroll_pause_time)
 
 #---------------------------------------------------------------
-def scroll_to_end_by_class_name(driver, class_name, likes_count):
+def scroll_to_end_by_class_name(driver, class_name, number_requested):
     """Scroll the active window to the end, where the last element of the given class name become visible.
 
-    Argument 'likes_count' is used for creating a realistic progress bar
+    Argument 'number_requested' is used for creating a realistic progress bar
     """
     eles = driver.find_elements_by_class_name(class_name)
     count = 0
@@ -439,7 +436,7 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
 
     while new_count != count:
         try:
-            utils.update_progress(new_count / likes_count, f'    - Scrolling down to load more items {new_count}/{likes_count}:')
+            utils.update_progress(new_count / number_requested, f'    - Scrolling down to load more items {new_count}/{number_requested}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(random.randint(15, 20) / 10)  
@@ -454,14 +451,14 @@ def scroll_to_end_by_class_name(driver, class_name, likes_count):
             printR(f'   Time out while scrolling down. Please retry.')
         except NoSuchElementException:
             pass
-    if new_count < likes_count:
-        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count}/{likes_count}')
+    if new_count < number_requested:
+        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count}/{number_requested}')
 
 #---------------------------------------------------------------
-def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name= '', tag_name=''):
+def scroll_to_end_by_class_or_tag_name(driver, number_requested, class_name= '', tag_name=''):
     """Scroll the active window to the end, where the last element of the given class name become visible.
 
-    Argument 'expected_items_count' is used for creating a realistic progress bar
+    Argument 'number_requested' is used for creating a realistic progress bar
     """
     if class_name:
         eles = driver.find_elements_by_class_name(class_name)
@@ -473,7 +470,7 @@ def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name=
 
     while new_count != count:
         try:
-            utils.update_progress(new_count / expected_items_count, f'    - Scrolling down to load more items {new_count}/{expected_items_count}:')
+            utils.update_progress(new_count / number_requested, f'    - Scrolling down to load more items {new_count}/{number_requested}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(random.randint(15, 20) / 10)  
@@ -492,26 +489,25 @@ def scroll_to_end_by_class_or_tag_name(driver, expected_items_count, class_name=
             printR(f'   Time out while scrolling down. Please retry.')
         except NoSuchElementException:
             pass
-    if new_count >= expected_items_count:
-        utils.update_progress(1, f'    - Scrolling down to load more items:{expected_items_count}/{expected_items_count}')
+    if new_count >= number_requested:
+        utils.update_progress(1, f'    - Scrolling down to load more items:{number_requested}/{number_requested}')
     else:
         print(f'     - Available items: {new_count}')
     return eles
 
 #---------------------------------------------------------------
-def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_count):
+def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, number_requested, time_out = 10):
     """Scroll the active window to the end, where the last element of the given tag name is loaded and visible.
 
-    Argument 'likes_count' is used for creating a realistic progress bar
+    Argument 'number_requested' is used for creating a realistic progress bar
     """
     eles = check_and_get_all_elements_by_tag_name(element, tag_name)
     count = 0
     new_count = len(eles)
-    time_out = 60
     count_down_timer = time_out
     while new_count != count:
         try:
-            utils.update_progress(new_count / likes_count, f'    - Scrolling down to load more items {new_count}/{likes_count}:')
+            utils.update_progress(new_count / number_requested, f'    - Scrolling down to load more items {new_count}/{number_requested}:')
             the_last_in_list = eles[-1]
             the_last_in_list.location_once_scrolled_into_view 
             time.sleep(1)
@@ -525,8 +521,13 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
             new_count = len(eles)
 
             # give the slow server a chance to load the new items 
-            while new_count == count and count_down_timer >= 0 and new_count < likes_count:
+            while new_count == count and count_down_timer >= 0 and new_count < number_requested:
+                utils.update_progress(count_down_timer / time_out, f'    - Slow response from server. Counting down {count_down_timer}:')
                 count_down_timer -= 1
+
+                eles = check_and_get_all_elements_by_tag_name(element, tag_name)
+                new_count = len(eles)
+                the_last_in_list = eles[-1]
                 the_last_in_list.location_once_scrolled_into_view 
                 time.sleep(1)
 
@@ -534,12 +535,23 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, likes_co
             printR(f'   Time out ({time_out}s) while scrolling down. Please retry.')
         except NoSuchElementException:
             pass
-    if new_count >= likes_count:
-        utils.update_progress(1, f'    - Scrolling down to load more items:{likes_count}/{likes_count}')
+    if new_count >= number_requested:
+        utils.update_progress(1, f'    - Scrolling down to load more items:{number_requested}/{number_requested}')
+    else:
+        # scroll down has finished, but the items obtained are less than requested. Show it
+        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count}/{number_requested}')
+
     return eles
 
 #---------------------------------------------------------------
-def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_to_check, number_of_items_requested = 100, message = '', time_out= 60):
+def scroll_down_active_page(driver, 
+                            web_element = None,
+                            class_name_to_check = '', 
+                            tag_name_to_check = '', 
+                            xpath_to_check = '', 
+                            number_requested = 100, 
+                            message = '', 
+                            time_out= 60):
     """Scrolling down the active window until all the request items of a given class name or a tag name, are loaded.
 
     - The process monitors the change of the page height to decide if another scroll down is needed
@@ -554,6 +566,8 @@ def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_t
         items = web_element.find_elements_by_class_name(class_name_to_check) 
     elif tag_name_to_check: 
         items = web_element.find_elements_by_tag_name(tag_name_to_check) 
+    elif xpath_to_check: 
+        items = web_element.find_elements_by_xpath(xpath_to_check) 
     else:
         printR('   Items were not specified. The process stopped.')
         return
@@ -561,19 +575,20 @@ def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_t
         printR('   No items found.')
         return
       
-    if len(items) >= number_of_items_requested:
+    if len(items) >= number_requested:
         return    
-     
+
     # get the current height of the page
     last_scroll_height = driver.execute_script("return document.body.scrollHeight")
 
     time_out_count_down = time_out
     count_sofar = 0
-    if number_of_items_requested == -1:
-        number_of_items_requested  = config.MAX_NOTIFICATION_REQUEST
+    if number_requested == -1:
+        number_requested  = config.MAX_NOTIFICATION_REQUEST
 
-    while count_sofar < number_of_items_requested :   
-        utils.update_progress(count_sofar / number_of_items_requested, f'    - Scrolling down {count_sofar}/{number_of_items_requested}')
+    while count_sofar < number_requested :   
+        utils.update_progress(count_sofar / number_requested, f'    - Scrolling down {count_sofar}/{number_requested}')
+
         # scroll down to bottom
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)
@@ -582,6 +597,7 @@ def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_t
         # give the slow server a chance to load the new items
         while new_scroll_height == last_scroll_height and time_out_count_down >= 0:
             time_out_count_down -= 1
+            #web_element.send_keys(Keys.END)
             new_scroll_height = driver.execute_script("return document.body.scrollHeight") 
             time.sleep(1)
  
@@ -591,15 +607,19 @@ def scroll_down_active_page(driver, web_element, class_name_to_check, tag_name_t
             items = web_element.find_elements_by_class_name(class_name_to_check)         
         elif tag_name_to_check: 
             items = web_element.find_elements_by_tag_name(tag_name_to_check) 
+        elif xpath_to_check: 
+            items = web_element.find_elements_by_xpath(xpath_to_check) 
 
         count_sofar = len(items)    
 
-        if count_sofar < number_of_items_requested and time_out_count_down <= 0:
-            printR(f'\n   Time out ({time_out}s)! {count_sofar}/{number_of_items_requested} items obtained. You may try again at another time')
+        if count_sofar < number_requested and time_out_count_down <= 0:
+            printR(f'\n   Time out ({time_out}s)! {count_sofar}/{number_requested} items obtained. You may try again at another time')
             break
  
     # normal termination of while loop: show completed progress bar
     else:
-        utils.update_progress(1, f'    - Scrolling down {number_of_items_requested}/{number_of_items_requested}')
+        utils.update_progress(1, f'    - Scrolling down {number_requested}/{number_requested}')
+
+    return items
 
     

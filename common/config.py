@@ -19,6 +19,7 @@ USE_MULTIPROCESSING = False                             # to be implemented
 PHOTOS_PER_PAGE         = 50                            # 500px currently loads 50 photos per page
 LOADED_ITEM_PER_PAGE    = 50                            # it also loads 50 followers, or friends, at a time in the popup window
 NOTIFICATION_PER_LOAD   = 20                            # number of notifications loaded for each scroll down 
+USERS_PER_LOAD          = 20                            # number of users loaded for each scroll down 
 
 # self limitation to avoid abusing
 MAX_NOTIFICATION_REQUEST = 5000  

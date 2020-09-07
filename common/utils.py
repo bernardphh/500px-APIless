@@ -20,8 +20,9 @@ from dateutil.relativedelta import relativedelta
 def printG(text, write_log=True):  print(f"\033[92m {text}\033[00m"); logger.info(text) if write_log else None 
 def printY(text, write_log=True):  print(f"\033[93m {text}\033[00m"); logger.info(text) if write_log else None
 def printR(text, write_log=True):  print(f"\033[91m {text}\033[00m"); logger.error(text)if write_log else None
-def printC(text, write_log=False): print(f"\033[96m {text}\033[00m"); logger.info(text)if write_log else None 
-def printB(text, write_log=False): print(f"\033[94m {text}\033[00m"); logger.info(text)if write_log else None 
+def printC(text, write_log=False): print(f"\033[96m {text}\033[00m"); logger.info(text) if write_log else None 
+def printB(text, write_log=False): print(f"\033[94m {text}\033[00m"); logger.info(text) if write_log else None 
+def printW(text, write_log=False): print(f"\033[97m {text}\033[00m"); logger.info(text) if write_log else None 
 def print_and_log(text): print(text); logger.info(text)
 
 #---------------------------------------------------------------
@@ -447,8 +448,8 @@ def analyze_notifications(df):
 
 #---------------------------------------------------------------
 def convert_relative_datetime_string_to_absolute_date(relative_time_string, format = "%Y %m %d" ):
-    """ Convert a string of relative time (e.g. "2 days ago") to a datetime object, strip the time part and return 
-        the date string in the given format (e.g. YYYY-mm-dd )
+    """ Convert a string of relative time (e.g. "2 days ago") to a datetime object
+        the date string in the given format 
         Possible inputs:
          in a few seconds
          in 1 minute, in 2 minutes, 3-59 minutes ago
@@ -545,21 +546,22 @@ def merge_relationships(df_unique, df_all):
     # rename Relationship values on df_unique to avoid confusion later when we merge with df_all 
     # on notification, 'Not Follow' means this is your new follower and you do not follow back
     # and 'Following' means this is your new follower and you also follow back
-    #df_unique.loc[df_unique.Relationship == 'Not Follow', 'Relationship'] = 'New follower'
     df_unique.loc[df_unique.Relationship == 'Following', 'Relationship'] = 'Reciprocal'
     df_unique.loc[df_unique.Relationship.isnull(), 'Relationship'] = ''
 
-    # merge Relationship from 2 dataframes, the left one, or Relationship_x, is the latest from notification page, the right one, or Relationship_y is the one from local database 
+    # merge Relationship from 2 dataframes, the left one, or Relationship_x, is from notification page, the right one, or Relationship_y is the one from local database 
     # We will update the right side, Relationship_y, then delete the left side    
     df_merge = pd.merge(df_unique, df_all[['User Name', 'Relationship']], how='left', on='User Name')
 
-    # We use the left side if it has value ( override the right side)
-    df_merge.loc[df_merge.Relationship_x.notnull() , 'Relationship_y'] = df_merge.Relationship_x 
-   
+    # if the right is empty we copy the value from the left, if the left has value
+    df_merge.loc[(~df_merge.Relationship_y.notnull()) & (df_merge.Relationship_x.notnull()) , 'Relationship_y'] = df_merge.Relationship_x 
+  
     # Delete column Relationship_x and rename Relationship_y to the orginin name before merging: Relationship 
     df_merge.drop("Relationship_x", axis=1, inplace=True)    
     df_merge.rename(columns={'Relationship_y': 'Relationship'}, inplace=True)
-        
+     
+    df_merge.loc[df_merge.Relationship.isnull(), 'Relationship'] = ''       
+    
     # create an summary dictionary 
     followers_count   = df_merge.loc[df_merge.Relationship.str.contains('Not Follow', regex=False), :].shape[0]
     followings_count  = df_merge.loc[df_merge.Relationship.str.contains('Following',  regex=False), :].shape[0]
