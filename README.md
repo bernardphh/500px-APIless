@@ -1,7 +1,3 @@
-``` diff
-! Note: I just realize that recent structure changes in 500px pages break some of my functionalities. 
-!       I'm adjusting the code to address these changes. Stay tuned for the update.
-```
 # 500px-APIless: Scraping and automation
 A personal project created by curiosity and for fun, to extract information from 500px web site for data analyzing, and to perform some automated processes.
 
@@ -206,9 +202,10 @@ Feedback, bug report, contributions are more than welcomed.
 
 As in any web scraping, a change in page structure may break one or more options. 
 Hopefully we can adapt when it happens, time and weather permitted.
-Euh..., I meant time and mood permitted. (as I go older in age, my mood tends to change as quickly as weather. It can swing unpredictably, freely to all direction :)  
+Euh..., I meant time and mood permitted. (as I go older in age, my mood tends to change as quickly as weather. It can swing freely, unpredictably, to all direction :)  
 
-As stated earlier, this project is created for fun and for gaining personal experience with python and web scraping. 
+As stated earlier, this project is created for fun and for gaining personal experience with python and web scraping. This were carried out in the most candid way. Some people may very well find this is not worth the effort, considering the fact that the pages keep changing and the site keeps evolving. 
+But I will keep going as long as it stays fun. 
 
 **The owner assumes no responsibility**.
 
