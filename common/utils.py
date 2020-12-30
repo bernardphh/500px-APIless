@@ -112,7 +112,9 @@ def validate_non_empty_input(prompt_message, user_inputs):
 #--------------------------------------------------------------- 
 def validate_input(prompt_message, user_inputs):
     """ Prompt for input and accepts nothing but digits or letter 'r' or 'q'. 
-    Return the valid input and a boolean (True if r(estar)t or q(uit) is requested, False otherwise."""
+    Return the valid input ( character r or q, or digit characters) and a boolean:
+    - True if r (for restart) or q (for quit) is entered
+    - False otherwise (meaning  this is not an abort request, digit has been entered """
 
     val = input(prompt_message) 
     while True:
@@ -121,11 +123,11 @@ def validate_input(prompt_message, user_inputs):
             user_inputs.choice = val
             return val, True
 
-        # if we have error converting inputs to integer, then the input is invalid
         try: 
             dummy_int = int(val)
             return val, False
         except ValueError:
+            # if we got error when converting inputs to integer, then the input is invalid
             printR("Invalid input! Please retry.", write_log=False)
             val = input(prompt_message)
 

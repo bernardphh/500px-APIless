@@ -92,13 +92,21 @@ def open_user_home_page(driver, user_name):
     while not main_window_handle and count_down > 0:
         main_window_handle = driver.current_window_handle
         count_down -= 1
-    if count_down <=0:
+    if count_down <= 0:
         return False, f"Timed out ({time_out}s) while opening {user_name}'s home page. Please retry"
 
+    time.sleep(2)
+ 
     if check_and_get_ele_by_class_name(driver, 'not_found'):
-        return False, f'User {user_name} does not exit'
+        return False, f'User {user_name} does not exits'
+    elif check_and_get_ele_by_xpath (driver, "//span[contains(text(), 'Work in progress')]"):
+        return False, f'User {user_name} has no photos'    
+    elif check_and_get_ele_by_xpath (driver, "//span[contains(text(), 'This page is no longer available')]"):
+        return False, f'User {user_name} no longer exits'    
+
     elif check_and_get_ele_by_class_name(driver, 'missing') is None:
         return True, ''
+
     else:
         return False, f'Error reading {user_name}\'s page. Please make sure a valid user name is used'
 
@@ -496,7 +504,7 @@ def scroll_to_end_by_class_or_tag_name(driver, number_requested, class_name= '',
     return eles
 
 #---------------------------------------------------------------
-def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, number_requested, time_out = 10):
+def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, number_requested, time_out = 20):
     """Scroll the active window to the end, where the last element of the given tag name is loaded and visible.
 
     Argument 'number_requested' is used for creating a realistic progress bar
@@ -536,10 +544,10 @@ def scroll_to_end_by_tag_name_within_element(driver, element, tag_name, number_r
         except NoSuchElementException:
             pass
     if new_count >= number_requested:
-        utils.update_progress(1, f'    - Scrolling down to load more items:{number_requested}/{number_requested}')
+        utils.update_progress(1, f'    - Scrolling down to load more items:{number_requested} / {number_requested}')
     else:
         # scroll down has finished, but the items obtained are less than requested. Show it
-        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count}/{number_requested}')
+        utils.update_progress(1, f'    - Scrolling down to load more items:{new_count} / {number_requested}')
 
     return eles
 
