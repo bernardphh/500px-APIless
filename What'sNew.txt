@@ -1,3 +1,11 @@
+Jan 2 2021:
+- Replace un-reliable WebDriverWait, eg.:
+  from:
+ 	#follower_headline_ele = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Followers ')]")))
+  to:
+        follower_headline_ele = webtools.check_and_get_ele_by_xpath(driver, "//*[contains(text(), 'Followers ')]")
+- Bugs fixes
+---------------------------
 Dec 30 2020:
 - Verified functionalities and made changes accordingly.
 - Various bugs fixes

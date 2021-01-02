@@ -454,17 +454,18 @@ def get_followers_list(driver, user_inputs, output_lists):
 
     # extract number of followers on the modal window                
     try:  
-        follower_headline_ele = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Followers ')]")))
-    except  TimeoutException:
-        printR(f'   - Error while getting the number off followers')
-        return []
-    try:
+        #follower_headline_ele = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Followers ')]")))
+        follower_headline_ele = webtools.check_and_get_ele_by_xpath(driver, "//*[contains(text(), 'Followers ')]")
         # remove thousand-separator character, if existed
         followers_count = int(follower_headline_ele.text.replace(",", "").replace(".", "").replace('Followers', '').strip())
+    except  TimeoutException:
+        printR(f'   - Error while getting the number off followers. Please try again.')
+        return []
     except:
-        printR(f'   Error converting followers count to int: {followers_count}')
-    else:
-        printG(f'   {user_inputs.user_name} has {str(followers_count)} follower(s)' )
+        printR(f'   Error converting followers count to int: {followers_count} Please try again.')
+        return []
+    
+    printG(f'   {user_inputs.user_name} has {str(followers_count)} follower(s)' )
 
     # get the container that hosts all users:  a div of class: infinite-scroll-component 
     container = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="followers-modal"]/div/div/div')
@@ -473,7 +474,7 @@ def get_followers_list(driver, user_inputs, output_lists):
         return []
 
     # scroll down to load all users
-    webtools.scroll_to_end_by_tag_name_within_element(driver, container, 'img', followers_count, time_out = 20)
+    webtools.scroll_to_end_by_tag_name_within_element(driver, container, 'img', followers_count, time_out = 10)
 
     # now that we have all followers loaded, start extracting the info
     # get all direct (immediate) children under the container: all div tags of class: StyledLayout__Box-xxxxxxxxxxxxxx
@@ -549,14 +550,13 @@ def does_this_user_follow_me(driver, user_inputs):
         return False, f'   - Time out ({time_out}s) loading Following list. Please retry'    
     # extract number of following on the modal window                 
     try:  
-        following_text_ele = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Following ')]")))
-    except  TimeoutException:
-        return False, f'   - Error while getting the number of following'
-
-    try:
+        #following_text_ele = WebDriverWait(driver, time_out).until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Following ')]")))
+        following_text_ele = webtools.check_and_get_ele_by_xpath(driver, "//*[contains(text(), 'Following ')]")
         following_count = int(following_text_ele.text.replace(",", "").replace(".", "").replace('Following', '').strip())
+    except  TimeoutException:
+        return False, f'   - Error while getting the number of following. Please try again.'
     except:
-        return False, f'   Error converting followers count to int: {following_text_ele.text}'
+        return False, f'   Error converting followers count to int: {following_text_ele.text}Please try again.'
    
     printG(f'   {user_inputs.target_user_name} is following {str(following_count)} user(s)' )
   
@@ -721,9 +721,9 @@ def get_followings_list(driver, user_inputs, output_lists):
         following_count = int(following_text_ele.text.replace(",", "").replace(".", "").replace('Following', '').strip())
 
     except:
-        printR(f'   Error converting followers count to int: {following_text_ele.text}')
+        printR(f'   Error converting following users count to int: {following_text_ele.text}')
     else:
-        printG(f'   {user_inputs.user_name} has {str(following_count)} follower(s)' )
+        printG(f'   {user_inputs.user_name} is following {str(following_count)} user(s)' )
 
    # get the container that hosts all users:  a div of class: infinite-scroll-component 
     container = webtools.check_and_get_ele_by_xpath(driver, '//*[@id="following-modal"]/div/div/div')
@@ -1474,7 +1474,7 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
     - For each element in the list, traverse up, down the xml tree for photo title, owner name, like status, and make a decision to click the like icon or not
     - Continue until the required number is reached. along the way, stop and scroll down to load more photos when needed 
     """
-    photos_done = 0
+    photos_done, loaded_photos_coun  = 0, 0
     current_index = 0  # the index of the photo in the loaded photos list. We dynamically scroll down the page to load more photos as we go, so ...
                        # ... we use this index to keep track where we are after a list update 
     prev_photographer_name = ''
@@ -1495,8 +1495,13 @@ def like_n_photos_on_homefeed_page(driver, user_inputs):
 
     photos = driver.find_elements_by_xpath('//*[contains(@id, "photo-")]')
     time.sleep(1)
-    img_eles = [webtools.check_and_get_all_elements_by_tag_name(photo, 'img')[1] for photo in photos]
-    loaded_photos_count = len(img_eles)
+    try:
+        img_eles = [webtools.check_and_get_all_elements_by_tag_name(photo, 'img')[1] for photo in photos]
+        loaded_photos_count = len(img_eles)
+    except:
+        printR('Error locating image elements. Please retry.')
+        return
+
    
     while photos_done < user_inputs.number_of_photos_to_be_liked: 
         # check whether we have processed all loaded photos, if yes, scroll down 1 time to load more
@@ -2157,9 +2162,9 @@ def handle_option_3(driver, user_inputs, output_lists):
 
     # avoid to do the same thing twice: when the list (in memory) has items and output file exists on disk
     if output_lists.followers_list is not None and len(output_lists.followers_list) > 0:
-        html_file = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.html'
-        if os.path.isfile(html_file):
-            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file)} ...', write_log=False)
+        html_file_name = f'{user_inputs.user_name}_{len(output_lists.followers_list)}_followers_{date_string}.html'
+        if os.path.isfile(html_file_name):
+            printY(f'Results exists in memory and on disk. Showing the existing file at:\n{os.path.abspath(html_file_name)} ...', write_log=False)
 
         # update the javascript used in the main html page to use the just created html result page
         utils.update_active_page_on_main_html_page_js(user_inputs.js_file_name, apiless.CSV_type.followers.name, os.path.basename(html_file_name))
